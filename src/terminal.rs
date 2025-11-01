@@ -183,6 +183,9 @@ impl Terminal {
             Ok(CommandAction::OutputHtml(html)) => {
                 self.renderer.append_output_html(&html, output_scroll)?;
             }
+            Ok(CommandAction::ShawEffect) => {
+                self.play_shaw_effect()?;
+            }
             Ok(CommandAction::Clear) => {
                 self.renderer.clear_output();
             }
@@ -439,6 +442,43 @@ impl Terminal {
         Ok(())
     }
 
+    fn play_shaw_effect(&self) -> Result<(), JsValue> {
+        self.renderer.force_scroll_to_bottom();
+
+        let renderer = Rc::clone(&self.renderer);
+        spawn_local(async move {
+            // Allow the terminal to settle at the bottom before showing the effect.
+            TimeoutFuture::new(120).await;
+
+            let effect = match renderer.render_shaw_effect() {
+                Ok(effect) => effect,
+                Err(err) => {
+                    utils::log(&format!("Failed to render Shaw effect: {:?}", err));
+                    return;
+                }
+            };
+
+            renderer.force_scroll_to_bottom();
+
+            TimeoutFuture::new(3000).await;
+
+            if let Err(err) = effect.set_attribute("data-state", "hiding") {
+                utils::log(&format!(
+                    "Failed to mark Shaw effect for dismissal: {:?}",
+                    err
+                ));
+            }
+
+            TimeoutFuture::new(260).await;
+
+            if let Err(err) = renderer.remove_effect(&effect) {
+                utils::log(&format!("Failed to remove Shaw effect: {:?}", err));
+            }
+        });
+
+        Ok(())
+    }
+
     fn ensure_input_disabled(&self) -> bool {
         let mut state = self.state.borrow_mut();
         if state.input_disabled() {
@@ -492,7 +532,6 @@ impl Terminal {
                 utils::log(&format!("Failed to render Goku media: {:?}", err));
             }
 
-            
             if let Err(err) = renderer.append_info_html(GOKU_FINISHER_HTML, ScrollBehavior::Bottom)
             {
                 utils::log(&format!(

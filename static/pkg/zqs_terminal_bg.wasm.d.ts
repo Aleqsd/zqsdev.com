@@ -2,8 +2,8 @@
 /* eslint-disable */
 export const memory: WebAssembly.Memory;
 export const start: () => void;
-export const wasm_bindgen__convert__closures_____invoke__h198ab718674ba547: (a: number, b: number, c: any) => void;
-export const wasm_bindgen__closure__destroy__h3145a8b24ff30b85: (a: number, b: number) => void;
+export const wasm_bindgen__convert__closures_____invoke__h2e03046961f34b99: (a: number, b: number, c: any) => void;
+export const wasm_bindgen__closure__destroy__h0044d08b8af135e0: (a: number, b: number) => void;
 export const wasm_bindgen__convert__closures_____invoke__h13fe8b1350e448f2: (a: number, b: number, c: any) => void;
 export const wasm_bindgen__closure__destroy__hbd7a766e679e418f: (a: number, b: number) => void;
 export const wasm_bindgen__convert__closures_____invoke__h3576219be204890a: (a: number, b: number) => void;

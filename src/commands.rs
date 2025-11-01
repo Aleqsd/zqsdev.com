@@ -67,6 +67,11 @@ pub const COMMAND_DEFINITIONS: &[CommandDefinition] = &[
         icon: "🧠",
     },
     CommandDefinition {
+        name: "shaw",
+        description: "Summon Shaw for a celebratory cameo.",
+        icon: "🎬",
+    },
+    CommandDefinition {
         name: "clear",
         description: "Clear the terminal output.",
         icon: "🧹",
@@ -79,6 +84,7 @@ pub enum CommandAction {
     OutputHtml(String),
     Clear,
     Download(String),
+    ShawEffect,
 }
 
 #[derive(Debug)]
@@ -134,6 +140,7 @@ pub fn execute(
         "contact" => execute_contact(state),
         "resume" => execute_resume(state),
         "faq" => execute_faq(state),
+        "shaw" | "sha" => execute_shaw(),
         "ai" => execute_ai(state),
         "clear" => Ok(CommandAction::Clear),
         _ => {
@@ -361,6 +368,10 @@ fn render_help() -> String {
             .to_string(),
     );
     lines.join("\n")
+}
+
+fn execute_shaw() -> Result<CommandAction, String> {
+    Ok(CommandAction::ShawEffect)
 }
 
 fn format_skills(skills: &BTreeMap<String, Vec<String>>) -> String {

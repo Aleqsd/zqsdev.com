@@ -6,8 +6,8 @@ use wasm_bindgen::closure::Closure;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
 use web_sys::{
-    Document, DocumentFragment, Element, HtmlButtonElement, HtmlDivElement, HtmlElement,
-    HtmlImageElement, HtmlInputElement, HtmlSpanElement, Node, Text,
+    Document, DocumentFragment, Element, HtmlAudioElement, HtmlButtonElement, HtmlDivElement,
+    HtmlElement, HtmlImageElement, HtmlInputElement, HtmlSpanElement, Node, Text,
 };
 
 const TERMINAL_ID: &str = "terminal";
@@ -537,6 +537,65 @@ impl Renderer {
 
     pub fn force_scroll_to_bottom(&self) {
         self.scroll_to_bottom();
+    }
+
+    pub fn render_shaw_effect(&self) -> Result<HtmlElement, JsValue> {
+        let wrapper = self
+            .document
+            .create_element("div")?
+            .dyn_into::<HtmlDivElement>()?;
+        wrapper.set_class_name("line output-text shaw-effect-line");
+
+        let figure = self
+            .document
+            .create_element("figure")?
+            .dyn_into::<HtmlElement>()?;
+        figure.set_class_name("shaw-effect");
+
+        let image = self
+            .document
+            .create_element("img")?
+            .dyn_into::<HtmlImageElement>()?;
+        image.set_class_name("shaw-effect__image");
+        image.set_src("./effects/shaw.gif");
+        image.set_alt("Shaw bursts onto the terminal stage");
+        image.set_attribute("loading", "lazy")?;
+
+        let audio = self
+            .document
+            .create_element("audio")?
+            .dyn_into::<HtmlAudioElement>()?;
+        audio.set_class_name("shaw-effect__audio");
+        audio.set_src("./effects/shaw.mp3");
+        audio.set_preload("auto");
+        audio.set_autoplay(true);
+        let _ = audio.set_attribute("playsinline", "true");
+
+        let image_node: Node = image.into();
+        figure.append_child(&image_node)?;
+        let audio_node: Node = audio.clone().into();
+        figure.append_child(&audio_node)?;
+
+        let figure_node: Node = figure.into();
+        wrapper.append_child(&figure_node)?;
+        self.output.append_child(&wrapper)?;
+
+        if let Err(err) = audio.play() {
+            utils::log(&format!("Failed to autoplay Shaw audio: {:?}", err));
+        }
+
+        let element: HtmlElement = wrapper.clone().dyn_into::<HtmlElement>()?;
+        self.apply_scroll(&element, ScrollBehavior::Bottom)?;
+        Ok(element)
+    }
+
+    pub fn remove_effect(&self, element: &HtmlElement) -> Result<(), JsValue> {
+        if let Some(parent) = element.parent_node() {
+            let node: Node = element.clone().into();
+            parent.remove_child(&node).map(|_| ())
+        } else {
+            Ok(())
+        }
     }
 
     fn scroll_to_bottom(&self) {

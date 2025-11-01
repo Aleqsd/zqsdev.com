@@ -239,6 +239,41 @@ body.theme-midnight {
     text-shadow: 0 0 18px rgba(255, 114, 63, 0.55);
 }
 
+.shaw-effect {
+    margin: 1.25rem auto 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.75rem;
+    width: min(360px, 90%);
+    position: relative;
+}
+
+.shaw-effect-line {
+    transition: opacity 0.25s ease, transform 0.28s ease;
+}
+
+.shaw-effect-line[data-state="hiding"] {
+    opacity: 0;
+    transform: scale(0.96);
+}
+
+.shaw-effect__image {
+    width: 100%;
+    height: auto;
+    display: block;
+    border-radius: 12px;
+    box-shadow: 0 14px 32px -18px rgba(255, 126, 173, 0.65),
+        0 0 22px -12px rgba(98, 221, 255, 0.55);
+}
+
+.shaw-effect__audio {
+    position: absolute;
+    width: 0;
+    height: 0;
+    overflow: hidden;
+}
+
 #terminal.tv-off .terminal-toolbar,
 #terminal.tv-off .output,
 #terminal.tv-off .prompt-line,

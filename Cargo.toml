@@ -39,6 +39,7 @@ features = [
     "HtmlSpanElement",
     "HtmlButtonElement",
     "HtmlImageElement",
+    "HtmlAudioElement",
     "HtmlInputElement",
     "DomTokenList",
     "NodeList",
