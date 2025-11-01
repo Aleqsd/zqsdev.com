@@ -2,10 +2,8 @@
 !README.md
 
 # Generated build artifacts
-/pkg/
 target/
 **/target/
-static/pkg/*
 !static/pkg/README.md
 
 # Local environment overrides
