@@ -5,11 +5,62 @@ use wasm_bindgen::closure::Closure;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
 use web_sys::{
-    ClipboardEvent, CompositionEvent, Element, EventTarget, HtmlElement, KeyboardEvent, MouseEvent,
+    ClipboardEvent, CompositionEvent, Element, EventTarget, HtmlElement, HtmlInputElement,
+    InputEvent, KeyboardEvent, MouseEvent, PointerEvent, TouchEvent,
 };
 
 pub fn install_listeners(terminal: Rc<Terminal>) -> Result<(), JsValue> {
     let document = utils::document()?;
+    let prompt_line = document
+        .get_element_by_id("prompt-line")
+        .ok_or_else(|| JsValue::from_str("Missing #prompt-line element"))?
+        .dyn_into::<HtmlElement>()?;
+    let hidden_input = document
+        .get_element_by_id("prompt-hidden-input")
+        .ok_or_else(|| JsValue::from_str("Missing #prompt-hidden-input element"))?
+        .dyn_into::<HtmlInputElement>()?;
+
+    let pointer_focus_terminal = Rc::clone(&terminal);
+    let pointer_closure = Closure::wrap(Box::new(move |_event: PointerEvent| {
+        pointer_focus_terminal.focus();
+    }) as Box<dyn FnMut(_)>);
+    prompt_line.add_event_listener_with_callback(
+        "pointerdown",
+        pointer_closure.as_ref().unchecked_ref(),
+    )?;
+    pointer_closure.forget();
+
+    let touch_focus_terminal = Rc::clone(&terminal);
+    let touch_closure = Closure::wrap(Box::new(move |_event: TouchEvent| {
+        touch_focus_terminal.focus();
+    }) as Box<dyn FnMut(_)>);
+    prompt_line.add_event_listener_with_callback(
+        "touchstart",
+        touch_closure.as_ref().unchecked_ref(),
+    )?;
+    touch_closure.forget();
+
+    let click_focus_terminal = Rc::clone(&terminal);
+    let click_focus_closure = Closure::wrap(Box::new(move |_event: MouseEvent| {
+        click_focus_terminal.focus();
+    }) as Box<dyn FnMut(_)>);
+    prompt_line.add_event_listener_with_callback(
+        "click",
+        click_focus_closure.as_ref().unchecked_ref(),
+    )?;
+    click_focus_closure.forget();
+
+    let input_terminal = Rc::clone(&terminal);
+    let hidden_input_for_input = hidden_input.clone();
+    let input_closure = Closure::wrap(Box::new(move |_event: InputEvent| {
+        input_terminal.overwrite_input(&hidden_input_for_input.value());
+    }) as Box<dyn FnMut(_)>);
+    hidden_input.add_event_listener_with_callback(
+        "input",
+        input_closure.as_ref().unchecked_ref(),
+    )?;
+    input_closure.forget();
+
     let keydown_terminal = Rc::clone(&terminal);
     let suggestions_terminal = Rc::clone(&terminal);
     let paste_terminal = Rc::clone(&terminal);

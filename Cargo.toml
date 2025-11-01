@@ -38,6 +38,7 @@ features = [
     "HtmlDivElement",
     "HtmlSpanElement",
     "HtmlImageElement",
+    "HtmlInputElement",
     "DomTokenList",
     "NodeList",
     "EventTarget",
@@ -57,4 +58,6 @@ features = [
     "console",
     "DocumentFragment",
     "Text",
+    "PointerEvent",
+    "TouchEvent",
 ]

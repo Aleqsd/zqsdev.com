@@ -470,6 +470,15 @@ body.theme-midnight {
     overflow-wrap: anywhere;
 }
 
+.prompt-hidden-input {
+    position: absolute;
+    left: -9999px;
+    width: 1px;
+    height: 1px;
+    opacity: 0;
+    pointer-events: none;
+}
+
 .prompt-caret {
     flex: 0 0 auto;
 }

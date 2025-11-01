@@ -62,6 +62,20 @@ impl Terminal {
         Ok(())
     }
 
+    pub fn focus(&self) {
+        self.renderer.focus_terminal();
+    }
+
+    pub fn overwrite_input(&self, value: &str) {
+        {
+            let mut state = self.state.borrow_mut();
+            state.input_buffer = value.to_string();
+            state.history_index = None;
+        }
+        self.refresh_input();
+        self.refresh_suggestions();
+    }
+
     pub fn push_system_message(&self, message: &str) {
         let _ = self
             .renderer
