@@ -484,6 +484,8 @@ impl Terminal {
                 ));
             }
 
+            renderer.force_scroll_to_bottom();
+
             if let Err(err) =
                 renderer.append_output_html(KAMEHAMEHA_MEDIA_HTML, ScrollBehavior::Bottom)
             {

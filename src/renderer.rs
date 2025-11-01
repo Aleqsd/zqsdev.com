@@ -535,6 +535,10 @@ impl Renderer {
         Ok(())
     }
 
+    pub fn force_scroll_to_bottom(&self) {
+        self.scroll_to_bottom();
+    }
+
     fn scroll_to_bottom(&self) {
         let scroll_height = self.output.scroll_height();
         self.output.set_scroll_top(scroll_height);
