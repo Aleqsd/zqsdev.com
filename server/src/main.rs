@@ -102,6 +102,7 @@ struct AiResponse {
     answer: String,
     ai_enabled: bool,
     reason: Option<String>,
+    model: Option<&'static str>,
 }
 
 #[tokio::main]
@@ -116,7 +117,10 @@ async fn main() -> anyhow::Result<()> {
             None
         }
         Err(VarError::NotUnicode(err)) => {
-            return Err(anyhow!("GOOGLE_API_KEY contains invalid unicode: {:?}", err));
+            return Err(anyhow!(
+                "GOOGLE_API_KEY contains invalid unicode: {:?}",
+                err
+            ));
         }
     };
 
@@ -165,13 +169,9 @@ async fn main() -> anyhow::Result<()> {
             msg = "OpenAI fallback backend configured"
         );
     }
-    let default_model = if client.has_groq() {
-        GROQ_MODEL_NAME
-    } else if client.has_google() {
-        GOOGLE_MODEL_NAME
-    } else {
-        OPENAI_MODEL_NAME
-    };
+    let default_model = client
+        .primary_model()
+        .unwrap_or(OPENAI_MODEL_NAME);
     let state = Arc::new(AppState {
         limiter: Arc::new(Mutex::new(RateLimiter::new(
             PER_MINUTE_BUDGET_EUR,
@@ -287,11 +287,13 @@ async fn handle_ai(
     Json(payload): Json<AiRequest>,
 ) -> impl IntoResponse {
     let question = payload.question.trim();
+    let primary_model = state.client.primary_model();
     if question.is_empty() {
         let response = AiResponse {
             answer: "Please provide a question so the AI can help.".to_string(),
             ai_enabled: true,
             reason: Some("empty_question".to_string()),
+            model: primary_model,
         };
         return (StatusCode::BAD_REQUEST, Json(response));
     }
@@ -302,6 +304,7 @@ async fn handle_ai(
                 .to_string(),
             ai_enabled: true,
             reason: Some("question_too_long".to_string()),
+            model: primary_model,
         };
         return (StatusCode::BAD_REQUEST, Json(response));
     }
@@ -336,6 +339,7 @@ async fn handle_ai(
             ),
             ai_enabled: false,
             reason: Some(reason.to_string()),
+            model: primary_model,
         };
         return (status, Json(response));
     }
@@ -380,6 +384,7 @@ async fn handle_ai(
                         ),
                         ai_enabled: false,
                         reason: Some(reason.to_string()),
+                        model: Some(model),
                     };
                     return (status, Json(response));
                 }
@@ -417,6 +422,7 @@ async fn handle_ai(
                 answer: answer_text,
                 ai_enabled: true,
                 reason: None,
+                model: Some(model),
             };
             (StatusCode::OK, Json(response))
         }
@@ -442,6 +448,7 @@ async fn handle_ai(
                 ),
                 ai_enabled: true,
                 reason: Some("backend_error".to_string()),
+                model: primary_model,
             };
             (StatusCode::SERVICE_UNAVAILABLE, Json(response))
         }
@@ -553,6 +560,16 @@ impl AiClient {
 
     fn has_free_backend(&self) -> bool {
         self.groq.is_some() || self.google.is_some()
+    }
+
+    fn primary_model(&self) -> Option<&'static str> {
+        if let Some(groq) = &self.groq {
+            Some(groq.model)
+        } else if let Some(google) = &self.google {
+            Some(google.model)
+        } else {
+            self.openai.as_ref().map(|openai| openai.model)
+        }
     }
 
     async fn ask(
@@ -781,7 +798,13 @@ impl AiClientError {
     fn all_backends_failed(failures: Vec<BackendFailure>) -> Self {
         let summary = failures
             .into_iter()
-            .map(|failure| format!("{} backend failed: {}", failure.backend.as_str(), failure.error))
+            .map(|failure| {
+                format!(
+                    "{} backend failed: {}",
+                    failure.backend.as_str(),
+                    failure.error
+                )
+            })
             .collect::<Vec<_>>()
             .join("; ");
         AiClientError::AllBackendsFailed(summary)
@@ -922,11 +945,15 @@ struct GoogleCandidatePart {
 impl GoogleCandidate {
     fn into_text(self) -> Option<String> {
         self.content.and_then(|content| {
-            content.parts.unwrap_or_default().into_iter().find_map(|part| {
-                part.text
-                    .map(|text| text.trim().to_string())
-                    .filter(|value| !value.is_empty())
-            })
+            content
+                .parts
+                .unwrap_or_default()
+                .into_iter()
+                .find_map(|part| {
+                    part.text
+                        .map(|text| text.trim().to_string())
+                        .filter(|value| !value.is_empty())
+                })
         })
     }
 }
@@ -957,6 +984,47 @@ mod tests {
         let low = tokens_to_cost(500, 100);
         let high = tokens_to_cost(5000, 1000);
         assert!(high > low);
+    }
+
+    #[test]
+    fn primary_model_falls_back_through_backends() {
+        let client = AiClient::new(
+            Some("google-key".to_string()),
+            Some("groq-key".to_string()),
+            Some("openai-key".to_string()),
+        )
+        .expect("client should construct");
+        assert_eq!(client.primary_model(), Some(GROQ_MODEL_NAME));
+
+        let client = AiClient::new(
+            Some("google-key".to_string()),
+            None,
+            Some("openai-key".to_string()),
+        )
+        .expect("client should construct without Groq");
+        assert_eq!(client.primary_model(), Some(GOOGLE_MODEL_NAME));
+
+        let client =
+            AiClient::new(None, None, Some("openai-key".to_string())).expect("OpenAI only");
+        assert_eq!(client.primary_model(), Some(OPENAI_MODEL_NAME));
+    }
+
+    #[test]
+    fn ai_response_serializes_model_field() {
+        let response = AiResponse {
+            answer: "Answer".to_string(),
+            ai_enabled: true,
+            reason: None,
+            model: Some(GROQ_MODEL_NAME),
+        };
+        let value = serde_json::to_value(&response).expect("serialize response");
+        assert_eq!(
+            value
+                .get("model")
+                .and_then(|entry| entry.as_str()),
+            Some(GROQ_MODEL_NAME),
+            "Serialized AI response should expose the backend model"
+        );
     }
 
     #[test]
@@ -1045,9 +1113,7 @@ mod tests {
         let remote = faqs
             .iter()
             .find(|entry| {
-                entry
-                    .get("question")
-                    .and_then(|value| value.as_str())
+                entry.get("question").and_then(|value| value.as_str())
                     == Some("🌍 Are you open to remote roles?")
             })
             .and_then(|entry| entry.get("answer"))
@@ -1069,9 +1135,7 @@ mod tests {
         let industries = faqs
             .iter()
             .find(|entry| {
-                entry
-                    .get("question")
-                    .and_then(|value| value.as_str())
+                entry.get("question").and_then(|value| value.as_str())
                     == Some("🏢 What industries do you focus on?")
             })
             .and_then(|entry| entry.get("answer"))
@@ -1093,9 +1157,7 @@ mod tests {
         let leadership = faqs
             .iter()
             .find(|entry| {
-                entry
-                    .get("question")
-                    .and_then(|value| value.as_str())
+                entry.get("question").and_then(|value| value.as_str())
                     == Some("👥 Can you lead cross-functional teams?")
             })
             .and_then(|entry| entry.get("answer"))
@@ -1119,9 +1181,7 @@ mod tests {
         let ai_usage = faqs
             .iter()
             .find(|entry| {
-                entry
-                    .get("question")
-                    .and_then(|value| value.as_str())
+                entry.get("question").and_then(|value| value.as_str())
                     == Some("🤖 How do you use AI in your workflow?")
             })
             .and_then(|entry| entry.get("answer"))
@@ -1139,9 +1199,7 @@ mod tests {
         let availability = faqs
             .iter()
             .find(|entry| {
-                entry
-                    .get("question")
-                    .and_then(|value| value.as_str())
+                entry.get("question").and_then(|value| value.as_str())
                     == Some("⏱️ How soon can you start?")
             })
             .and_then(|entry| entry.get("answer"))

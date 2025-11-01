@@ -1,4 +1,5 @@
 use crate::keyword_icons::{self, Segment as KeywordSegment};
+use crate::markdown;
 use crate::utils;
 use gloo_timers::future::TimeoutFuture;
 use wasm_bindgen::prelude::*;
@@ -17,6 +18,13 @@ const SUGGESTIONS_ID: &str = "suggestions";
 const AI_TOGGLE_ID: &str = "ai-mode-toggle";
 const AI_INDICATOR_ID: &str = "ai-mode-indicator";
 const AI_LOADER_ID: &str = "ai-loader";
+
+#[derive(Clone, Copy)]
+pub enum ScrollBehavior {
+    None,
+    Anchor,
+    Bottom,
+}
 
 pub struct Renderer {
     document: Document,
@@ -67,11 +75,16 @@ impl Renderer {
         let _ = self.caret.focus();
     }
 
-    pub fn append_command(&self, label: &str, command: &str) -> Result<(), JsValue> {
+    pub fn append_command(
+        &self,
+        label: &str,
+        command: &str,
+        behavior: ScrollBehavior,
+    ) -> Result<(), JsValue> {
         let line = self
             .document
             .create_element("div")?
-            .dyn_into::<HtmlDivElement>()?;
+            .dyn_into::<HtmlElement>()?;
         line.set_class_name("line command-line");
 
         let label_span = self
@@ -89,13 +102,18 @@ impl Renderer {
         command_span.set_text_content(Some(command));
 
         line.append_child(&label_span)?;
-        line.append_child(&command_span)?;
-        self.output.append_child(&line)?;
-        self.scroll_to_bottom();
+       line.append_child(&command_span)?;
+       self.output.append_child(&line)?;
+        let element: &HtmlElement = line.unchecked_ref();
+        self.apply_scroll(element, behavior)?;
         Ok(())
     }
 
-    pub fn append_output_text(&self, text: &str) -> Result<(), JsValue> {
+    pub fn append_output_text(
+        &self,
+        text: &str,
+        behavior: ScrollBehavior,
+    ) -> Result<(), JsValue> {
         let wrapper = self
             .document
             .create_element("div")?
@@ -111,11 +129,16 @@ impl Renderer {
 
         wrapper.append_child(&pre)?;
         self.output.append_child(&wrapper)?;
-        self.scroll_to_bottom();
+        let element: &HtmlElement = wrapper.unchecked_ref();
+        self.apply_scroll(element, behavior)?;
         Ok(())
     }
 
-    pub fn append_output_html(&self, html: &str) -> Result<(), JsValue> {
+    pub fn append_output_html(
+        &self,
+        html: &str,
+        behavior: ScrollBehavior,
+    ) -> Result<(), JsValue> {
         let wrapper = self
             .document
             .create_element("div")?
@@ -132,11 +155,16 @@ impl Renderer {
 
         wrapper.append_child(&container)?;
         self.output.append_child(&wrapper)?;
-        self.scroll_to_bottom();
+        let element: &HtmlElement = wrapper.unchecked_ref();
+        self.apply_scroll(element, behavior)?;
         Ok(())
     }
 
-    pub fn append_info_line(&self, message: &str) -> Result<(), JsValue> {
+    pub fn append_info_line(
+        &self,
+        message: &str,
+        behavior: ScrollBehavior,
+    ) -> Result<(), JsValue> {
         let line = self
             .document
             .create_element("div")?
@@ -144,11 +172,16 @@ impl Renderer {
         line.set_class_name("line info-line");
         self.render_text_with_icons(&line, message)?;
         self.output.append_child(&line)?;
-        self.scroll_to_bottom();
+        let element: &HtmlElement = line.unchecked_ref();
+        self.apply_scroll(element, behavior)?;
         Ok(())
     }
 
-    pub fn append_info_html(&self, message: &str) -> Result<(), JsValue> {
+    pub fn append_info_html(
+        &self,
+        message: &str,
+        behavior: ScrollBehavior,
+    ) -> Result<(), JsValue> {
         let line = self
             .document
             .create_element("div")?
@@ -157,8 +190,18 @@ impl Renderer {
         line.set_inner_html(message);
         self.decorate_with_icons(&line)?;
         self.output.append_child(&line)?;
-        self.scroll_to_bottom();
+        let element: &HtmlElement = line.unchecked_ref();
+        self.apply_scroll(element, behavior)?;
         Ok(())
+    }
+
+    pub fn append_output_markdown(
+        &self,
+        text: &str,
+        behavior: ScrollBehavior,
+    ) -> Result<(), JsValue> {
+        let html = markdown::to_html(text);
+        self.append_output_html(&html, behavior)
     }
 
     fn decorate_with_icons(&self, element: &HtmlElement) -> Result<(), JsValue> {
@@ -348,6 +391,25 @@ impl Renderer {
     fn scroll_to_bottom(&self) {
         let scroll_height = self.output.scroll_height();
         self.output.set_scroll_top(scroll_height);
+    }
+
+    fn scroll_to_child(&self, child: &HtmlElement) -> Result<(), JsValue> {
+        let offset = child.offset_top();
+        self.output.set_scroll_top(offset);
+        Ok(())
+    }
+
+    fn apply_scroll(&self, element: &HtmlElement, behavior: ScrollBehavior) -> Result<(), JsValue> {
+        match behavior {
+            ScrollBehavior::None => {}
+            ScrollBehavior::Anchor => {
+                self.scroll_to_child(element)?;
+            }
+            ScrollBehavior::Bottom => {
+                self.scroll_to_bottom();
+            }
+        }
+        Ok(())
     }
 
     pub fn apply_ai_mode(&self, active: bool) -> Result<(), JsValue> {

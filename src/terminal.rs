@@ -1,6 +1,6 @@
 use crate::ai;
 use crate::commands::{self, CommandAction, CommandError};
-use crate::renderer::Renderer;
+use crate::renderer::{Renderer, ScrollBehavior};
 use crate::state::AppState;
 use crate::utils;
 use std::cell::RefCell;
@@ -22,7 +22,9 @@ pub enum HistoryDirection {
 }
 
 const WELCOME_TYPE_DELAY_MS: u32 = 18;
-const AI_HELPER_SUGGESTIONS: &[(&str, &str)] = &[("help", "AI help"), ("quit", "Quit AI")];
+const AI_HELP_COMMAND: &str = "help";
+const AI_QUIT_COMMAND: &str = "quit";
+const AI_QUIT_LABEL: &str = "Quit AI";
 const AI_STATUS_ACTIVE: &str = "AI Mode: Activated";
 const AI_STATUS_DEACTIVATED: &str = "AI Mode: Deactivated";
 const AI_STATUS_BUSY: &str = "AI Mode: Activated — Synthesizing…";
@@ -31,6 +33,12 @@ const AI_ACTIVATED_INFO: &str =
 const AI_DEACTIVATED_INFO: &str = "📟 AI Mode deactivated. Classic terminal helpers restored.";
 const AI_HELP_MESSAGE: &str = "🤖 AI Mode help:\nYou're chatting with an assistant that only uses Alexandre's résumé data.\nAsk a question or type `quit` to exit AI Mode.";
 const AI_DATA_LOADING: &str = "AI knowledge base still loading. Please try again shortly.";
+const BOOT_SEQUENCE_MESSAGE: &str =
+    "Welcome to the ZQSDev interactive terminal!";
+const WELCOME_GUIDANCE_LINES: [&str; 2] = [
+    "Type `help` to view all available commands.",
+    "Use the quick actions below to jump to key sections instantly.",
+];
 
 impl Terminal {
     pub fn new(state: SharedState, renderer: SharedRenderer) -> Self {
@@ -56,7 +64,9 @@ impl Terminal {
     }
 
     pub fn push_system_message(&self, message: &str) {
-        let _ = self.renderer.append_info_line(message);
+        let _ = self
+            .renderer
+            .append_info_line(message, ScrollBehavior::Bottom);
     }
 
     pub fn submit_command(&self) -> Result<(), JsValue> {
@@ -76,13 +86,20 @@ impl Terminal {
         self.refresh_input();
         self.refresh_suggestions();
 
-        self.renderer.append_command(&prompt_label, &display_line)?;
+        let ai_mode_active = self.ai_mode_active();
+        let command_scroll = if ai_mode_active {
+            ScrollBehavior::Bottom
+        } else {
+            ScrollBehavior::Anchor
+        };
+        self.renderer
+            .append_command(&prompt_label, &display_line, command_scroll)?;
 
         if trimmed.is_empty() {
             return Ok(());
         }
 
-        if self.ai_mode_active() {
+        if ai_mode_active {
             return self.handle_ai_mode_submission(trimmed);
         }
 
@@ -95,12 +112,20 @@ impl Terminal {
             commands::execute(command, &state, extra)
         };
 
+        let output_scroll = if ai_mode_active {
+            ScrollBehavior::Bottom
+        } else {
+            ScrollBehavior::None
+        };
+
         match action {
             Ok(CommandAction::Output(text)) => {
-                self.renderer.append_output_text(&text)?;
+                self.renderer
+                    .append_output_text(&text, output_scroll)?;
             }
             Ok(CommandAction::OutputHtml(html)) => {
-                self.renderer.append_output_html(&html)?;
+                self.renderer
+                    .append_output_html(&html, output_scroll)?;
             }
             Ok(CommandAction::Clear) => {
                 self.renderer.clear_output();
@@ -108,13 +133,15 @@ impl Terminal {
             Ok(CommandAction::Download(url)) => {
                 utils::open_link(&url);
                 let confirmation = format!("Opening résumé at {url}");
-                self.renderer.append_info_line(&confirmation)?;
+                self.renderer
+                    .append_info_line(&confirmation, output_scroll)?;
             }
             Err(CommandError::NotFound { command }) => {
                 self.handle_unknown_command(&command)?;
             }
             Err(CommandError::Message(message)) => {
-                self.renderer.append_output_text(&message)?;
+                self.renderer
+                    .append_output_text(&message, output_scroll)?;
             }
         }
 
@@ -136,9 +163,16 @@ impl Terminal {
     fn handle_unknown_command(&self, command: &str) -> Result<(), JsValue> {
         let message =
             format!("Command not found: `{command}`\nType `help` to list available commands.");
-        self.renderer.append_output_text(&message)?;
+        let info_scroll = if self.ai_mode_active() {
+            ScrollBehavior::Bottom
+        } else {
+            ScrollBehavior::None
+        };
+        self.renderer
+            .append_output_text(&message, info_scroll.clone())?;
         let html = r#"Need a hand? <button type="button" class="ai-mode-cta" data-action="activate-ai-mode">Ask the AI assistant</button>"#;
-        self.renderer.append_info_html(html)?;
+        self.renderer
+            .append_info_html(html, info_scroll)?;
         Ok(())
     }
 
@@ -218,9 +252,12 @@ impl Terminal {
     }
 
     pub fn on_data_ready(&self) -> Result<(), JsValue> {
-        let (welcome, resume_link) = {
+        let (profile_name, resume_link) = {
             let state = self.state.borrow();
-            let welcome = build_welcome_message(&state);
+            let name = state
+                .data
+                .as_ref()
+                .map(|data| data.profile.name.clone());
             let link = state
                 .data
                 .as_ref()
@@ -232,17 +269,20 @@ impl Terminal {
                         .filter(|value| !value.trim().is_empty())
                 })
                 .unwrap_or_else(|| "https://cv.zqsdev.com".to_string());
-            (welcome, link)
+            (name, link)
         };
 
         let renderer = Rc::clone(&self.renderer);
         spawn_local(async move {
             if let Err(err) = renderer
-                .type_output_text(&welcome, WELCOME_TYPE_DELAY_MS)
+                .type_output_text(BOOT_SEQUENCE_MESSAGE, WELCOME_TYPE_DELAY_MS)
                 .await
             {
                 utils::log(&format!("Failed to animate welcome message: {:?}", err));
-                if let Err(err) = renderer.append_output_text(&welcome) {
+                if let Err(err) = renderer.append_output_text(
+                    BOOT_SEQUENCE_MESSAGE,
+                    ScrollBehavior::Bottom,
+                ) {
                     utils::log(&format!(
                         "Failed to render welcome message fallback: {:?}",
                         err
@@ -250,15 +290,41 @@ impl Terminal {
                 }
             }
 
-            let link_html = format!(
-                r#"If you want, you can just <a href="{url}" target="_blank" rel="noopener noreferrer">open the résumé</a>."#,
-                url = resume_link
-            );
-            if let Err(err) = renderer.append_info_html(&link_html) {
+            if let Some(name) = profile_name {
+                let profile_line = profile_loaded_line(&name);
+                if let Err(err) =
+                    renderer.append_output_text(&profile_line, ScrollBehavior::Bottom)
+                {
+                    utils::log(&format!(
+                        "Failed to append profile line `{profile_line}`: {:?}",
+                        err
+                    ));
+                }
+            }
+
+            for guidance in WELCOME_GUIDANCE_LINES {
+                if let Err(err) =
+                    renderer.append_info_line(guidance, ScrollBehavior::Bottom)
+                {
+                    utils::log(&format!(
+                        "Failed to append guidance line `{guidance}`: {:?}",
+                        err
+                    ));
+                }
+            }
+
+            let resume_html = resume_link_html(&resume_link);
+            if let Err(err) =
+                renderer.append_info_html(&resume_html, ScrollBehavior::Bottom)
+            {
                 utils::log(&format!("Failed to append résumé link: {:?}", err));
             }
             let ai_cta_html = r#"Prefer to talk with an AI? <button type="button" class="ai-mode-cta" data-action="activate-ai-mode">Ask the AI assistant</button>"#;
-            if let Err(err) = renderer.append_info_html(ai_cta_html) {
+            if let Err(err) = renderer.append_info_html(
+                ai_cta_html,
+                ScrollBehavior::Bottom,
+            )
+            {
                 utils::log(&format!(
                     "Failed to append AI assistant call-to-action: {:?}",
                     err
@@ -281,7 +347,13 @@ impl Terminal {
     fn handle_ai_mode_submission(&self, input: String) -> Result<(), JsValue> {
         let normalized = input.trim().to_ascii_lowercase();
         if normalized == "help" {
-            self.renderer.append_output_text(AI_HELP_MESSAGE)?;
+            let behavior = if self.ai_mode_active() {
+                ScrollBehavior::Bottom
+            } else {
+                ScrollBehavior::None
+            };
+            self.renderer
+                .append_output_text(AI_HELP_MESSAGE, behavior)?;
             return Ok(());
         }
         if normalized == "quit" {
@@ -293,7 +365,13 @@ impl Terminal {
     fn queue_ai_answer(&self, question: String) -> Result<(), JsValue> {
         let data_ready = { self.state.borrow().data.is_some() };
         if !data_ready {
-            self.renderer.append_info_line(AI_DATA_LOADING)?;
+            let behavior = if self.ai_mode_active() {
+                ScrollBehavior::Bottom
+            } else {
+                ScrollBehavior::None
+            };
+            self.renderer
+                .append_info_line(AI_DATA_LOADING, behavior)?;
             return Ok(());
         }
 
@@ -314,13 +392,24 @@ impl Terminal {
             match result {
                 Ok(payload) => {
                     if payload.ai_enabled {
+                        {
+                            let mut state = shared_state.borrow_mut();
+                            state.set_ai_model(payload.model.clone());
+                        }
+                        render_current_suggestions(&shared_state, &renderer);
                         renderer.set_ai_indicator_text(AI_STATUS_ACTIVE);
-                        if let Err(err) = renderer.append_output_text(&payload.answer) {
+                        if let Err(err) =
+                            renderer.append_output_markdown(
+                                &payload.answer,
+                                ScrollBehavior::Bottom,
+                            )
+                        {
                             utils::log(&format!("Failed to render AI answer: {:?}", err));
                         }
                     } else {
                         {
                             let mut state = shared_state.borrow_mut();
+                            state.set_ai_model(payload.model.clone());
                             state.set_ai_mode(false);
                         }
                         if let Err(err) = renderer.apply_ai_mode(false) {
@@ -332,14 +421,20 @@ impl Terminal {
                         if let Some(reason) = payload.reason.as_ref() {
                             notice.push_str(&format!(" (limit: {reason})"));
                         }
-                        if let Err(err) = renderer.append_info_line(&notice) {
+                        if let Err(err) = renderer.append_info_line(
+                            &notice,
+                            ScrollBehavior::Bottom,
+                        ) {
                             utils::log(&format!("Failed to render AI limit info: {:?}", err));
                         }
                     }
                 }
                 Err(error) => {
                     let message = format!("AI error: {error}");
-                    if let Err(err) = renderer.append_output_text(&message) {
+                    if let Err(err) = renderer.append_output_text(
+                        &message,
+                        ScrollBehavior::Bottom,
+                    ) {
                         utils::log(&format!("Failed to render AI error: {:?}", err));
                     }
                 }
@@ -387,7 +482,12 @@ impl Terminal {
             } else {
                 AI_DEACTIVATED_INFO
             };
-            self.renderer.append_info_line(message)?;
+            let behavior = if active {
+                ScrollBehavior::Bottom
+            } else {
+                ScrollBehavior::None
+            };
+            self.renderer.append_info_line(message, behavior)?;
         }
 
         if previous != active {
@@ -443,19 +543,39 @@ fn default_suggestions() -> Vec<&'static str> {
     names
 }
 
+fn ai_help_label(model: Option<&str>) -> String {
+    match model {
+        Some(name) if !name.trim().is_empty() => format!("AI help ({name})"),
+        _ => "AI help".to_string(),
+    }
+}
+
+fn ai_mode_suggestions(filter: &str, model: Option<&str>) -> Vec<(String, String)> {
+    let commands = [
+        (AI_HELP_COMMAND, ai_help_label(model)),
+        (AI_QUIT_COMMAND, AI_QUIT_LABEL.to_string()),
+    ];
+
+    commands
+        .into_iter()
+        .filter(|(command, _)| filter.is_empty() || command.starts_with(filter))
+        .map(|(command, label)| ((*command).to_string(), label))
+        .collect()
+}
+
 fn render_current_suggestions(state: &SharedState, renderer: &SharedRenderer) {
-    let (buffer, ai_mode) = {
+    let (buffer, ai_mode, ai_model) = {
         let state = state.borrow();
-        (state.input_buffer.clone(), state.ai_mode)
+        (
+            state.input_buffer.clone(),
+            state.ai_mode,
+            state.ai_model.clone(),
+        )
     };
     let trimmed = buffer.trim().to_ascii_lowercase();
 
     let suggestions: Vec<(String, String)> = if ai_mode {
-        AI_HELPER_SUGGESTIONS
-            .iter()
-            .filter(|(command, _)| trimmed.is_empty() || command.starts_with(&trimmed))
-            .map(|(command, label)| ((*command).to_string(), (*label).to_string()))
-            .collect()
+        ai_mode_suggestions(&trimmed, ai_model.as_deref())
     } else {
         let names: Vec<String> = if trimmed.is_empty() {
             default_suggestions()
@@ -481,18 +601,15 @@ fn render_current_suggestions(state: &SharedState, renderer: &SharedRenderer) {
     renderer.render_suggestions(suggestions);
 }
 
-fn build_welcome_message(state: &AppState) -> String {
-    if let Some(data) = &state.data {
-        let mut lines = Vec::new();
-        lines.push("Welcome to the ZQSDev interactive terminal!".to_string());
-        lines.push(format!("Profile loaded for {}.", data.profile.name));
-        lines.push(String::new());
-        lines.push("Type `help` to view all available commands.".to_string());
-        lines.push("Use the quick actions below to jump to key sections instantly.".to_string());
-        lines.join("\n")
-    } else {
-        "Welcome! Loading résumé data…".to_string()
-    }
+fn profile_loaded_line(name: &str) -> String {
+    format!("Profile loaded for {}.", name)
+}
+
+fn resume_link_html(url: &str) -> String {
+    format!(
+        r#"If you want, you can just <a href="{url}" target="_blank" rel="noopener noreferrer">open the résumé</a>."#,
+        url = url
+    )
 }
 
 #[cfg(test)]
@@ -536,26 +653,44 @@ mod tests {
         state
     }
 
-    #[wasm_bindgen_test]
-    fn welcome_message_with_data_mentions_profile() {
-        let state = make_state_with_data();
-        let message = build_welcome_message(&state);
-        assert!(message.contains("Profile loaded for Alex."));
-        assert!(
-            message.contains("Type `help`"),
-            "Help hint missing:\n{message}"
-        );
-        assert!(
-            message.contains("Use the quick actions below"),
-            "Quick action hint missing:\n{message}"
+    #[test]
+    fn boot_sequence_matches_spec() {
+        assert_eq!(
+            super::BOOT_SEQUENCE_MESSAGE,
+            "Welcome to the ZQSDev interactive terminal!"
         );
     }
 
-    #[wasm_bindgen_test]
-    fn welcome_message_without_data_is_loading() {
-        let state = AppState::new();
-        let message = build_welcome_message(&state);
-        assert_eq!(message, "Welcome! Loading résumé data…");
+    #[test]
+    fn guidance_lines_match_spec() {
+        assert_eq!(
+            super::WELCOME_GUIDANCE_LINES,
+            [
+                "Type `help` to view all available commands.",
+                "Use the quick actions below to jump to key sections instantly."
+            ]
+        );
+    }
+
+    #[test]
+    fn profile_loaded_line_formats_name() {
+        assert_eq!(
+            super::profile_loaded_line("Alex"),
+            "Profile loaded for Alex."
+        );
+    }
+
+    #[test]
+    fn resume_link_html_wraps_anchor() {
+        let html = super::resume_link_html("https://cv.zqsdev.com");
+        assert!(
+            html.contains(r#"href="https://cv.zqsdev.com""#),
+            "Expected résumé anchor to include the provided URL: {html}"
+        );
+        assert!(
+            html.contains("open the résumé"),
+            "Anchor markup should include the résumé label: {html}"
+        );
     }
 
     #[wasm_bindgen_test]
@@ -588,6 +723,39 @@ mod tests {
             Some("resume"),
             "Résumé helper chip should be the first suggestion"
         );
+    }
+
+    #[test]
+    fn ai_help_label_includes_model_name() {
+        let label = super::ai_help_label(Some("gpt-4o-mini"));
+        assert!(
+            label.contains("gpt-4o-mini"),
+            "AI help label should include the model name: {label}"
+        );
+    }
+
+    #[test]
+    fn ai_mode_suggestions_label_help_with_model() {
+        let suggestions = super::ai_mode_suggestions("", Some("llama-3.1-8b-instant"));
+        let help = suggestions
+            .iter()
+            .find(|(command, _)| command == "help")
+            .expect("help suggestion missing");
+        assert!(
+            help.1.contains("llama-3.1-8b-instant"),
+            "Help label should mention the active model {help:?}"
+        );
+    }
+
+    #[test]
+    fn ai_mode_suggestions_filter_by_prefix() {
+        let suggestions = super::ai_mode_suggestions("q", Some("gpt"));
+        assert_eq!(
+            suggestions.len(),
+            1,
+            "Only the quit suggestion should match prefix `q`"
+        );
+        assert_eq!(suggestions[0].0, "quit");
     }
 
     #[wasm_bindgen_test]

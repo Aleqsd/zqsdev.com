@@ -146,9 +146,7 @@ impl RateLimiter {
             hour_spend: self.hour_cost.total,
             day_spend: self.day_cost.total,
             month_spend: self.month_cost.total,
-            ip_burst: ip_windows
-                .map(|w| w.burst.entries.len())
-                .unwrap_or(0),
+            ip_burst: ip_windows.map(|w| w.burst.entries.len()).unwrap_or(0),
             ip_minute: ip_windows.map(|w| w.minute.entries.len()).unwrap_or(0),
             ip_hour: ip_windows.map(|w| w.hour.entries.len()).unwrap_or(0),
             ip_day: ip_windows.map(|w| w.day.entries.len()).unwrap_or(0),

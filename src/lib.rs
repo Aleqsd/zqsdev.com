@@ -2,6 +2,7 @@ mod ai;
 mod commands;
 mod input;
 mod keyword_icons;
+mod markdown;
 mod renderer;
 mod state;
 mod terminal;
@@ -24,7 +25,7 @@ pub fn start() -> Result<(), JsValue> {
     let terminal = Rc::new(Terminal::new(Rc::clone(&state), Rc::clone(&renderer)));
 
     terminal.initialize()?;
-    terminal.push_system_message("Booting ZQSDev terminal…");
+    terminal.push_system_message("Booting…");
 
     input::install_listeners(Rc::clone(&terminal))?;
 

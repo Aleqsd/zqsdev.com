@@ -544,7 +544,7 @@ body.theme-midnight {
 }
 
 #terminal.ai-mode-active .suggestion[data-command="quit"]::before {
-    content: "⏻";
+    content: "🛑";
     filter: drop-shadow(0 0 8px rgba(255, 120, 120, 0.8));
 }
 

@@ -1839,7 +1839,7 @@ dependencies = [
 
 [[package]]
 name = "zqs_terminal"
-version = "0.1.19"
+version = "0.1.25"
 dependencies = [
  "console_error_panic_hook",
  "gloo-timers",
@@ -1855,7 +1855,7 @@ dependencies = [
 
 [[package]]
 name = "zqs_terminal_server"
-version = "0.1.19"
+version = "0.1.25"
 dependencies = [
  "anyhow",
  "axum",

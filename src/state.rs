@@ -103,6 +103,7 @@ pub struct AppState {
     pub data: Option<TerminalData>,
     pub initialized: bool,
     pub ai_mode: bool,
+    pub ai_model: Option<String>,
 }
 
 impl AppState {
@@ -115,6 +116,7 @@ impl AppState {
             data: None,
             initialized: false,
             ai_mode: false,
+            ai_model: None,
         }
     }
 
@@ -132,5 +134,9 @@ impl AppState {
 
     pub fn set_ai_mode(&mut self, active: bool) {
         self.ai_mode = active;
+    }
+
+    pub fn set_ai_model(&mut self, model: Option<String>) {
+        self.ai_model = model;
     }
 }

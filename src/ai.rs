@@ -12,6 +12,8 @@ pub struct AiServerResponse {
     pub answer: String,
     pub ai_enabled: bool,
     pub reason: Option<String>,
+    #[serde(default)]
+    pub model: Option<String>,
 }
 
 #[derive(Serialize)]

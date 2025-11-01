@@ -180,6 +180,21 @@ const KEYWORD_PATTERNS: &[KeywordPattern] = &[
         icon_path: "/icons/devicons/linkedin/linkedin-original.svg",
     },
     KeywordPattern {
+        pattern: "Alexandre DO-O ALMEIDA",
+        pattern_lower: "alexandre do-o almeida",
+        icon_path: "/icons/devicons/alexandre.png",
+    },
+    KeywordPattern {
+        pattern: "Meta Platforms",
+        pattern_lower: "meta platforms",
+        icon_path: "/icons/devicons/meta/meta-original.svg",
+    },
+    KeywordPattern {
+        pattern: "Meta",
+        pattern_lower: "meta",
+        icon_path: "/icons/devicons/meta/meta-original.svg",
+    },
+    KeywordPattern {
         pattern: "AWS",
         pattern_lower: "aws",
         icon_path: "/icons/devicons/amazonwebservices/amazonwebservices-original-wordmark.svg",
@@ -329,7 +344,7 @@ fn is_end_boundary(text: &str, end: usize) -> bool {
 }
 
 fn is_keyword_char(ch: char) -> bool {
-    ch.is_ascii_alphanumeric() || matches!(ch, '+' | '#' | '.' | '/')
+    ch.is_ascii_alphanumeric() || matches!(ch, '+' | '#' | '/')
 }
 
 #[cfg(test)]
@@ -469,6 +484,64 @@ mod tests {
                     icon_path: "/icons/devicons/linkedin/linkedin-original.svg"
                 }),
                 Segment::Text(" today.".to_string()),
+            ]
+        );
+    }
+
+    #[test]
+    fn tokenize_detects_meta() {
+        let segments = tokenize("Shipped experiences with Meta Platforms and Meta teams.");
+        assert_eq!(
+            segments,
+            vec![
+                Segment::Text("Shipped experiences with ".to_string()),
+                Segment::Icon(IconMatch {
+                    token: "Meta Platforms".to_string(),
+                    icon_path: "/icons/devicons/meta/meta-original.svg"
+                }),
+                Segment::Text(" and ".to_string()),
+                Segment::Icon(IconMatch {
+                    token: "Meta".to_string(),
+                    icon_path: "/icons/devicons/meta/meta-original.svg"
+                }),
+                Segment::Text(" teams.".to_string()),
+            ]
+        );
+    }
+
+    #[test]
+    fn tokenize_detects_alexandre() {
+        let segments = tokenize("Meet Alexandre DO-O ALMEIDA, better known as Alexandre.");
+        assert_eq!(
+            segments,
+            vec![
+                Segment::Text("Meet ".to_string()),
+                Segment::Icon(IconMatch {
+                    token: "Alexandre DO-O ALMEIDA".to_string(),
+                    icon_path: "/icons/devicons/alexandre.png"
+                }),
+                Segment::Text(", better known as ".to_string()),
+                Segment::Icon(IconMatch {
+                    token: "Alexandre".to_string(),
+                    icon_path: "/icons/devicons/alexandre.png"
+                }),
+                Segment::Text(".".to_string()),
+            ]
+        );
+    }
+
+    #[test]
+    fn tokenize_detects_profile_load_line() {
+        let segments = tokenize("Profile loaded for Alexandre DO-O ALMEIDA.");
+        assert_eq!(
+            segments,
+            vec![
+                Segment::Text("Profile loaded for ".to_string()),
+                Segment::Icon(IconMatch {
+                    token: "Alexandre DO-O ALMEIDA".to_string(),
+                    icon_path: "/icons/devicons/alexandre.png"
+                }),
+                Segment::Text(".".to_string()),
             ]
         );
     }
