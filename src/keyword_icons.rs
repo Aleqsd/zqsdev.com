@@ -175,6 +175,11 @@ const KEYWORD_PATTERNS: &[KeywordPattern] = &[
         icon_path: "/icons/devicons/slack/slack-original.svg",
     },
     KeywordPattern {
+        pattern: "LinkedIn",
+        pattern_lower: "linkedin",
+        icon_path: "/icons/devicons/linkedin/linkedin-original.svg",
+    },
+    KeywordPattern {
         pattern: "AWS",
         pattern_lower: "aws",
         icon_path: "/icons/devicons/amazonwebservices/amazonwebservices-original-wordmark.svg",
@@ -453,6 +458,22 @@ mod tests {
                     icon_path: "/icons/devicons/googlecloud/googlecloud-original.svg"
                 }),
                 Segment::Text(" services.".to_string()),
+            ]
+        );
+    }
+
+    #[test]
+    fn tokenize_detects_linkedin() {
+        let segments = tokenize("Connect on LinkedIn today.");
+        assert_eq!(
+            segments,
+            vec![
+                Segment::Text("Connect on ".to_string()),
+                Segment::Icon(IconMatch {
+                    token: "LinkedIn".to_string(),
+                    icon_path: "/icons/devicons/linkedin/linkedin-original.svg"
+                }),
+                Segment::Text(" today.".to_string()),
             ]
         );
     }

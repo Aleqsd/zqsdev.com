@@ -3,7 +3,8 @@
 
 # Generated build artifacts
 /pkg/
-/target/
+target/
+**/target/
 
 # Local environment overrides
 .env

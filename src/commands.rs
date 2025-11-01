@@ -8,7 +8,7 @@ pub struct CommandDefinition {
     pub icon: &'static str,
 }
 
-const AI_MODEL_NAME: &str = "gpt-4o-mini";
+const AI_MODEL_NAME: &str = "llama-3.1-8b-instant";
 
 pub const COMMAND_DEFINITIONS: &[CommandDefinition] = &[
     CommandDefinition {
@@ -318,7 +318,9 @@ fn execute_ai(state: &AppState) -> Result<CommandAction, String> {
     );
     lines.push("  • While active, type a natural-language question or use the helper chips (`help`, `quit`).".to_string());
     lines.push("  • The assistant only answers using Alexandre DO-O ALMEIDA's résumé data. If it can't find something, it will say so.".to_string());
-    lines.push(format!("  • Model in use: {AI_MODEL_NAME} (OpenAI)."));
+    lines.push(format!(
+        "  • Model in use: {AI_MODEL_NAME} (Groq, OpenAI fallback on errors)."
+    ));
     lines.push(String::new());
     if state.ai_mode {
         lines.push("AI Mode is currently active. Ask your question or type `quit` to return to classic mode.".to_string());
