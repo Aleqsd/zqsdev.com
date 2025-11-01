@@ -1,18 +1,18 @@
 {
     "name": "Alexandre DO-O ALMEIDA",
     "headline": "💡 Senior DevOps Engineer • Founding Engineer • QA Automation",
-    "summary_fr": "Ingénieur logiciel senior avec 10 ans d’expérience en DevOps, produit et fullstack, spécialisé dans le jeu vidéo et les infrastructures d’autotests. Ex-PlayStation (CI/CD & QA automation pour les jeux rétro) et cofondateur de Jam.gg (Y Combinator S20).",
     "summary_en": "Senior software engineer with 10 years of experience in DevOps, product, and fullstack development across gaming and tech. Ex-PlayStation (CI/CD & QA automation for retro games) and cofounder of Jam.gg (Y Combinator S20).",
     "location": "France (Remote)",
     "email": "alexandre@zqsdev.com",
     "links": {
         "github": "https://github.com/aleqsd",
         "linkedin": "https://www.linkedin.com/in/alexandre-dooalmeida",
-        "website": "https://zqsdev.com",
-        "resume_url": "https://cv.zqsdev.com"
+        "website": "https://www.zqsdev.com/",
+        "resume_url": "https://cv.zqsdev.com/"
     },
     "languages": [
-        "fr",
-        "en"
+        "English (TOEIC 990/990) - Full professional proficiency",
+        "French - Native or bilingual proficiency",
+        "Spanish - Limited working proficiency"
     ]
 }

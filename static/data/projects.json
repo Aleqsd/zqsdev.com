@@ -1,44 +1,82 @@
 [
     {
-        "name": "🧪 PlayStation Emulator Autotest Suite",
-        "desc": "Automated QA infrastructure for testing and verifying retro titles on PlayStation platforms.",
+        "name": "🎮 Micro Mages (NES to PS5 Port)",
+        "desc": "Combined faithful emulation with modern enhancements, building QA automation, CI/CD pipelines, and publishing workflows for the PS5 release with online multiplayer and PSN achievements.",
         "tech": [
             "Python",
-            "Rust",
-            "AWS",
-            "GitHub Actions"
+            "QA Automation",
+            "GitHub Actions",
+            "Lua"
         ],
-        "link": "https://github.com/aleqsd"
+        "link": "https://store.playstation.com/en-us/concept/10008684"
     },
     {
-        "name": "🎮 Jam.gg Cloud Gaming Platform",
-        "desc": "Browser-based multiplayer platform with Twitch/Discord integration and custom game catalog system.",
+        "name": "🕹️ Mistale Studio",
+        "desc": "Directed a 15-person startup team to ship a cross-platform Line Tower Wars title with PvP and community features for the Intel Game Developer Contest.",
         "tech": [
-            "Go",
-            "React",
-            "Firebase",
-            "GCP"
+            "Leadership",
+            "Unity3D",
+            "Video Games"
         ],
-        "link": "https://jam.gg"
+        "link": "https://x.com/MistaleStudio"
     },
     {
-        "name": "🕹️ Arcana-Mundi",
-        "desc": "Homebrew Sega Genesis game with automated builds and emulator testing pipelines.",
+        "name": "🐝 BeeToBee",
+        "desc": "Delivered a campus web and mobile platform enabling Ynov students to offer peer-led trainings and manage professionalization certifications.",
         "tech": [
-            "C",
-            "Rust",
-            "GitHub Actions"
+            "Android"
         ],
-        "link": "https://github.com/aleqsd"
+        "link": "https://x.com/BeeToBee_Ynov"
     },
     {
-        "name": "🤖 QA Bot & CI Integrations",
-        "desc": "Automation bots for Slack, GitHub, and Linear to streamline QA and DevOps workflows.",
+        "name": "📱 Cherry Sports",
+        "desc": "Built a motivational Android app that tracks workouts, visualizes progress, and rewards consistency using neuroscience-inspired mechanics.",
         "tech": [
-            "Python",
-            "AWS Lambda",
-            "Slack API"
+            "Android"
         ],
-        "link": "https://github.com/aleqsd"
+        "link": null
+    },
+    {
+        "name": "🎥 TheClair - End of Study Project",
+        "desc": "Managed a four-person team to deliver Kinect-controlled theater projector software, developed in C++/Qt with a MySQL backend.",
+        "tech": [
+            "C++",
+            "Qt",
+            "Microsoft Visual Studio",
+            "SVN",
+            "MySQL"
+        ],
+        "link": null
+    },
+    {
+        "name": "🎮 E-Sport player @ Millenium",
+        "desc": "I was part of the World of Warcraft roster of the multi-gaming structure Millenium, at the age of 17 (whose organizers later founded Webedia)",
+        "tech": [
+            "E-Sport",
+            "Video Games"
+        ],
+        "link": "https://x.com/BeeToBee_Ynov"
+    },
+    {
+        "name": "📄 Machine Learning and Cancer Prediction",
+        "desc": "Researched interpretable ML for oncology, interviewing field experts and building an XGBoost prototype on the Wisconsin Breast Cancer Dataset for early-detection support.",
+        "tech": [
+            "Machine Learning",
+            "XGBoost",
+            "Data Science"
+        ],
+        "link": "https://drive.google.com/file/d/1vSn7ih7-lTybVDkfm3Re2lNdA2dCDqO_/view"
+    },
+    {
+        "name": "🏆 First Place – Workshop Ynov National",
+        "desc": "Led the winning Atos France x Ynov team among 2600 students, delivering a full tender response with product, marketing, and engineering pitches to a 400-person jury.",
+        "tech": [],
+        "link": null
+    },
+    {
+        "name": "🏆 Winner – Student Battle Code",
+        "desc": "Captured national honors at Sopra Steria's programming challenge across French engineering schools through rapid problem-solving and team coordination.",
+        "tech": [],
+        "link": null
     }
 ]

@@ -64,16 +64,30 @@ def bump(version: str, level: str) -> str:
     return f"{major}.{minor}.{patch}"
 
 
-def update_manifest(manifest: Path, new_version: str) -> None:
+def update_manifest(manifest: Path, new_version: str) -> bool:
     original = manifest.read_text(encoding="utf-8")
 
     def replacer(match: re.Match[str]) -> str:
         return f"{match.group(1)}{new_version}{match.group(3)}"
 
-    updated, count = VERSION_PATTERN.subn(replacer, original, count=1)
-    if count == 0:
-        raise ValueError(f"Failed to update version in {manifest}")
+    if not VERSION_PATTERN.search(original):
+        return False
+
+    updated = VERSION_PATTERN.sub(replacer, original, count=1)
     manifest.write_text(updated, encoding="utf-8")
+    return True
+
+
+def ensure_workspace_version(manifest: Path) -> None:
+    text = manifest.read_text(encoding="utf-8")
+    if 'version.workspace' not in text:
+        raise ValueError(
+            f"{manifest} does not opt into workspace versioning; update the manifest or adjust the bump script."
+        )
+    if VERSION_PATTERN.search(text):
+        raise ValueError(
+            f"{manifest} still contains an explicit version assignment; remove it to rely on workspace.package."
+        )
 
 
 def write_version_file(version_file: Path, version: str) -> None:
@@ -95,8 +109,9 @@ def main() -> int:
         current_version = read_current_version(version_file, workspace_manifest)
         new_version = bump(current_version, args.level)
         write_version_file(version_file, new_version)
-        update_manifest(workspace_manifest, new_version)
-        update_manifest(server_manifest, new_version)
+        if not update_manifest(workspace_manifest, new_version):
+            raise ValueError(f"Failed to update version in {workspace_manifest}")
+        ensure_workspace_version(server_manifest)
     except Exception as exc:  # noqa: BLE001
         print(f"[bump-version] error: {exc}", file=sys.stderr)
         return 1

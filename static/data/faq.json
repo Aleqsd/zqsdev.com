@@ -1,15 +1,23 @@
 [
     {
         "question": "🌍 Are you open to remote roles?",
-        "answer": "Yes. I have led distributed teams across Europe and North America and work comfortably async-first."
+        "answer": "Yes. I'm remote-first, currently based in Montpellier, France, and can consider relocation in 2026."
+    },
+    {
+        "question": "👥 Can you lead cross-functional teams?",
+        "answer": "Yes. I've led developer and QA teams for PlayStation and Atos, helped launch Jam.gg as a founding engineer, product owner, and TPM, and coordinated personal gaming crews across artists, gamedev, QA, and marketing."
     },
     {
         "question": "🏢 What industries do you focus on?",
-        "answer": "Developer tooling, gaming platforms, and automation-heavy products are where I deliver the most value."
+        "answer": "Gaming, biotech, and the automation projects that keep me curious are where I deliver the most value."
+    },
+    {
+        "question": "🤖 How do you use AI in your workflow?",
+        "answer": "I'm having a blast with the latest AI tooling—pairing Codex CLI, Gemini CLI, and other copilots in parallel across multiple projects every day to speed up delivery."
     },
     {
         "question": "⏱️ How soon can you start?",
-        "answer": "I can begin a new engagement within four weeks, depending on contract and onboarding requirements."
+        "answer": "I can start this month and move quickly once we align on scope."
     },
     {
         "question": "🚀 Do you engage with early-stage startups?",

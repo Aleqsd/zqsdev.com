@@ -1025,4 +1025,131 @@ mod tests {
         };
         assert_eq!(app_state.estimate_cost("Hello AI?"), 0.0);
     }
+
+    #[test]
+    fn faq_knowledge_reflects_latest_details() {
+        let data_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../static/data");
+        let knowledge =
+            KnowledgeBase::load(&data_dir).expect("should load knowledge base from static data");
+        let (_, json_text) = knowledge
+            .system_prompt
+            .split_once("Knowledge base (JSON):\n")
+            .expect("system prompt should embed knowledge JSON");
+        let data: serde_json::Value =
+            serde_json::from_str(json_text).expect("embedded knowledge should be valid JSON");
+        let faqs = data
+            .get("faq")
+            .and_then(|value| value.as_array())
+            .expect("faq data should be an array");
+
+        let remote = faqs
+            .iter()
+            .find(|entry| {
+                entry
+                    .get("question")
+                    .and_then(|value| value.as_str())
+                    == Some("🌍 Are you open to remote roles?")
+            })
+            .and_then(|entry| entry.get("answer"))
+            .and_then(|value| value.as_str())
+            .expect("remote roles FAQ should be present");
+        assert!(
+            remote.contains("remote-first"),
+            "Remote FAQ answer should mention remote-first culture: {remote}"
+        );
+        assert!(
+            remote.contains("Montpellier"),
+            "Remote FAQ answer should include current location: {remote}"
+        );
+        assert!(
+            remote.contains("2026"),
+            "Remote FAQ answer should reference relocation timeline: {remote}"
+        );
+
+        let industries = faqs
+            .iter()
+            .find(|entry| {
+                entry
+                    .get("question")
+                    .and_then(|value| value.as_str())
+                    == Some("🏢 What industries do you focus on?")
+            })
+            .and_then(|entry| entry.get("answer"))
+            .and_then(|value| value.as_str())
+            .expect("industry focus FAQ should be present");
+        assert!(
+            industries.contains("Gaming"),
+            "Industry answer should include gaming focus: {industries}"
+        );
+        assert!(
+            industries.contains("biotech"),
+            "Industry answer should include biotech focus: {industries}"
+        );
+        assert!(
+            industries.contains("automation"),
+            "Industry answer should mention automation projects: {industries}"
+        );
+
+        let leadership = faqs
+            .iter()
+            .find(|entry| {
+                entry
+                    .get("question")
+                    .and_then(|value| value.as_str())
+                    == Some("👥 Can you lead cross-functional teams?")
+            })
+            .and_then(|entry| entry.get("answer"))
+            .and_then(|value| value.as_str())
+            .expect("leadership FAQ should be present");
+        assert!(
+            leadership.contains("PlayStation") && leadership.contains("Atos"),
+            "Leadership answer should reference enterprise teams: {leadership}"
+        );
+        assert!(
+            leadership.contains("Jam.gg"),
+            "Leadership answer should mention Jam.gg founding role: {leadership}"
+        );
+        assert!(
+            leadership.contains("artists")
+                && leadership.contains("QA")
+                && leadership.contains("marketing"),
+            "Leadership answer should cover cross-discipline personal projects: {leadership}"
+        );
+
+        let ai_usage = faqs
+            .iter()
+            .find(|entry| {
+                entry
+                    .get("question")
+                    .and_then(|value| value.as_str())
+                    == Some("🤖 How do you use AI in your workflow?")
+            })
+            .and_then(|entry| entry.get("answer"))
+            .and_then(|value| value.as_str())
+            .expect("AI workflow FAQ should be present");
+        assert!(
+            ai_usage.contains("Codex CLI") && ai_usage.contains("Gemini CLI"),
+            "AI usage answer should cite key copilots: {ai_usage}"
+        );
+        assert!(
+            ai_usage.contains("multiple projects") && ai_usage.contains("parallel"),
+            "AI usage answer should highlight concurrent workflows: {ai_usage}"
+        );
+
+        let availability = faqs
+            .iter()
+            .find(|entry| {
+                entry
+                    .get("question")
+                    .and_then(|value| value.as_str())
+                    == Some("⏱️ How soon can you start?")
+            })
+            .and_then(|entry| entry.get("answer"))
+            .and_then(|value| value.as_str())
+            .expect("availability FAQ should be present");
+        assert!(
+            availability.contains("start this month"),
+            "Availability answer should confirm immediate start: {availability}"
+        );
+    }
 }

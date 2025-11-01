@@ -448,7 +448,11 @@ mod tests {
                 website: None,
                 resume_url: Some("https://cv.zqsdev.com".to_string()),
             },
-            languages: Some(vec!["English".to_string(), "Français".to_string()]),
+            languages: Some(vec![
+                "English (TOEIC 990/990) - Full professional proficiency".to_string(),
+                "French - Native or bilingual proficiency".to_string(),
+                "Spanish - Limited working proficiency".to_string(),
+            ]),
         };
 
         let mut skills = BTreeMap::new();
@@ -587,8 +591,38 @@ mod tests {
             "English summary missing from contact output:\n{output}"
         );
         assert!(
-            output.contains("ENGLISH, FRANÇAIS"),
-            "Languages should appear uppercased in contact output:\n{output}"
+            output.contains("ENGLISH (TOEIC 990/990) - FULL PROFESSIONAL PROFICIENCY"),
+            "Languages should surface detailed proficiency in contact output:\n{output}"
+        );
+    }
+
+    #[wasm_bindgen_test]
+    fn contact_command_handles_missing_french_summary() {
+        let mut state = stub_state();
+        let mut data = state
+            .data
+            .clone()
+            .expect("stub state should include résumé data");
+        data.profile.summary_fr = None;
+        data.profile.links.resume_url = None;
+        state.set_data(data);
+
+        let action = execute("contact", &state, &[]).expect("contact command should succeed");
+        let CommandAction::OutputHtml(output) = action else {
+            panic!("expected html output");
+        };
+
+        assert!(
+            !output.contains("Résumé (FR)"),
+            "Contact HTML should omit the French summary when unavailable:\n{output}"
+        );
+        assert!(
+            !output.contains("cv.zqsdev.com"),
+            "Contact HTML should hide resume link when not provided:\n{output}"
+        );
+        assert!(
+            output.contains("ENGLISH (TOEIC 990/990) - FULL PROFESSIONAL PROFICIENCY"),
+            "Detailed languages should remain visible when summaries are missing:\n{output}"
         );
     }
 
@@ -644,6 +678,54 @@ mod tests {
             }
             other => panic!("unexpected result for unknown command: {other:?}"),
         }
+    }
+
+    #[test]
+    fn format_projects_omits_link_when_absent() {
+        let projects = vec![Project {
+            name: "Demo".to_string(),
+            desc: "No external link provided.".to_string(),
+            tech: vec!["Rust".to_string(), "Testing".to_string()],
+            link: None,
+        }];
+
+        let output = super::format_projects(&projects);
+        assert!(
+            output.contains("Demo"),
+            "Project name should be present:\n{output}"
+        );
+        assert!(
+            output.contains("Tech: Rust, Testing"),
+            "Tech stack should be listed:\n{output}"
+        );
+        assert!(
+            !output.contains("Link:"),
+            "Formatter should omit empty links:\n{output}"
+        );
+    }
+
+    #[test]
+    fn format_projects_omits_tech_when_empty() {
+        let projects = vec![Project {
+            name: "No Tech Listed".to_string(),
+            desc: "An entry focusing on achievements without a tech stack.".to_string(),
+            tech: Vec::new(),
+            link: Some("https://example.com".to_string()),
+        }];
+
+        let output = super::format_projects(&projects);
+        assert!(
+            output.contains("No Tech Listed"),
+            "Project name should appear:\n{output}"
+        );
+        assert!(
+            output.contains("Link: https://example.com"),
+            "Formatter should still render links when present:\n{output}"
+        );
+        assert!(
+            !output.contains("Tech:"),
+            "Formatter should omit tech line when list is empty:\n{output}"
+        );
     }
 
     #[test]
