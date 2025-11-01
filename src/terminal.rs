@@ -107,6 +107,9 @@ impl Terminal {
         };
         self.renderer
             .append_command(&prompt_label, &display_line, command_scroll)?;
+        if !ai_mode_active {
+            self.renderer.append_spacer_line(ScrollBehavior::None)?;
+        }
 
         if trimmed.is_empty() {
             return Ok(());

@@ -3,8 +3,8 @@
         "title": "🚀 DevOps Engineer / Autotests Infrastructure Lead",
         "company": "🎮 Sony Interactive Entertainment (PlayStation)",
         "location": "San Francisco (Remote)",
-        "start": "2023-02",
-        "end": "2025-07",
+        "start": "2023",
+        "end": "2025",
         "highlights": [
             "Built from scratch the CI/CD and autotest infrastructure for PlayStation emulators used in the Classics Catalog on PS4 and PS5.",
             "Automated testing of 5,000+ retro games on console devkits and OS environments, using Python, GitHub Actions, AWS and Google/Slack/Linear APIs.",
@@ -17,8 +17,8 @@
         "title": "🏗️ Founding Engineer / Product Manager",
         "company": "☁️ Jam.gg (Y Combinator S20)",
         "location": "San Francisco (Remote)",
-        "start": "2020-03",
-        "end": "2023-02",
+        "start": "2020",
+        "end": "2023",
         "highlights": [
             "Cofounding team of a SaaS cloud gaming platform scaled to 2M users and 500K MAU.",
             "Built backend/frontend/cloud architecture using Go, TypeScript, React, Firebase, and GCP.",
@@ -30,8 +30,8 @@
         "title": "🔧 Innovation Project Manager / Backend Engineer",
         "company": "🛡️ Atos",
         "location": "Aix-en-Provence, France",
-        "start": "2018-09",
-        "end": "2020-07",
+        "start": "2018",
+        "end": "2020",
         "highlights": [
             "Led a team of 6 developers on AI, IoT, and predictive maintenance projects using Azure.",
             "Developed a secure Java backend for a geolocation tool used by the French Army.",
@@ -42,8 +42,8 @@
         "title": "🕶️ VR/AR Engineer",
         "company": "🛩️ Airbus Helicopters",
         "location": "Marignane, France",
-        "start": "2017-10",
-        "end": "2018-09",
+        "start": "2017",
+        "end": "2018",
         "highlights": [
             "Built immersive Unity simulators (C#) for HTC Vive and HoloLens to train helicopter technicians.",
             "Developed a Python/XML tool for Dassault to automate maintenance documentation."
@@ -53,8 +53,8 @@
         "title": "🧬 Bioinformatics Engineer Intern",
         "company": "CNRS (French National Centre for Scientific Research)",
         "location": "Marseille, France",
-        "start": "2016-05",
-        "end": "2016-07",
+        "start": "2016",
+        "end": "2016",
         "highlights": [
             "Extended VisualTE (Java/Swing) with modules for 3D structure analysis, multiple alignments, and phylogenetic visualization."
         ]

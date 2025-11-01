@@ -71,12 +71,16 @@ impl Renderer {
     pub fn update_input(&self, buffer: &str) {
         self.prompt_input.set_text_content(Some(buffer));
         self.prompt_hidden_input.set_value(buffer);
+        let end = buffer.encode_utf16().count() as u32;
+        let _ = self
+            .prompt_hidden_input
+            .set_selection_range(end, end);
     }
 
     pub fn focus_terminal(&self) {
         let _ = self.prompt_hidden_input.focus();
-        let len = self.prompt_hidden_input.value().len() as u32;
-        let _ = self.prompt_hidden_input.set_selection_range(len, len);
+        let end = self.prompt_hidden_input.value().encode_utf16().count() as u32;
+        let _ = self.prompt_hidden_input.set_selection_range(end, end);
     }
 
     pub fn append_command(
@@ -109,6 +113,20 @@ impl Renderer {
         line.append_child(&command_span)?;
         self.output.append_child(&line)?;
         let element: &HtmlElement = line.unchecked_ref();
+        self.apply_scroll(element, behavior)?;
+        Ok(())
+    }
+
+    pub fn append_spacer_line(&self, behavior: ScrollBehavior) -> Result<(), JsValue> {
+        let spacer = self
+            .document
+            .create_element("div")?
+            .dyn_into::<HtmlElement>()?;
+        spacer.set_class_name("line spacer-line");
+        spacer.set_text_content(Some("\u{00a0}"));
+        spacer.set_attribute("aria-hidden", "true")?;
+        self.output.append_child(&spacer)?;
+        let element: &HtmlElement = spacer.unchecked_ref();
         self.apply_scroll(element, behavior)?;
         Ok(())
     }
