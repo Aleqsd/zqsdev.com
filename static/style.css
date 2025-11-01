@@ -602,7 +602,7 @@ body.theme-midnight {
     align-items: center;
     justify-content: center;
     gap: 0.35rem;
-    padding: 0.45rem 1rem;
+    padding: 0.45rem 1.2rem;
     border-radius: 999px;
     border: 1px solid var(--color-panel-border);
     background: rgba(12, 24, 36, 0.6);
@@ -612,6 +612,7 @@ body.theme-midnight {
     font-size: 0.65rem;
     font-weight: 600;
     cursor: pointer;
+    text-align: center;
     transition: color 0.2s ease, border-color 0.2s ease, background 0.2s ease;
 }
 

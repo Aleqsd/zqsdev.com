@@ -21,8 +21,8 @@ const AI_INDICATOR_ID: &str = "ai-mode-indicator";
 const AI_LOADER_ID: &str = "ai-loader";
 
 const COMPACT_SUGGESTION_VISIBLE_COUNT: usize = 4;
-const SUGGESTION_EXPAND_LABEL: &str = "Afficher tout";
-const SUGGESTION_COLLAPSE_LABEL: &str = "Réduire";
+const SUGGESTION_EXPAND_LABEL: &str = "Show more";
+const SUGGESTION_COLLAPSE_LABEL: &str = "Show less";
 
 #[derive(Clone, Copy)]
 pub enum ScrollBehavior {
