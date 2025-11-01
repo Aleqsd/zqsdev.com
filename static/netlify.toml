@@ -1,0 +1,30 @@
+[build]
+publish = "."
+command = ""
+
+# Serve the résumé viewer directly when the cv subdomain is hit
+[[redirects]]
+from = "https://cv.zqsdev.com/*"
+to = "/cv/:splat"
+status = 200
+force = true
+
+# Calendly keeps its vanity subdomain but points to the external scheduler
+[[redirects]]
+from = "https://calendly.zqsdev.com/*"
+to = "https://calendly.com/alexandre-zqsdev/30min"
+status = 301
+force = true
+
+# Convenience redirect for the /calendly path on the main site
+[[redirects]]
+from = "/calendly"
+to = "https://calendly.com/alexandre-zqsdev/30min"
+status = 301
+force = true
+
+# Catch-all so the SPA stays routable on zqsdev.com / www.zqsdev.com
+[[redirects]]
+from = "/*"
+to = "/index.html"
+status = 200

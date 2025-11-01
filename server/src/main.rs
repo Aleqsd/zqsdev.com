@@ -973,6 +973,44 @@ fn tokens_to_cost(input_tokens: usize, output_tokens: usize) -> f64 {
 mod tests {
     use super::*;
 
+    fn load_embedded_knowledge() -> serde_json::Value {
+        let data_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../static/data");
+        let knowledge =
+            KnowledgeBase::load(&data_dir).expect("should load knowledge base from static data");
+        let (_, json_text) = knowledge
+            .system_prompt
+            .split_once("Knowledge base (JSON):\n")
+            .expect("system prompt should embed knowledge JSON");
+        serde_json::from_str(json_text).expect("embedded knowledge should be valid JSON")
+    }
+
+    #[test]
+    fn profile_links_target_primary_domains() {
+        let data = load_embedded_knowledge();
+        let links = data
+            .get("profile")
+            .and_then(|profile| profile.get("links"))
+            .expect("profile.links should be present");
+
+        let resume = links
+            .get("resume_url")
+            .and_then(|value| value.as_str())
+            .expect("profile.links.resume_url should be populated");
+        assert!(
+            resume.starts_with("https://cv.zqsdev.com"),
+            "Résumé link should point to the cv subdomain: {resume}"
+        );
+
+        let website = links
+            .get("website")
+            .and_then(|value| value.as_str())
+            .expect("profile.links.website should be populated");
+        assert!(
+            website.starts_with("https://www.zqsdev.com") || website.starts_with("https://zqsdev.com"),
+            "Website link should target the primary domain: {website}"
+        );
+    }
+
     #[test]
     fn token_estimate_is_positive() {
         let sample = "Hello world";
@@ -1096,15 +1134,7 @@ mod tests {
 
     #[test]
     fn faq_knowledge_reflects_latest_details() {
-        let data_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../static/data");
-        let knowledge =
-            KnowledgeBase::load(&data_dir).expect("should load knowledge base from static data");
-        let (_, json_text) = knowledge
-            .system_prompt
-            .split_once("Knowledge base (JSON):\n")
-            .expect("system prompt should embed knowledge JSON");
-        let data: serde_json::Value =
-            serde_json::from_str(json_text).expect("embedded knowledge should be valid JSON");
+        let data = load_embedded_knowledge();
         let faqs = data
             .get("faq")
             .and_then(|value| value.as_array())

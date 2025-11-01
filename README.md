@@ -106,10 +106,17 @@ The CI pipeline should run the same trio so local runs stay in lockstep with aut
 - Edit the JSON files in `static/data/` to refresh profile details, experiences, and skills.
 
 ## Deployment
-The server is optional at runtime. For a static-only deploy:
+The server is optional at runtime; the public site is served from the static bundle.
 
+### Netlify (www.zqsdev.com & zqsdev.com)
+- `static/netlify.toml` owns redirects so the SPA loads everywhere while `cv.zqsdev.com` serves the résumé viewer and `calendly.zqsdev.com` forwards to Calendly.
+- Install the Netlify CLI (`npm install -g netlify-cli`) and authenticate once with `netlify login` or `NETLIFY_AUTH_TOKEN`.
+- `make deploy-preview` → runs `make build` then `netlify deploy --dir static --config static/netlify.toml`.
+- `make deploy-prod` → same flow with `--prod`. Pass extra flags via `NETLIFY_FLAGS` (e.g. `NETLIFY_FLAGS="--alias staging"`).
+
+### Self-hosting (optional)
 1. Run `make build`.
-2. Publish the contents of `static/` (including `static/pkg/`) to your host of choice.
+2. Publish the contents of `static/` (including `static/pkg/`) to your CDN or object store.
 
 If you want AI Mode in production, deploy the proxy (e.g. on Fly.io, Railway, or a small VPS) with:
 
