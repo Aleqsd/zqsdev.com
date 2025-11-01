@@ -646,9 +646,9 @@ a:hover {
     font-size: 0.78rem;
     letter-spacing: 0.08em;
     text-transform: uppercase;
-    color: var(--color-muted);
+    color: rgba(243, 251, 255, 0.85);
     text-align: center;
-    opacity: 0.85;
+    opacity: 0.95;
 }
 
 @media (max-width: 768px) {
