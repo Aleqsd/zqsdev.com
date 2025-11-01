@@ -31,6 +31,23 @@ pub enum ScrollBehavior {
     Bottom,
 }
 
+#[derive(Clone, Debug)]
+pub struct AchievementView {
+    pub title: String,
+    pub description: String,
+    pub unlocked: bool,
+}
+
+impl AchievementView {
+    pub fn new(title: &str, description: &str, unlocked: bool) -> Self {
+        Self {
+            title: title.to_string(),
+            description: description.to_string(),
+            unlocked,
+        }
+    }
+}
+
 pub struct Renderer {
     document: Document,
     terminal_root: HtmlElement,
@@ -41,6 +58,10 @@ pub struct Renderer {
     suggestions: HtmlElement,
     ai_toggle: HtmlElement,
     ai_indicator: HtmlElement,
+    achievement_layer: HtmlElement,
+    achievements_trigger: HtmlElement,
+    achievements_overlay: HtmlElement,
+    achievements_modal: HtmlElement,
 }
 
 impl Renderer {
@@ -55,6 +76,30 @@ impl Renderer {
         let suggestions = get_html_element(&document, SUGGESTIONS_ID)?;
         let ai_toggle = get_html_element(&document, AI_TOGGLE_ID)?;
         let ai_indicator = get_html_element(&document, AI_INDICATOR_ID)?;
+        let achievements_trigger = get_html_element(&document, "achievements-trigger")?;
+        let achievements_overlay = get_html_element(&document, "achievements-overlay")?;
+        let achievements_modal = get_html_element(&document, "achievements-modal")?;
+        achievements_trigger.set_attribute("aria-expanded", "false")?;
+        achievements_overlay.set_attribute("data-state", "hidden")?;
+        achievements_overlay.set_attribute("aria-hidden", "true")?;
+        let achievement_layer = match terminal_root
+            .query_selector(".achievement-layer")?
+            .map(|node| node.dyn_into::<HtmlElement>())
+        {
+            Some(Ok(existing)) => existing,
+            Some(Err(_)) => {
+                let layer = document.create_element("div")?.dyn_into::<HtmlElement>()?;
+                layer.set_class_name("achievement-layer");
+                terminal_root.append_child(&layer)?;
+                layer
+            }
+            None => {
+                let layer = document.create_element("div")?.dyn_into::<HtmlElement>()?;
+                layer.set_class_name("achievement-layer");
+                terminal_root.append_child(&layer)?;
+                layer
+            }
+        };
 
         Ok(Self {
             document,
@@ -66,6 +111,10 @@ impl Renderer {
             suggestions,
             ai_toggle,
             ai_indicator,
+            achievement_layer,
+            achievements_trigger,
+            achievements_overlay,
+            achievements_modal,
         })
     }
 
@@ -152,6 +201,140 @@ impl Renderer {
         self.output.append_child(&wrapper)?;
         let element: &HtmlElement = wrapper.unchecked_ref();
         self.apply_scroll(element, behavior)?;
+        Ok(())
+    }
+
+    pub fn show_achievements_modal(&self, achievements: &[AchievementView]) -> Result<(), JsValue> {
+        clear_children(&self.achievements_modal)?;
+
+        let header = self
+            .document
+            .create_element("div")?
+            .dyn_into::<HtmlElement>()?;
+        header.set_class_name("achievements-modal__header");
+
+        let title_el = self
+            .document
+            .create_element("h2")?
+            .dyn_into::<HtmlElement>()?;
+        title_el.set_id("achievements-modal-title");
+        title_el.set_class_name("achievements-modal__title");
+        title_el.set_text_content(Some("Achievements"));
+
+        let close_btn = self
+            .document
+            .create_element("button")?
+            .dyn_into::<HtmlButtonElement>()?;
+        close_btn.set_class_name("achievements-modal__close");
+        close_btn.set_attribute("type", "button")?;
+        close_btn.set_attribute("data-role", "achievements-close")?;
+        close_btn.set_attribute("aria-label", "Close achievements panel")?;
+        close_btn.set_text_content(Some("Close"));
+
+        header.append_child(&title_el)?;
+        header.append_child(&close_btn)?;
+        self.achievements_modal.append_child(&header)?;
+
+        let unlocked_count = achievements.iter().filter(|entry| entry.unlocked).count();
+        let total_count = achievements.len();
+
+        let summary = self
+            .document
+            .create_element("p")?
+            .dyn_into::<HtmlElement>()?;
+        summary.set_class_name("achievements-modal__summary");
+        summary.set_text_content(Some(&format!(
+            "{unlocked}/{total} unlocked",
+            unlocked = unlocked_count,
+            total = total_count
+        )));
+        self.achievements_modal.append_child(&summary)?;
+
+        let hint = self
+            .document
+            .create_element("p")?
+            .dyn_into::<HtmlElement>()?;
+        hint.set_class_name("achievements-modal__hint");
+        hint.set_text_content(Some(
+            "Discover hidden interactions in the terminal to unlock them.",
+        ));
+        self.achievements_modal.append_child(&hint)?;
+
+        let list = self
+            .document
+            .create_element("ul")?
+            .dyn_into::<HtmlElement>()?;
+        list.set_class_name("achievements-modal__list");
+
+        for achievement in achievements {
+            let item = self
+                .document
+                .create_element("li")?
+                .dyn_into::<HtmlElement>()?;
+            item.set_class_name("achievement-card");
+            item.set_attribute(
+                "data-state",
+                if achievement.unlocked {
+                    "unlocked"
+                } else {
+                    "locked"
+                },
+            )?;
+
+            let status = self
+                .document
+                .create_element("span")?
+                .dyn_into::<HtmlElement>()?;
+            status.set_class_name("achievement-card__status");
+            status.set_text_content(Some(if achievement.unlocked {
+                "Unlocked"
+            } else {
+                "Locked"
+            }));
+
+            let title = self
+                .document
+                .create_element("h3")?
+                .dyn_into::<HtmlElement>()?;
+            title.set_class_name("achievement-card__title");
+            title.set_text_content(Some(&achievement.title));
+
+            let description = self
+                .document
+                .create_element("p")?
+                .dyn_into::<HtmlElement>()?;
+            description.set_class_name("achievement-card__description");
+            description.set_text_content(Some(&achievement.description));
+
+            item.append_child(&status)?;
+            item.append_child(&title)?;
+            item.append_child(&description)?;
+            list.append_child(&item)?;
+        }
+
+        self.achievements_modal.append_child(&list)?;
+
+        self.achievements_overlay
+            .set_attribute("data-state", "visible")?;
+        self.achievements_overlay
+            .set_attribute("aria-hidden", "false")?;
+        self.achievements_trigger
+            .set_attribute("aria-expanded", "true")?;
+
+        if let Err(err) = self.achievements_modal.focus() {
+            utils::log(&format!("Failed to focus achievements modal: {:?}", err));
+        }
+
+        Ok(())
+    }
+
+    pub fn hide_achievements_modal(&self) -> Result<(), JsValue> {
+        self.achievements_overlay
+            .set_attribute("data-state", "hidden")?;
+        self.achievements_overlay
+            .set_attribute("aria-hidden", "true")?;
+        self.achievements_trigger
+            .set_attribute("aria-expanded", "false")?;
         Ok(())
     }
 
@@ -589,6 +772,132 @@ impl Renderer {
         Ok(element)
     }
 
+    pub fn render_achievement_toast(
+        &self,
+        title: &str,
+        description: &str,
+    ) -> Result<HtmlElement, JsValue> {
+        let toast = self
+            .document
+            .create_element("div")?
+            .dyn_into::<HtmlElement>()?;
+        toast.set_class_name("achievement-toast");
+        toast.set_attribute("role", "status")?;
+        toast.set_attribute("aria-live", "polite")?;
+
+        let icon = self
+            .document
+            .create_element("div")?
+            .dyn_into::<HtmlElement>()?;
+        icon.set_class_name("achievement-toast__icon");
+        icon.set_text_content(Some("🏆"));
+
+        let content = self
+            .document
+            .create_element("div")?
+            .dyn_into::<HtmlElement>()?;
+        content.set_class_name("achievement-toast__content");
+
+        let title_el = self
+            .document
+            .create_element("p")?
+            .dyn_into::<HtmlElement>()?;
+        title_el.set_class_name("achievement-toast__title");
+        title_el.set_text_content(Some(title));
+
+        let description_el = self
+            .document
+            .create_element("p")?
+            .dyn_into::<HtmlElement>()?;
+        description_el.set_class_name("achievement-toast__description");
+        description_el.set_text_content(Some(description));
+
+        content.append_child(&title_el)?;
+        content.append_child(&description_el)?;
+        toast.append_child(&icon)?;
+        toast.append_child(&content)?;
+        self.achievement_layer.append_child(&toast)?;
+        toast.set_attribute("data-state", "visible")?;
+
+        Ok(toast)
+    }
+
+    pub fn render_pokemon_capture_attempt(&self) -> Result<HtmlElement, JsValue> {
+        self.render_pokemon_effect(
+            "pokemon-effect--capture",
+            "./effects/capture.gif",
+            "The Poké Ball wobbles while attempting to capture Pikachu",
+            None,
+        )
+    }
+
+    pub fn render_pokemon_capture_success(&self) -> Result<HtmlElement, JsValue> {
+        self.render_pokemon_effect(
+            "pokemon-effect--success",
+            "./effects/captured.gif",
+            "Pikachu has been captured successfully",
+            Some("./effects/captured.mp3"),
+        )
+    }
+
+    fn render_pokemon_effect(
+        &self,
+        modifier: &str,
+        image_src: &str,
+        image_alt: &str,
+        audio_src: Option<&str>,
+    ) -> Result<HtmlElement, JsValue> {
+        let wrapper = self
+            .document
+            .create_element("div")?
+            .dyn_into::<HtmlDivElement>()?;
+        wrapper.set_class_name("line output-text pokemon-effect-line");
+
+        let figure = self
+            .document
+            .create_element("figure")?
+            .dyn_into::<HtmlElement>()?;
+        figure.set_class_name(&format!("pokemon-effect {modifier}"));
+
+        let image = self
+            .document
+            .create_element("img")?
+            .dyn_into::<HtmlImageElement>()?;
+        image.set_class_name("pokemon-effect__image");
+        image.set_src(image_src);
+        image.set_alt(image_alt);
+        image.set_attribute("loading", "lazy")?;
+
+        let image_node: Node = image.into();
+        figure.append_child(&image_node)?;
+
+        if let Some(src) = audio_src {
+            let audio = self
+                .document
+                .create_element("audio")?
+                .dyn_into::<HtmlAudioElement>()?;
+            audio.set_class_name("pokemon-effect__audio");
+            audio.set_src(src);
+            audio.set_preload("auto");
+            audio.set_autoplay(true);
+            let _ = audio.set_attribute("playsinline", "true");
+            let audio_node: Node = audio.clone().into();
+            figure.append_child(&audio_node)?;
+
+            if let Err(err) = audio.play() {
+                utils::log(&format!("Failed to autoplay Pokémon audio: {:?}", err));
+            }
+        }
+
+        let figure_node: Node = figure.into();
+        wrapper.append_child(&figure_node)?;
+        self.output.append_child(&wrapper)?;
+
+        let element: HtmlElement = wrapper.clone().dyn_into::<HtmlElement>()?;
+        self.apply_scroll(&element, ScrollBehavior::Bottom)?;
+        Ok(element)
+    }
+
     pub fn remove_effect(&self, element: &HtmlElement) -> Result<(), JsValue> {
         if let Some(parent) = element.parent_node() {
             let node: Node = element.clone().into();
@@ -713,4 +1022,11 @@ fn get_html_element(document: &Document, id: &str) -> Result<HtmlElement, JsValu
             el.dyn_into::<HtmlElement>()
                 .map_err(|_| JsValue::from_str(&format!("Element #{id} is not HtmlElement")))
         })
+}
+
+fn clear_children(element: &HtmlElement) -> Result<(), JsValue> {
+    while let Some(child) = element.first_child() {
+        element.remove_child(&child)?;
+    }
+    Ok(())
 }

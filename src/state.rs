@@ -107,6 +107,12 @@ pub struct AppState {
     pub input_disabled: bool,
     pub konami_index: usize,
     pub konami_triggered: bool,
+    pub pokemon_capture_chance: u8,
+    pub achievement_shaw_unlocked: bool,
+    pub achievement_pokemon_unlocked: bool,
+    pub achievement_konami_unlocked: bool,
+    pub achievement_shutdown_unlocked: bool,
+    pub achievements_modal_open: bool,
 }
 
 impl AppState {
@@ -123,6 +129,12 @@ impl AppState {
             input_disabled: false,
             konami_index: 0,
             konami_triggered: false,
+            pokemon_capture_chance: 1,
+            achievement_shaw_unlocked: false,
+            achievement_pokemon_unlocked: false,
+            achievement_konami_unlocked: false,
+            achievement_shutdown_unlocked: false,
+            achievements_modal_open: false,
         }
     }
 
@@ -152,5 +164,38 @@ impl AppState {
 
     pub fn input_disabled(&self) -> bool {
         self.input_disabled
+    }
+
+    pub fn pokemon_capture_chance(&self) -> u8 {
+        self.pokemon_capture_chance
+    }
+
+    pub fn set_pokemon_capture_chance(&mut self, chance: u8) {
+        self.pokemon_capture_chance = chance.clamp(1, 100);
+    }
+
+    pub fn unlock_shaw_celebration(&mut self) -> bool {
+        Self::unlock_flag(&mut self.achievement_shaw_unlocked)
+    }
+
+    pub fn unlock_pokemon_master(&mut self) -> bool {
+        Self::unlock_flag(&mut self.achievement_pokemon_unlocked)
+    }
+
+    pub fn unlock_konami_secret(&mut self) -> bool {
+        Self::unlock_flag(&mut self.achievement_konami_unlocked)
+    }
+
+    pub fn unlock_shutdown_protocol(&mut self) -> bool {
+        Self::unlock_flag(&mut self.achievement_shutdown_unlocked)
+    }
+
+    fn unlock_flag(flag: &mut bool) -> bool {
+        if *flag {
+            false
+        } else {
+            *flag = true;
+            true
+        }
     }
 }

@@ -64,7 +64,32 @@
             </div>
             <div id="suggestions" class="suggestions" aria-live="polite" aria-label="Command suggestions"></div>
         </div>
+        <button
+            id="achievements-trigger"
+            class="achievements-trigger"
+            type="button"
+            aria-haspopup="dialog"
+            aria-controls="achievements-modal"
+            aria-expanded="false"
+        >
+            achievements
+        </button>
     </main>
+    <div
+        id="achievements-overlay"
+        class="achievements-overlay"
+        data-state="hidden"
+        aria-hidden="true"
+    >
+        <div
+            id="achievements-modal"
+            class="achievements-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="achievements-modal-title"
+            tabindex="-1"
+        ></div>
+    </div>
     <footer class="page-footnote">
         🦀 Developed in Rust by Alexandre DO-O ALMEIDA — Open source on <a href="https://github.com/Aleqsd/zqsdev.com" target="_blank" rel="noopener noreferrer">GitHub</a>.
     </footer>

@@ -117,6 +117,74 @@ pub fn install_listeners(terminal: Rc<Terminal>) -> Result<(), JsValue> {
         .add_event_listener_with_callback("click", ai_activate_click.as_ref().unchecked_ref())?;
     ai_activate_click.forget();
 
+    let achievements_terminal = Rc::clone(&terminal);
+    let achievements_trigger = document
+        .get_element_by_id("achievements-trigger")
+        .ok_or_else(|| JsValue::from_str("Missing #achievements-trigger element"))?
+        .dyn_into::<HtmlElement>()?;
+    let achievements_click = Closure::wrap(Box::new(move |event: MouseEvent| {
+        event.prevent_default();
+        event.stop_propagation();
+        if let Err(err) = achievements_terminal.open_achievements_modal() {
+            utils::log(&format!(
+                "Failed to open achievements modal via trigger: {:?}",
+                err
+            ));
+        }
+    }) as Box<dyn FnMut(_)>);
+    achievements_trigger
+        .add_event_listener_with_callback("click", achievements_click.as_ref().unchecked_ref())?;
+    achievements_click.forget();
+
+    let achievements_overlay = document
+        .get_element_by_id("achievements-overlay")
+        .ok_or_else(|| JsValue::from_str("Missing #achievements-overlay element"))?
+        .dyn_into::<HtmlElement>()?;
+    let achievements_close_terminal = Rc::clone(&terminal);
+    let overlay_click = Closure::wrap(Box::new(move |event: MouseEvent| {
+        if let Some(target) = event.target() {
+            if let Ok(element) = target.dyn_into::<Element>() {
+                if element
+                    .closest("[data-role=\"achievements-close\"]")
+                    .ok()
+                    .flatten()
+                    .is_some()
+                {
+                    event.prevent_default();
+                    event.stop_propagation();
+                    if let Err(err) = achievements_close_terminal.close_achievements_modal() {
+                        utils::log(&format!(
+                            "Failed to close achievements modal via close action: {:?}",
+                            err
+                        ));
+                    }
+                    return;
+                }
+
+                if element
+                    .closest("#achievements-modal")
+                    .ok()
+                    .flatten()
+                    .is_some()
+                {
+                    return;
+                }
+
+                event.prevent_default();
+                event.stop_propagation();
+                if let Err(err) = achievements_close_terminal.close_achievements_modal() {
+                    utils::log(&format!(
+                        "Failed to close achievements modal via backdrop: {:?}",
+                        err
+                    ));
+                }
+            }
+        }
+    }) as Box<dyn FnMut(_)>);
+    achievements_overlay
+        .add_event_listener_with_callback("click", overlay_click.as_ref().unchecked_ref())?;
+    overlay_click.forget();
+
     let composition_closure = Closure::wrap(Box::new(move |event: CompositionEvent| {
         handle_composition_end(&composition_terminal, event);
     }) as Box<dyn FnMut(_)>);
@@ -188,7 +256,7 @@ fn handle_keydown(terminal: &Terminal, event: KeyboardEvent) {
         }
         "Escape" => {
             event.prevent_default();
-            terminal.clear_input();
+            terminal.handle_escape();
         }
         _ => {
             handle_printable(terminal, &event);

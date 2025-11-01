@@ -1,5 +1,6 @@
 use crate::state::{AppState, Education, Experience, Profile, Project, TerminalData};
 use crate::utils;
+use js_sys::Math;
 use std::collections::BTreeMap;
 
 pub struct CommandDefinition {
@@ -72,6 +73,11 @@ pub const COMMAND_DEFINITIONS: &[CommandDefinition] = &[
         icon: "🎬",
     },
     CommandDefinition {
+        name: "pokemon",
+        description: "Throw a Poké Ball to try to catch Pikachu.",
+        icon: "⚡️",
+    },
+    CommandDefinition {
         name: "clear",
         description: "Clear the terminal output.",
         icon: "🧹",
@@ -85,12 +91,20 @@ pub enum CommandAction {
     Clear,
     Download(String),
     ShawEffect,
+    PokemonAttempt(PokemonAttemptOutcome),
 }
 
 #[derive(Debug)]
 pub enum CommandError {
     NotFound { command: String },
     Message(String),
+}
+
+#[derive(Debug)]
+pub struct PokemonAttemptOutcome {
+    pub current_chance: u8,
+    pub success: bool,
+    pub next_chance: u8,
 }
 
 pub fn command_names() -> Vec<&'static str> {
@@ -141,6 +155,7 @@ pub fn execute(
         "resume" => execute_resume(state),
         "faq" => execute_faq(state),
         "shaw" | "sha" => execute_shaw(),
+        "pokemon" | "pokeball" => execute_pokemon(state),
         "ai" => execute_ai(state),
         "clear" => Ok(CommandAction::Clear),
         _ => {
@@ -372,6 +387,23 @@ fn render_help() -> String {
 
 fn execute_shaw() -> Result<CommandAction, String> {
     Ok(CommandAction::ShawEffect)
+}
+
+fn execute_pokemon(state: &AppState) -> Result<CommandAction, String> {
+    let chance = state.pokemon_capture_chance();
+    let roll = (Math::random() * 100.0).floor() as u8;
+    let success = roll < chance;
+    let next_chance = if success {
+        1
+    } else {
+        chance.saturating_add(1).min(100)
+    };
+
+    Ok(CommandAction::PokemonAttempt(PokemonAttemptOutcome {
+        current_chance: chance,
+        success,
+        next_chance,
+    }))
 }
 
 fn format_skills(skills: &BTreeMap<String, Vec<String>>) -> String {

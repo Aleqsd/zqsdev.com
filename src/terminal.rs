@@ -1,6 +1,6 @@
 use crate::ai;
-use crate::commands::{self, CommandAction, CommandError};
-use crate::renderer::{Renderer, ScrollBehavior};
+use crate::commands::{self, CommandAction, CommandError, PokemonAttemptOutcome};
+use crate::renderer::{AchievementView, Renderer, ScrollBehavior};
 use crate::state::AppState;
 use crate::utils;
 use gloo_timers::future::TimeoutFuture;
@@ -8,6 +8,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 use wasm_bindgen::JsValue;
 use wasm_bindgen_futures::spawn_local;
+use web_sys::HtmlElement;
 
 pub type SharedState = Rc<RefCell<AppState>>;
 pub type SharedRenderer = Rc<Renderer>;
@@ -75,6 +76,14 @@ const GOKU_FINISHER_HTML: &str =
     r#"<div class="konami-message konami-message--goku">Goku: "KAMEHAMEHA!" 💥</div>"#;
 const TERMINAL_EXPLODED_HTML: &str = r#"<div class="konami-message konami-message--terminal">💥 The terminal has exploded. Refresh the page to revive it.</div>"#;
 const KAMEHAMEHA_PROMPT_LABEL: &str = "⚡ KI>$";
+const ACHIEVEMENT_SHAW_TITLE: &str = "Shaw!";
+const ACHIEVEMENT_SHAW_DESCRIPTION: &str = "Could she be... a Hunter?";
+const ACHIEVEMENT_POKEMON_TITLE: &str = "Who's that Pokemon?";
+const ACHIEVEMENT_POKEMON_DESCRIPTION: &str = "It's Pikachu!";
+const ACHIEVEMENT_KONAMI_TITLE: &str = "Kamehameha!";
+const ACHIEVEMENT_KONAMI_DESCRIPTION: &str = "And this... is to go even further beyond!";
+const ACHIEVEMENT_SHUTDOWN_TITLE: &str = "AAAAAAAAAAAAAH";
+const ACHIEVEMENT_SHUTDOWN_DESCRIPTION: &str = "Why would you do that?!";
 
 impl Terminal {
     pub fn new(state: SharedState, renderer: SharedRenderer) -> Self {
@@ -104,6 +113,31 @@ impl Terminal {
             return;
         }
         self.renderer.focus_terminal();
+    }
+
+    pub fn open_achievements_modal(&self) -> Result<(), JsValue> {
+        let achievements = self.collect_achievement_views();
+        self.renderer.show_achievements_modal(&achievements)?;
+        {
+            let mut state = self.state.borrow_mut();
+            state.achievements_modal_open = true;
+        }
+        Ok(())
+    }
+
+    pub fn close_achievements_modal(&self) -> Result<(), JsValue> {
+        {
+            let mut state = self.state.borrow_mut();
+            state.achievements_modal_open = false;
+        }
+        self.renderer.hide_achievements_modal()
+    }
+
+    pub fn handle_escape(&self) {
+        if self.close_achievements_modal_if_open() {
+            return;
+        }
+        self.clear_input();
     }
 
     pub fn overwrite_input(&self, value: &str) {
@@ -160,7 +194,19 @@ impl Terminal {
         }
 
         if Self::is_shutdown_command(&trimmed) {
-            self.trigger_shutdown_sequence()?;
+            let celebrate = {
+                let mut state = self.state.borrow_mut();
+                state.unlock_shutdown_protocol()
+            };
+            if celebrate {
+                self.trigger_achievement_popup(
+                    ACHIEVEMENT_SHUTDOWN_TITLE,
+                    ACHIEVEMENT_SHUTDOWN_DESCRIPTION,
+                )?;
+                self.refresh_achievements_modal_if_visible()?;
+            }
+
+            self.trigger_shutdown_sequence(1000)?;
             return Ok(());
         }
 
@@ -192,6 +238,9 @@ impl Terminal {
             }
             Ok(CommandAction::ShawEffect) => {
                 self.play_shaw_effect()?;
+            }
+            Ok(CommandAction::PokemonAttempt(outcome)) => {
+                self.play_pokemon_attempt(&outcome, output_scroll)?;
             }
             Ok(CommandAction::Clear) => {
                 self.renderer.clear_output();
@@ -239,7 +288,18 @@ impl Terminal {
         };
 
         if triggered {
+            let celebrate = {
+                let mut state = self.state.borrow_mut();
+                state.unlock_konami_secret()
+            };
             self.start_kamehameha_sequence()?;
+            if celebrate {
+                self.trigger_achievement_popup(
+                    ACHIEVEMENT_KONAMI_TITLE,
+                    ACHIEVEMENT_KONAMI_DESCRIPTION,
+                )?;
+                self.refresh_achievements_modal_if_visible()?;
+            }
             return Ok(true);
         }
 
@@ -434,7 +494,7 @@ impl Terminal {
         Ok(())
     }
 
-    fn trigger_shutdown_sequence(&self) -> Result<(), JsValue> {
+    fn trigger_shutdown_sequence(&self, delay_ms: u32) -> Result<(), JsValue> {
         if self.ensure_input_disabled() {
             return Ok(());
         }
@@ -443,13 +503,224 @@ impl Terminal {
         self.renderer.update_input("");
         self.renderer
             .render_suggestions(std::iter::empty::<(String, String)>());
-        self.renderer
-            .append_info_line(TV_OFF_WARNING, ScrollBehavior::Bottom)?;
-        self.renderer.play_tv_shutdown_animation()?;
+
+        let renderer = Rc::clone(&self.renderer);
+        spawn_local(async move {
+            TimeoutFuture::new(delay_ms).await;
+
+            if let Err(err) = renderer.append_info_line(TV_OFF_WARNING, ScrollBehavior::Bottom) {
+                utils::log(&format!(
+                    "Failed to append shutdown warning line after delay: {:?}",
+                    err
+                ));
+                return;
+            }
+
+            if let Err(err) = renderer.play_tv_shutdown_animation() {
+                utils::log(&format!(
+                    "Failed to play TV shutdown animation after delay: {:?}",
+                    err
+                ));
+            }
+        });
         Ok(())
     }
 
+    fn play_pokemon_attempt(
+        &self,
+        outcome: &PokemonAttemptOutcome,
+        behavior: ScrollBehavior,
+    ) -> Result<(), JsValue> {
+        {
+            let mut state = self.state.borrow_mut();
+            state.set_pokemon_capture_chance(outcome.next_chance);
+        }
+
+        let chance_message = format!(
+            "You have a {chance}% chance of catching Pikachu!",
+            chance = outcome.current_chance
+        );
+        self.renderer
+            .append_output_text(&chance_message, behavior)?;
+
+        let attempt_effect = self.renderer.render_pokemon_capture_attempt()?;
+        self.dismiss_pokemon_effect_after_delay(&attempt_effect, 2000);
+
+        if outcome.success {
+            self.renderer
+                .append_info_line("⚡️ Poké Ball shakes… success!", ScrollBehavior::Bottom)?;
+            let celebrate = {
+                let mut state = self.state.borrow_mut();
+                state.unlock_pokemon_master()
+            };
+            if celebrate {
+                self.trigger_achievement_popup(
+                    ACHIEVEMENT_POKEMON_TITLE,
+                    ACHIEVEMENT_POKEMON_DESCRIPTION,
+                )?;
+                self.refresh_achievements_modal_if_visible()?;
+            }
+            let success_effect = self.renderer.render_pokemon_capture_success()?;
+            self.dismiss_pokemon_effect_after_delay(&success_effect, 5000);
+            self.renderer.append_info_line(
+                "Pikachu was caught! Congratulations!",
+                ScrollBehavior::Bottom,
+            )?;
+        } else {
+            self.renderer
+                .append_info_line("Oh you failed, try again!", ScrollBehavior::Bottom)?;
+            let state = self.state.borrow();
+            let next = state.pokemon_capture_chance();
+            drop(state);
+            if next > outcome.current_chance {
+                let encouragement =
+                    format!("Your next capture chance rises to {next}%.", next = next);
+                self.renderer
+                    .append_info_line(&encouragement, ScrollBehavior::Bottom)?;
+            }
+        }
+
+        Ok(())
+    }
+
+    fn dismiss_pokemon_effect_after_delay(&self, element: &HtmlElement, delay_ms: u32) {
+        let renderer = Rc::clone(&self.renderer);
+        let element = element.clone();
+        spawn_local(async move {
+            TimeoutFuture::new(delay_ms).await;
+
+            if let Err(err) = element.set_attribute("data-state", "hiding") {
+                utils::log(&format!(
+                    "Failed to mark Pokémon effect for dismissal: {:?}",
+                    err
+                ));
+                return;
+            }
+
+            TimeoutFuture::new(260).await;
+
+            if let Err(err) = renderer.remove_effect(&element) {
+                utils::log(&format!(
+                    "Failed to remove Pokémon effect element: {:?}",
+                    err
+                ));
+            }
+        });
+    }
+
+    fn trigger_achievement_popup(&self, title: &str, description: &str) -> Result<(), JsValue> {
+        let toast = self.renderer.render_achievement_toast(title, description)?;
+        self.dismiss_achievement_after_delay(&toast, 5200);
+        Ok(())
+    }
+
+    fn dismiss_achievement_after_delay(&self, toast: &HtmlElement, delay_ms: u32) {
+        let renderer = Rc::clone(&self.renderer);
+        let toast = toast.clone();
+        spawn_local(async move {
+            TimeoutFuture::new(delay_ms).await;
+
+            if let Err(err) = toast.set_attribute("data-state", "hiding") {
+                utils::log(&format!(
+                    "Failed to mark achievement toast for dismissal: {:?}",
+                    err
+                ));
+                return;
+            }
+
+            TimeoutFuture::new(320).await;
+
+            if let Err(err) = renderer.remove_effect(&toast) {
+                utils::log(&format!(
+                    "Failed to remove achievement toast element: {:?}",
+                    err
+                ));
+            }
+        });
+    }
+
+    fn refresh_achievements_modal_if_visible(&self) -> Result<(), JsValue> {
+        let should_refresh = {
+            let state = self.state.borrow();
+            state.achievements_modal_open
+        };
+        if !should_refresh {
+            return Ok(());
+        }
+        let achievements = self.collect_achievement_views();
+        self.renderer.show_achievements_modal(&achievements)
+    }
+
+    fn collect_achievement_views(&self) -> Vec<AchievementView> {
+        let (shaw, pokemon, konami, shutdown) = {
+            let state = self.state.borrow();
+            (
+                state.achievement_shaw_unlocked,
+                state.achievement_pokemon_unlocked,
+                state.achievement_konami_unlocked,
+                state.achievement_shutdown_unlocked,
+            )
+        };
+
+        let mut unlocked = Vec::new();
+        let mut locked = Vec::new();
+        let entries = [
+            (shaw, ACHIEVEMENT_SHAW_TITLE, ACHIEVEMENT_SHAW_DESCRIPTION),
+            (
+                pokemon,
+                ACHIEVEMENT_POKEMON_TITLE,
+                ACHIEVEMENT_POKEMON_DESCRIPTION,
+            ),
+            (
+                konami,
+                ACHIEVEMENT_KONAMI_TITLE,
+                ACHIEVEMENT_KONAMI_DESCRIPTION,
+            ),
+            (
+                shutdown,
+                ACHIEVEMENT_SHUTDOWN_TITLE,
+                ACHIEVEMENT_SHUTDOWN_DESCRIPTION,
+            ),
+        ];
+
+        for (is_unlocked, title, description) in entries {
+            let view = AchievementView::new(title, description, is_unlocked);
+            if is_unlocked {
+                unlocked.push(view);
+            } else {
+                locked.push(view);
+            }
+        }
+
+        unlocked.extend(locked);
+        unlocked
+    }
+
+    fn close_achievements_modal_if_open(&self) -> bool {
+        let is_open = {
+            let state = self.state.borrow();
+            state.achievements_modal_open
+        };
+        if !is_open {
+            return false;
+        }
+        if let Err(err) = self.close_achievements_modal() {
+            utils::log(&format!("Failed to close achievements modal: {:?}", err));
+        }
+        true
+    }
+
     fn play_shaw_effect(&self) -> Result<(), JsValue> {
+        let celebrate = {
+            let mut state = self.state.borrow_mut();
+            state.unlock_shaw_celebration()
+        };
+
+        if celebrate {
+            self.trigger_achievement_popup(ACHIEVEMENT_SHAW_TITLE, ACHIEVEMENT_SHAW_DESCRIPTION)?;
+            self.refresh_achievements_modal_if_visible()?;
+        }
+
         self.renderer.force_scroll_to_bottom();
 
         let renderer = Rc::clone(&self.renderer);
@@ -810,8 +1081,19 @@ fn select_history_entry(state: &mut AppState, direction: HistoryDirection) -> Op
     Some(buffer)
 }
 
+const HIDDEN_HELPER_COMMANDS: [&str; 2] = ["shaw", "pokemon"];
+
+fn is_hidden_helper(command: &str) -> bool {
+    HIDDEN_HELPER_COMMANDS
+        .iter()
+        .any(|hidden| hidden.eq_ignore_ascii_case(command))
+}
+
 fn default_suggestions() -> Vec<&'static str> {
-    let mut names = commands::command_names();
+    let mut names: Vec<&'static str> = commands::command_names()
+        .into_iter()
+        .filter(|name| !is_hidden_helper(name))
+        .collect();
     if let Some(index) = names.iter().position(|name| *name == "resume") {
         let resume = names.remove(index);
         names.insert(0, resume);
@@ -861,12 +1143,14 @@ fn render_current_suggestions(state: &SharedState, renderer: &SharedRenderer) {
         } else {
             commands::suggestions(&buffer)
                 .into_iter()
+                .filter(|name| !is_hidden_helper(name))
                 .map(|s| s.to_string())
                 .collect()
         };
 
         names
             .into_iter()
+            .filter(|command| !is_hidden_helper(command))
             .map(|command| {
                 let label = commands::helper_label(&command);
                 (command, label)
