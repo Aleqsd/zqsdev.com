@@ -14,7 +14,7 @@ NETLIFY_FLAGS ?=
 PROJECT_VERSION := $(shell cat VERSION 2>/dev/null)
 NETLIFY_MESSAGE ?= Deploy $(PROJECT_VERSION)
 
-.PHONY: build clean check fmt serve serve-static test deploy-preview deploy-prod deploy
+.PHONY: build clean check fmt serve serve-static test deploy-preview deploy-prod deploy update backend-log
 
 build:
 	@command -v wasm-pack >/dev/null 2>&1 || { echo "wasm-pack not found. Install with 'cargo install wasm-pack'."; exit 1; }
@@ -51,6 +51,14 @@ deploy-prod: build
 	$(NETLIFY_BIN) deploy --dir $(STATIC_DIR) --prod --config $(NETLIFY_CONFIG) --message "$(NETLIFY_MESSAGE)" $(NETLIFY_FLAGS)
 
 deploy: deploy-prod
+
+update:
+	@git pull --rebase
+	$(MAKE) build
+	@sudo systemctl restart zqs-terminal.service
+
+backend-log:
+	@sudo tail -f backend.log
 
 clean:
 	cargo clean

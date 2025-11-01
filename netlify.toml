@@ -26,7 +26,7 @@ force = true
 # Proxy API requests to the self-hosted Axum backend
 [[redirects]]
 from = "/api/*"
-to = "https://api.zqsdev.com/:splat"
+to = "https://api.zqsdev.com/api/:splat"
 status = 200
 force = true
 

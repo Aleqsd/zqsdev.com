@@ -1,5 +1,8 @@
 *.md
 !README.md
+!AGENTS.md
+
+backend.log
 
 # Generated build artifacts
 target/
