@@ -7,10 +7,10 @@ export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembl
 export interface InitOutput {
   readonly memory: WebAssembly.Memory;
   readonly start: () => void;
-  readonly wasm_bindgen__convert__closures_____invoke__h288442c450988b58: (a: number, b: number, c: any) => void;
-  readonly wasm_bindgen__closure__destroy__h4c0e7754e163d4d7: (a: number, b: number) => void;
   readonly wasm_bindgen__convert__closures_____invoke__h13fe8b1350e448f2: (a: number, b: number, c: any) => void;
   readonly wasm_bindgen__closure__destroy__hbd7a766e679e418f: (a: number, b: number) => void;
+  readonly wasm_bindgen__convert__closures_____invoke__h288442c450988b58: (a: number, b: number, c: any) => void;
+  readonly wasm_bindgen__closure__destroy__h4c0e7754e163d4d7: (a: number, b: number) => void;
   readonly wasm_bindgen__convert__closures_____invoke__h3576219be204890a: (a: number, b: number) => void;
   readonly wasm_bindgen__closure__destroy__h53e2def30c10b9d8: (a: number, b: number) => void;
   readonly __wbindgen_malloc: (a: number, b: number) => number;

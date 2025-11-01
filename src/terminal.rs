@@ -38,6 +38,8 @@ const WELCOME_GUIDANCE_LINES: [&str; 2] = [
     "Type `help` to view all available commands.",
     "Use the quick actions below to jump to key sections instantly.",
 ];
+const TV_OFF_COMMAND: &str = "rm -rf";
+const TV_OFF_WARNING: &str = "⚠️ `rm -rf` sequence detected. Powering down terminal…";
 
 impl Terminal {
     pub fn new(state: SharedState, renderer: SharedRenderer) -> Self {
@@ -63,10 +65,16 @@ impl Terminal {
     }
 
     pub fn focus(&self) {
+        if self.input_disabled() {
+            return;
+        }
         self.renderer.focus_terminal();
     }
 
     pub fn overwrite_input(&self, value: &str) {
+        if self.input_disabled() {
+            return;
+        }
         {
             let mut state = self.state.borrow_mut();
             state.input_buffer = value.to_string();
@@ -83,6 +91,9 @@ impl Terminal {
     }
 
     pub fn submit_command(&self) -> Result<(), JsValue> {
+        if self.input_disabled() {
+            return Ok(());
+        }
         let input = {
             let state = self.state.borrow();
             state.input_buffer.clone()
@@ -105,13 +116,16 @@ impl Terminal {
         } else {
             ScrollBehavior::Anchor
         };
+        self.renderer.append_spacer_line(ScrollBehavior::None)?;
         self.renderer
             .append_command(&prompt_label, &display_line, command_scroll)?;
-        if !ai_mode_active {
-            self.renderer.append_spacer_line(ScrollBehavior::None)?;
-        }
 
         if trimmed.is_empty() {
+            return Ok(());
+        }
+
+        if Self::is_shutdown_command(&trimmed) {
+            self.trigger_shutdown_sequence()?;
             return Ok(());
         }
 
@@ -189,6 +203,9 @@ impl Terminal {
     }
 
     pub fn clear_input(&self) {
+        if self.input_disabled() {
+            return;
+        }
         {
             let mut state = self.state.borrow_mut();
             state.input_buffer.clear();
@@ -203,7 +220,7 @@ impl Terminal {
     }
 
     pub fn append_text(&self, value: &str) {
-        if value.is_empty() {
+        if self.input_disabled() || value.is_empty() {
             return;
         }
         {
@@ -216,6 +233,9 @@ impl Terminal {
     }
 
     pub fn delete_last_character(&self) {
+        if self.input_disabled() {
+            return;
+        }
         {
             let mut state = self.state.borrow_mut();
             state.input_buffer.pop();
@@ -226,6 +246,9 @@ impl Terminal {
     }
 
     pub fn navigate_history(&self, direction: HistoryDirection) {
+        if self.input_disabled() {
+            return;
+        }
         let new_buffer = {
             let mut state = self.state.borrow_mut();
             select_history_entry(&mut state, direction)
@@ -238,6 +261,9 @@ impl Terminal {
     }
 
     pub fn autocomplete(&self) {
+        if self.input_disabled() {
+            return;
+        }
         let suggestion = {
             let state = self.state.borrow();
             commands::autocomplete(&state.input_buffer).map(|value| value.to_string())
@@ -254,6 +280,9 @@ impl Terminal {
     }
 
     pub fn execute_suggestion(&self, command: &str) -> Result<(), JsValue> {
+        if self.input_disabled() {
+            return Ok(());
+        }
         {
             let mut state = self.state.borrow_mut();
             state.input_buffer = command.to_string();
@@ -334,12 +363,51 @@ impl Terminal {
         Ok(())
     }
 
+    fn trigger_shutdown_sequence(&self) -> Result<(), JsValue> {
+        if self.ensure_input_disabled() {
+            return Ok(());
+        }
+
+        self.renderer.disable_prompt_input()?;
+        self.renderer.update_input("");
+        self.renderer
+            .render_suggestions(std::iter::empty::<(String, String)>());
+        self.renderer
+            .append_info_line(TV_OFF_WARNING, ScrollBehavior::Bottom)?;
+        self.renderer.play_tv_shutdown_animation()?;
+        Ok(())
+    }
+
+    fn ensure_input_disabled(&self) -> bool {
+        let mut state = self.state.borrow_mut();
+        if state.input_disabled {
+            true
+        } else {
+            state.set_input_disabled(true);
+            false
+        }
+    }
+
+    fn input_disabled(&self) -> bool {
+        self.state.borrow().input_disabled
+    }
+
+    fn is_shutdown_command(input: &str) -> bool {
+        let normalized = input.split_whitespace().collect::<Vec<_>>().join(" ");
+        normalized.eq_ignore_ascii_case(TV_OFF_COMMAND)
+    }
+
     fn refresh_input(&self) {
         let buffer = { self.state.borrow().input_buffer.clone() };
         self.renderer.update_input(&buffer);
     }
 
     fn refresh_suggestions(&self) {
+        if self.input_disabled() {
+            self.renderer
+                .render_suggestions(std::iter::empty::<(String, String)>());
+            return;
+        }
         render_current_suggestions(&self.state, &self.renderer);
     }
 

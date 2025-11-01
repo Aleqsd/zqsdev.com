@@ -44,8 +44,8 @@ impl Renderer {
         let terminal_root = get_html_element(&document, TERMINAL_ID)?;
         let output = get_html_element(&document, OUTPUT_ID)?;
         let prompt_input = get_html_element(&document, PROMPT_INPUT_ID)?;
-        let prompt_hidden_input = get_html_element(&document, PROMPT_HIDDEN_INPUT_ID)?
-            .dyn_into::<HtmlInputElement>()?;
+        let prompt_hidden_input =
+            get_html_element(&document, PROMPT_HIDDEN_INPUT_ID)?.dyn_into::<HtmlInputElement>()?;
         let prompt_label = get_html_element(&document, PROMPT_LABEL_ID)?;
         let suggestions = get_html_element(&document, SUGGESTIONS_ID)?;
         let ai_toggle = get_html_element(&document, AI_TOGGLE_ID)?;
@@ -72,9 +72,7 @@ impl Renderer {
         self.prompt_input.set_text_content(Some(buffer));
         self.prompt_hidden_input.set_value(buffer);
         let end = buffer.encode_utf16().count() as u32;
-        let _ = self
-            .prompt_hidden_input
-            .set_selection_range(end, end);
+        let _ = self.prompt_hidden_input.set_selection_range(end, end);
     }
 
     pub fn focus_terminal(&self) {
@@ -392,6 +390,23 @@ impl Renderer {
                 }
             }
         }
+    }
+
+    pub fn disable_prompt_input(&self) -> Result<(), JsValue> {
+        self.prompt_hidden_input.set_disabled(true);
+        let _ = self.prompt_hidden_input.blur();
+        self.prompt_hidden_input
+            .set_attribute("aria-disabled", "true")?;
+        self.prompt_input.set_attribute("data-disabled", "true")?;
+        Ok(())
+    }
+
+    pub fn play_tv_shutdown_animation(&self) -> Result<(), JsValue> {
+        let _ = self.terminal_root.class_list().remove_1("ai-mode-active");
+        self.terminal_root.class_list().add_1("tv-off")?;
+        self.terminal_root.set_attribute("data-power", "off")?;
+        self.terminal_root.set_attribute("aria-disabled", "true")?;
+        Ok(())
     }
 
     fn scroll_to_bottom(&self) {

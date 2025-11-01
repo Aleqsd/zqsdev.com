@@ -104,6 +104,7 @@ pub struct AppState {
     pub initialized: bool,
     pub ai_mode: bool,
     pub ai_model: Option<String>,
+    pub input_disabled: bool,
 }
 
 impl AppState {
@@ -117,6 +118,7 @@ impl AppState {
             initialized: false,
             ai_mode: false,
             ai_model: None,
+            input_disabled: false,
         }
     }
 
@@ -138,5 +140,13 @@ impl AppState {
 
     pub fn set_ai_model(&mut self, model: Option<String>) {
         self.ai_model = model;
+    }
+
+    pub fn set_input_disabled(&mut self, disabled: bool) {
+        self.input_disabled = disabled;
+    }
+
+    pub fn input_disabled(&self) -> bool {
+        self.input_disabled
     }
 }

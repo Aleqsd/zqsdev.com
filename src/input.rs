@@ -34,20 +34,16 @@ pub fn install_listeners(terminal: Rc<Terminal>) -> Result<(), JsValue> {
     let touch_closure = Closure::wrap(Box::new(move |_event: TouchEvent| {
         touch_focus_terminal.focus();
     }) as Box<dyn FnMut(_)>);
-    prompt_line.add_event_listener_with_callback(
-        "touchstart",
-        touch_closure.as_ref().unchecked_ref(),
-    )?;
+    prompt_line
+        .add_event_listener_with_callback("touchstart", touch_closure.as_ref().unchecked_ref())?;
     touch_closure.forget();
 
     let click_focus_terminal = Rc::clone(&terminal);
     let click_focus_closure = Closure::wrap(Box::new(move |_event: MouseEvent| {
         click_focus_terminal.focus();
     }) as Box<dyn FnMut(_)>);
-    prompt_line.add_event_listener_with_callback(
-        "click",
-        click_focus_closure.as_ref().unchecked_ref(),
-    )?;
+    prompt_line
+        .add_event_listener_with_callback("click", click_focus_closure.as_ref().unchecked_ref())?;
     click_focus_closure.forget();
 
     let input_terminal = Rc::clone(&terminal);
@@ -55,10 +51,8 @@ pub fn install_listeners(terminal: Rc<Terminal>) -> Result<(), JsValue> {
     let input_closure = Closure::wrap(Box::new(move |_event: InputEvent| {
         input_terminal.overwrite_input(&hidden_input_for_input.value());
     }) as Box<dyn FnMut(_)>);
-    hidden_input.add_event_listener_with_callback(
-        "input",
-        input_closure.as_ref().unchecked_ref(),
-    )?;
+    hidden_input
+        .add_event_listener_with_callback("input", input_closure.as_ref().unchecked_ref())?;
     input_closure.forget();
 
     let keydown_terminal = Rc::clone(&terminal);
