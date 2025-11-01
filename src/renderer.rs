@@ -481,6 +481,52 @@ impl Renderer {
         Ok(())
     }
 
+    pub fn play_konami_charge(&self) -> Result<(), JsValue> {
+        let classes = self.terminal_root.class_list();
+        let _ = classes.remove_1("ai-mode-active");
+        classes.add_1("konami-charge")?;
+        Ok(())
+    }
+
+    pub fn clear_konami_media(&self) -> Result<(), JsValue> {
+        let figure = match self.output.query_selector(".konami-kamehameha") {
+            Ok(Some(element)) => element,
+            Ok(None) => return Ok(()),
+            Err(err) => return Err(err),
+        };
+
+        let mut current = figure;
+        // Climb up to the wrapper that lives directly under #output.
+        loop {
+            if let Some(parent) = current.parent_element() {
+                if parent.class_list().contains("line") {
+                    let node: Node = parent.into();
+                    let _ = self.output.remove_child(&node)?;
+                    break;
+                } else {
+                    current = parent;
+                    continue;
+                }
+            } else {
+                // Fallback: remove the original figure if we cannot find the wrapper.
+                let node: Node = current.into();
+                let _ = self.output.remove_child(&node)?;
+                break;
+            }
+        }
+        Ok(())
+    }
+
+    pub fn trigger_terminal_explosion(&self) -> Result<(), JsValue> {
+        let classes = self.terminal_root.class_list();
+        let _ = classes.remove_1("konami-charge");
+        let _ = classes.remove_1("ai-mode-active");
+        classes.add_1("terminal-exploded")?;
+        self.terminal_root.set_attribute("data-power", "ko")?;
+        self.terminal_root.set_attribute("aria-disabled", "true")?;
+        Ok(())
+    }
+
     pub fn play_tv_shutdown_animation(&self) -> Result<(), JsValue> {
         let _ = self.terminal_root.class_list().remove_1("ai-mode-active");
         self.terminal_root.class_list().add_1("tv-off")?;

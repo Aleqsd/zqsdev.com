@@ -105,6 +105,8 @@ pub struct AppState {
     pub ai_mode: bool,
     pub ai_model: Option<String>,
     pub input_disabled: bool,
+    pub konami_index: usize,
+    pub konami_triggered: bool,
 }
 
 impl AppState {
@@ -119,6 +121,8 @@ impl AppState {
             ai_mode: false,
             ai_model: None,
             input_disabled: false,
+            konami_index: 0,
+            konami_triggered: false,
         }
     }
 

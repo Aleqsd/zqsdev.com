@@ -131,6 +131,21 @@ pub fn install_listeners(terminal: Rc<Terminal>) -> Result<(), JsValue> {
 
 fn handle_keydown(terminal: &Terminal, event: KeyboardEvent) {
     let key = event.key();
+
+    if !event.repeat() {
+        match terminal.process_konami_key(&key) {
+            Ok(true) => {
+                event.prevent_default();
+                event.stop_propagation();
+                return;
+            }
+            Ok(false) => {}
+            Err(err) => {
+                utils::log(&format!("Konami code handling failed: {:?}", err));
+            }
+        }
+    }
+
     if let Some(command) = lookup_suggestion_command(event.target()) {
         match key.as_str() {
             "Enter" | " " | "Spacebar" => {

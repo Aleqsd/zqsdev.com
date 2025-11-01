@@ -3,6 +3,7 @@ use crate::commands::{self, CommandAction, CommandError};
 use crate::renderer::{Renderer, ScrollBehavior};
 use crate::state::AppState;
 use crate::utils;
+use gloo_timers::future::TimeoutFuture;
 use std::cell::RefCell;
 use std::rc::Rc;
 use wasm_bindgen::JsValue;
@@ -40,6 +41,33 @@ const WELCOME_GUIDANCE_LINES: [&str; 2] = [
 ];
 const TV_OFF_COMMAND: &str = "rm -rf";
 const TV_OFF_WARNING: &str = "⚠️ `rm -rf` sequence detected. Powering down terminal…";
+const KONAMI_CODE: [&str; 10] = [
+    "ArrowUp",
+    "ArrowUp",
+    "ArrowDown",
+    "ArrowDown",
+    "ArrowLeft",
+    "ArrowRight",
+    "ArrowLeft",
+    "ArrowRight",
+    "b",
+    "a",
+];
+const KONAMI_ALERT: &str = "🕹️ Cheat code accepted! Goku is charging a Kamehameha!";
+const KAMEHAMEHA_MEDIA_HTML: &str = r#"
+<figure class="konami-kamehameha">
+    <img
+        class="konami-kamehameha__video"
+        src="./effects/kamehameha.gif"
+        alt="Goku unleashes a Kamehameha beam"
+        loading="lazy"
+    >
+</figure>
+"#;
+const GOKU_FINISHER_HTML: &str =
+    r#"<div class="konami-message konami-message--goku">Goku: "KAMEHAMEHA!" 💥</div>"#;
+const TERMINAL_EXPLODED_HTML: &str = r#"<div class="konami-message konami-message--terminal">💥 The terminal has exploded. Refresh the page to revive it.</div>"#;
+const KAMEHAMEHA_PROMPT_LABEL: &str = "⚡ KI>$";
 
 impl Terminal {
     pub fn new(state: SharedState, renderer: SharedRenderer) -> Self {
@@ -173,6 +201,39 @@ impl Terminal {
         }
 
         Ok(())
+    }
+
+    pub fn process_konami_key(&self, key: &str) -> Result<bool, JsValue> {
+        let Some(normalized) = Self::normalize_konami_key(key) else {
+            self.reset_konami_progress();
+            return Ok(false);
+        };
+
+        let triggered = {
+            let mut state = self.state.borrow_mut();
+            if state.konami_triggered {
+                false
+            } else if KONAMI_CODE[state.konami_index] == normalized {
+                state.konami_index += 1;
+                if state.konami_index == KONAMI_CODE.len() {
+                    state.konami_index = 0;
+                    state.konami_triggered = true;
+                    true
+                } else {
+                    false
+                }
+            } else {
+                state.konami_index = if normalized == KONAMI_CODE[0] { 1 } else { 0 };
+                false
+            }
+        };
+
+        if triggered {
+            self.start_kamehameha_sequence()?;
+            return Ok(true);
+        }
+
+        Ok(false)
     }
 
     pub fn toggle_ai_mode(&self) -> Result<(), JsValue> {
@@ -380,7 +441,7 @@ impl Terminal {
 
     fn ensure_input_disabled(&self) -> bool {
         let mut state = self.state.borrow_mut();
-        if state.input_disabled {
+        if state.input_disabled() {
             true
         } else {
             state.set_input_disabled(true);
@@ -388,8 +449,91 @@ impl Terminal {
         }
     }
 
+    fn start_kamehameha_sequence(&self) -> Result<(), JsValue> {
+        if self.ensure_input_disabled() {
+            return Ok(());
+        }
+
+        self.renderer.disable_prompt_input()?;
+        self.renderer.update_input("");
+        self.renderer
+            .render_suggestions(std::iter::empty::<(String, String)>());
+        {
+            let mut state = self.state.borrow_mut();
+            state.prompt_label = KAMEHAMEHA_PROMPT_LABEL.to_string();
+            state.input_buffer.clear();
+        }
+        self.renderer.set_prompt_label(KAMEHAMEHA_PROMPT_LABEL);
+        self.renderer.play_konami_charge()?;
+
+        let renderer = Rc::clone(&self.renderer);
+        spawn_local(async move {
+            if let Err(err) = renderer.append_info_line(KONAMI_ALERT, ScrollBehavior::Bottom) {
+                utils::log(&format!("Failed to announce Konami code: {:?}", err));
+            }
+
+            TimeoutFuture::new(420).await;
+
+            if let Err(err) = renderer.append_info_line(
+                "Goku warps onto the terminal roof, palms blazing with ki.",
+                ScrollBehavior::Bottom,
+            ) {
+                utils::log(&format!(
+                    "Failed to narrate Goku's entrance into the terminal: {:?}",
+                    err
+                ));
+            }
+
+            if let Err(err) =
+                renderer.append_output_html(KAMEHAMEHA_MEDIA_HTML, ScrollBehavior::Bottom)
+            {
+                utils::log(&format!("Failed to render Goku media: {:?}", err));
+            }
+
+            
+            if let Err(err) = renderer.append_info_html(GOKU_FINISHER_HTML, ScrollBehavior::Bottom)
+            {
+                utils::log(&format!(
+                    "Failed to render Goku's finishing line before the explosion: {:?}",
+                    err
+                ));
+            }
+
+            TimeoutFuture::new(8600).await;
+
+            if let Err(err) = renderer.clear_konami_media() {
+                utils::log(&format!(
+                    "Failed to clear Kamehameha media before finishing move: {:?}",
+                    err
+                ));
+            }
+
+            TimeoutFuture::new(360).await;
+
+            if let Err(err) = renderer.trigger_terminal_explosion() {
+                utils::log(&format!(
+                    "Failed to apply terminal explosion visuals after Konami code: {:?}",
+                    err
+                ));
+            }
+
+            TimeoutFuture::new(420).await;
+
+            if let Err(err) =
+                renderer.append_info_html(TERMINAL_EXPLODED_HTML, ScrollBehavior::Bottom)
+            {
+                utils::log(&format!(
+                    "Failed to render terminal explosion aftermath message: {:?}",
+                    err
+                ));
+            }
+        });
+
+        Ok(())
+    }
+
     fn input_disabled(&self) -> bool {
-        self.state.borrow().input_disabled
+        self.state.borrow().input_disabled()
     }
 
     fn is_shutdown_command(input: &str) -> bool {
@@ -564,6 +708,25 @@ impl Terminal {
 
     fn ai_mode_active(&self) -> bool {
         self.state.borrow().ai_mode
+    }
+
+    fn reset_konami_progress(&self) {
+        let mut state = self.state.borrow_mut();
+        if !state.konami_triggered {
+            state.konami_index = 0;
+        }
+    }
+
+    fn normalize_konami_key(key: &str) -> Option<&'static str> {
+        match key {
+            "ArrowUp" => Some("ArrowUp"),
+            "ArrowDown" => Some("ArrowDown"),
+            "ArrowLeft" => Some("ArrowLeft"),
+            "ArrowRight" => Some("ArrowRight"),
+            "a" | "A" => Some("a"),
+            "b" | "B" => Some("b"),
+            _ => None,
+        }
     }
 }
 
