@@ -393,8 +393,14 @@ impl Terminal {
     }
 
     fn is_shutdown_command(input: &str) -> bool {
-        let normalized = input.split_whitespace().collect::<Vec<_>>().join(" ");
-        normalized.eq_ignore_ascii_case(TV_OFF_COMMAND)
+        let mut normalized = String::new();
+        for part in input.split_whitespace() {
+            if !normalized.is_empty() {
+                normalized.push(' ');
+            }
+            normalized.push_str(&part.to_ascii_lowercase());
+        }
+        normalized.contains(TV_OFF_COMMAND)
     }
 
     fn refresh_input(&self) {
