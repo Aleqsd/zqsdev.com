@@ -125,6 +125,11 @@ const KEYWORD_PATTERNS: &[KeywordPattern] = &[
         icon_path: "/icons/devicons/discordjs/discordjs-original.svg",
     },
     KeywordPattern {
+        pattern: "Android",
+        pattern_lower: "android",
+        icon_path: "/icons/devicons/android/android-original.svg",
+    },
+    KeywordPattern {
         pattern: "Docker",
         pattern_lower: "docker",
         icon_path: "/icons/devicons/docker/docker-original.svg",
@@ -133,11 +138,6 @@ const KEYWORD_PATTERNS: &[KeywordPattern] = &[
         pattern: "GitHub",
         pattern_lower: "github",
         icon_path: "/icons/devicons/github/github-original.svg",
-    },
-    KeywordPattern {
-        pattern: "Google",
-        pattern_lower: "google",
-        icon_path: "/icons/devicons/google/google-original.svg",
     },
     KeywordPattern {
         pattern: "Azure",
@@ -233,6 +233,11 @@ const KEYWORD_PATTERNS: &[KeywordPattern] = &[
         pattern: "SQL",
         pattern_lower: "sql",
         icon_path: "/icons/devicons/sqldeveloper/sqldeveloper-original.svg",
+    },
+    KeywordPattern {
+        pattern: "MySQL",
+        pattern_lower: "mysql",
+        icon_path: "/icons/devicons/mysql/mysql-original.svg",
     },
     KeywordPattern {
         pattern: "Bash",
@@ -473,6 +478,50 @@ mod tests {
     }
 
     #[test]
+    fn tokenize_detects_android() {
+        let segments = tokenize("Android development with Jetpack.");
+        assert_eq!(
+            segments,
+            vec![
+                Segment::Icon(IconMatch {
+                    token: "Android".to_string(),
+                    icon_path: "/icons/devicons/android/android-original.svg"
+                }),
+                Segment::Text(" development with Jetpack.".to_string()),
+            ]
+        );
+    }
+
+    #[test]
+    fn tokenize_detects_mysql() {
+        let segments = tokenize("MySQL backups and SQL migrations.");
+        assert_eq!(
+            segments,
+            vec![
+                Segment::Icon(IconMatch {
+                    token: "MySQL".to_string(),
+                    icon_path: "/icons/devicons/mysql/mysql-original.svg"
+                }),
+                Segment::Text(" backups and ".to_string()),
+                Segment::Icon(IconMatch {
+                    token: "SQL".to_string(),
+                    icon_path: "/icons/devicons/sqldeveloper/sqldeveloper-original.svg"
+                }),
+                Segment::Text(" migrations.".to_string()),
+            ]
+        );
+    }
+
+    #[test]
+    fn tokenize_leaves_plain_google_text() {
+        let segments = tokenize("Google search mastery.");
+        assert_eq!(
+            segments,
+            vec![Segment::Text("Google search mastery.".to_string())]
+        );
+    }
+
+    #[test]
     fn tokenize_detects_linkedin() {
         let segments = tokenize("Connect on LinkedIn today.");
         assert_eq!(
@@ -520,12 +569,7 @@ mod tests {
                     token: "Alexandre DO-O ALMEIDA".to_string(),
                     icon_path: "/icons/devicons/alexandre.png"
                 }),
-                Segment::Text(", better known as ".to_string()),
-                Segment::Icon(IconMatch {
-                    token: "Alexandre".to_string(),
-                    icon_path: "/icons/devicons/alexandre.png"
-                }),
-                Segment::Text(".".to_string()),
+                Segment::Text(", better known as Alexandre.".to_string()),
             ]
         );
     }

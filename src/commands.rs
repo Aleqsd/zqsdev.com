@@ -174,27 +174,26 @@ fn execute_about(state: &AppState) -> Result<CommandAction, String> {
     lines.push(format!("{} — {}", profile.name, profile.headline));
 
     let mut facts = Vec::new();
+    let languages = profile.languages.clone().unwrap_or_default();
     if let Some(location) = &profile.location {
         facts.push(format!("Location: {location}"));
     }
     if let Some(email) = &profile.email {
         facts.push(format!("Email: {email}"));
     }
-    if let Some(languages) = &profile.languages {
-        if !languages.is_empty() {
-            let joined = languages
-                .iter()
-                .map(|lang| lang.to_uppercase())
-                .collect::<Vec<_>>()
-                .join(", ");
-            facts.push(format!("Languages: {joined}"));
-        }
-    }
     if !facts.is_empty() {
         lines.push(String::new());
         lines.push("Quick facts:".to_string());
         for fact in facts {
             lines.push(format!("  • {fact}"));
+        }
+    }
+
+    if !languages.is_empty() {
+        lines.push(String::new());
+        lines.push("Languages:".to_string());
+        for language in languages {
+            lines.push(format!("  - {language}"));
         }
     }
 
@@ -230,7 +229,9 @@ fn execute_education(state: &AppState) -> Result<CommandAction, String> {
 
 fn execute_projects(state: &AppState) -> Result<CommandAction, String> {
     let data = ensure_data(state)?;
-    Ok(CommandAction::Output(format_projects(&data.projects)))
+    Ok(CommandAction::OutputHtml(render_projects_html(
+        &data.projects,
+    )))
 }
 
 fn execute_testimonials(state: &AppState) -> Result<CommandAction, String> {
@@ -356,7 +357,7 @@ fn render_help() -> String {
             .to_string(),
     );
     lines.push(
-        "Developed in Rust by Alexandre DO-O ALMEIDA — Open source: https://github.com/Aleqsd/zqsdev.com"
+        "Developed in Rust by Alexandre DO-O ALMEIDA (Open source: https://github.com/Aleqsd/zqsdev.com)"
             .to_string(),
     );
     lines.join("\n")
@@ -681,7 +682,7 @@ mod tests {
     }
 
     #[test]
-    fn format_projects_omits_link_when_absent() {
+    fn render_projects_html_omits_link_when_absent() {
         let projects = vec![Project {
             name: "Demo".to_string(),
             desc: "No external link provided.".to_string(),
@@ -689,23 +690,47 @@ mod tests {
             link: None,
         }];
 
-        let output = super::format_projects(&projects);
+        let output = super::render_projects_html(&projects);
         assert!(
             output.contains("Demo"),
             "Project name should be present:\n{output}"
         );
         assert!(
-            output.contains("Tech: Rust, Testing"),
+            output.contains("<strong>Tech:</strong> Rust, Testing"),
             "Tech stack should be listed:\n{output}"
         );
         assert!(
-            !output.contains("Link:"),
-            "Formatter should omit empty links:\n{output}"
+            !output.contains("<a "),
+            "Formatter should omit link anchors when no link is provided:\n{output}"
         );
     }
 
     #[test]
-    fn format_projects_omits_tech_when_empty() {
+    fn render_projects_html_includes_clickable_link() {
+        let projects = vec![Project {
+            name: "Linked Project".to_string(),
+            desc: "Has a URL attached.".to_string(),
+            tech: vec!["Rust".to_string()],
+            link: Some("https://example.com/demo".to_string()),
+        }];
+
+        let output = super::render_projects_html(&projects);
+        assert!(
+            output.contains(r#"href="https://example.com/demo""#),
+            "Expected anchor href in HTML output:\n{output}"
+        );
+        assert!(
+            output.contains("target=\"_blank\""),
+            "Link should open in a new tab:\n{output}"
+        );
+        assert!(
+            output.contains("rel=\"noopener noreferrer\""),
+            "Link should include rel safety attributes:\n{output}"
+        );
+    }
+
+    #[test]
+    fn render_projects_html_omits_tech_when_empty() {
         let projects = vec![Project {
             name: "No Tech Listed".to_string(),
             desc: "An entry focusing on achievements without a tech stack.".to_string(),
@@ -713,17 +738,17 @@ mod tests {
             link: Some("https://example.com".to_string()),
         }];
 
-        let output = super::format_projects(&projects);
+        let output = super::render_projects_html(&projects);
         assert!(
             output.contains("No Tech Listed"),
             "Project name should appear:\n{output}"
         );
         assert!(
-            output.contains("Link: https://example.com"),
+            output.contains(r#"href="https://example.com""#),
             "Formatter should still render links when present:\n{output}"
         );
         assert!(
-            !output.contains("Tech:"),
+            !output.contains("<strong>Tech:</strong>"),
             "Formatter should omit tech line when list is empty:\n{output}"
         );
     }
@@ -794,25 +819,46 @@ mod tests {
     }
 }
 
-fn format_projects(projects: &[Project]) -> String {
-    let mut lines = Vec::new();
+fn render_projects_html(projects: &[Project]) -> String {
+    if projects.is_empty() {
+        return String::new();
+    }
+
+    let mut html = String::from("<div class=\"projects\">");
     for project in projects {
-        lines.push(project.name.clone());
-        lines.push(format!("  {}", project.desc));
-        if !project.tech.is_empty() {
-            lines.push(format!("  Tech: {}", project.tech.join(", ")));
+        html.push_str("<article class=\"project\">");
+        html.push_str("<h3>");
+        html.push_str(&utils::escape_html(&project.name));
+        html.push_str("</h3>");
+        html.push_str("<p>");
+        html.push_str(&utils::escape_html(&project.desc));
+        html.push_str("</p>");
+
+        let tech = project
+            .tech
+            .iter()
+            .filter(|item| !item.trim().is_empty())
+            .map(|item| utils::escape_html(item))
+            .collect::<Vec<_>>();
+        if !tech.is_empty() {
+            html.push_str("<p><strong>Tech:</strong> ");
+            html.push_str(&tech.join(", "));
+            html.push_str("</p>");
         }
-        if let Some(link) = &project.link {
-            lines.push(format!("  Link: {link}"));
+
+        if let Some(link) = project.link.as_ref().filter(|link| !link.trim().is_empty()) {
+            let safe_link = utils::escape_html(link);
+            html.push_str("<p><a href=\"");
+            html.push_str(&safe_link);
+            html.push_str("\" target=\"_blank\" rel=\"noopener noreferrer\">");
+            html.push_str(&safe_link);
+            html.push_str("</a></p>");
         }
-        lines.push(String::new());
+
+        html.push_str("</article>");
     }
-    if let Some(last) = lines.last() {
-        if last.is_empty() {
-            lines.pop();
-        }
-    }
-    lines.join("\n")
+    html.push_str("</div>");
+    html
 }
 
 fn render_contact_html(profile: &Profile) -> String {

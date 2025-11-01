@@ -190,13 +190,36 @@ fn handle_paste(terminal: &Terminal, event: ClipboardEvent) {
 
 fn sanitize_pasted_text(input: &str) -> String {
     let mut sanitized = String::with_capacity(input.len());
+    let mut pending_space = false;
+
     for ch in input.chars() {
         match ch {
             '\r' => {}
-            '\n' | '\t' => sanitized.push(' '),
-            _ => sanitized.push(ch),
+            '\n' | '\t' => {
+                if !sanitized.is_empty() && !sanitized.ends_with(' ') {
+                    pending_space = true;
+                }
+            }
+            ' ' => {
+                if pending_space {
+                    if !sanitized.ends_with(' ') {
+                        sanitized.push(' ');
+                    }
+                    pending_space = false;
+                } else {
+                    sanitized.push(' ');
+                }
+            }
+            _ => {
+                if pending_space && !sanitized.ends_with(' ') {
+                    sanitized.push(' ');
+                }
+                pending_space = false;
+                sanitized.push(ch);
+            }
         }
     }
+
     sanitized.trim_matches(' ').to_string()
 }
 

@@ -102,18 +102,14 @@ impl Renderer {
         command_span.set_text_content(Some(command));
 
         line.append_child(&label_span)?;
-       line.append_child(&command_span)?;
-       self.output.append_child(&line)?;
+        line.append_child(&command_span)?;
+        self.output.append_child(&line)?;
         let element: &HtmlElement = line.unchecked_ref();
         self.apply_scroll(element, behavior)?;
         Ok(())
     }
 
-    pub fn append_output_text(
-        &self,
-        text: &str,
-        behavior: ScrollBehavior,
-    ) -> Result<(), JsValue> {
+    pub fn append_output_text(&self, text: &str, behavior: ScrollBehavior) -> Result<(), JsValue> {
         let wrapper = self
             .document
             .create_element("div")?
@@ -134,11 +130,7 @@ impl Renderer {
         Ok(())
     }
 
-    pub fn append_output_html(
-        &self,
-        html: &str,
-        behavior: ScrollBehavior,
-    ) -> Result<(), JsValue> {
+    pub fn append_output_html(&self, html: &str, behavior: ScrollBehavior) -> Result<(), JsValue> {
         let wrapper = self
             .document
             .create_element("div")?
@@ -160,11 +152,7 @@ impl Renderer {
         Ok(())
     }
 
-    pub fn append_info_line(
-        &self,
-        message: &str,
-        behavior: ScrollBehavior,
-    ) -> Result<(), JsValue> {
+    pub fn append_info_line(&self, message: &str, behavior: ScrollBehavior) -> Result<(), JsValue> {
         let line = self
             .document
             .create_element("div")?
@@ -177,11 +165,7 @@ impl Renderer {
         Ok(())
     }
 
-    pub fn append_info_html(
-        &self,
-        message: &str,
-        behavior: ScrollBehavior,
-    ) -> Result<(), JsValue> {
+    pub fn append_info_html(&self, message: &str, behavior: ScrollBehavior) -> Result<(), JsValue> {
         let line = self
             .document
             .create_element("div")?

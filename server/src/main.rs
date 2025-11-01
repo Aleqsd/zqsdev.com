@@ -169,9 +169,7 @@ async fn main() -> anyhow::Result<()> {
             msg = "OpenAI fallback backend configured"
         );
     }
-    let default_model = client
-        .primary_model()
-        .unwrap_or(OPENAI_MODEL_NAME);
+    let default_model = client.primary_model().unwrap_or(OPENAI_MODEL_NAME);
     let state = Arc::new(AppState {
         limiter: Arc::new(Mutex::new(RateLimiter::new(
             PER_MINUTE_BUDGET_EUR,
@@ -1006,7 +1004,8 @@ mod tests {
             .and_then(|value| value.as_str())
             .expect("profile.links.website should be populated");
         assert!(
-            website.starts_with("https://www.zqsdev.com") || website.starts_with("https://zqsdev.com"),
+            website.starts_with("https://www.zqsdev.com")
+                || website.starts_with("https://zqsdev.com"),
             "Website link should target the primary domain: {website}"
         );
     }
@@ -1057,9 +1056,7 @@ mod tests {
         };
         let value = serde_json::to_value(&response).expect("serialize response");
         assert_eq!(
-            value
-                .get("model")
-                .and_then(|entry| entry.as_str()),
+            value.get("model").and_then(|entry| entry.as_str()),
             Some(GROQ_MODEL_NAME),
             "Serialized AI response should expose the backend model"
         );

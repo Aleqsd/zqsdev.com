@@ -33,8 +33,7 @@ const AI_ACTIVATED_INFO: &str =
 const AI_DEACTIVATED_INFO: &str = "📟 AI Mode deactivated. Classic terminal helpers restored.";
 const AI_HELP_MESSAGE: &str = "🤖 AI Mode help:\nYou're chatting with an assistant that only uses Alexandre's résumé data.\nAsk a question or type `quit` to exit AI Mode.";
 const AI_DATA_LOADING: &str = "AI knowledge base still loading. Please try again shortly.";
-const BOOT_SEQUENCE_MESSAGE: &str =
-    "Welcome to the ZQSDev interactive terminal!";
+const BOOT_SEQUENCE_MESSAGE: &str = "Welcome to the ZQSDev interactive terminal!";
 const WELCOME_GUIDANCE_LINES: [&str; 2] = [
     "Type `help` to view all available commands.",
     "Use the quick actions below to jump to key sections instantly.",
@@ -120,12 +119,10 @@ impl Terminal {
 
         match action {
             Ok(CommandAction::Output(text)) => {
-                self.renderer
-                    .append_output_text(&text, output_scroll)?;
+                self.renderer.append_output_text(&text, output_scroll)?;
             }
             Ok(CommandAction::OutputHtml(html)) => {
-                self.renderer
-                    .append_output_html(&html, output_scroll)?;
+                self.renderer.append_output_html(&html, output_scroll)?;
             }
             Ok(CommandAction::Clear) => {
                 self.renderer.clear_output();
@@ -140,8 +137,7 @@ impl Terminal {
                 self.handle_unknown_command(&command)?;
             }
             Err(CommandError::Message(message)) => {
-                self.renderer
-                    .append_output_text(&message, output_scroll)?;
+                self.renderer.append_output_text(&message, output_scroll)?;
             }
         }
 
@@ -171,8 +167,7 @@ impl Terminal {
         self.renderer
             .append_output_text(&message, info_scroll.clone())?;
         let html = r#"Need a hand? <button type="button" class="ai-mode-cta" data-action="activate-ai-mode">Ask the AI assistant</button>"#;
-        self.renderer
-            .append_info_html(html, info_scroll)?;
+        self.renderer.append_info_html(html, info_scroll)?;
         Ok(())
     }
 
@@ -254,10 +249,7 @@ impl Terminal {
     pub fn on_data_ready(&self) -> Result<(), JsValue> {
         let (profile_name, resume_link) = {
             let state = self.state.borrow();
-            let name = state
-                .data
-                .as_ref()
-                .map(|data| data.profile.name.clone());
+            let name = state.data.as_ref().map(|data| data.profile.name.clone());
             let link = state
                 .data
                 .as_ref()
@@ -279,10 +271,9 @@ impl Terminal {
                 .await
             {
                 utils::log(&format!("Failed to animate welcome message: {:?}", err));
-                if let Err(err) = renderer.append_output_text(
-                    BOOT_SEQUENCE_MESSAGE,
-                    ScrollBehavior::Bottom,
-                ) {
+                if let Err(err) =
+                    renderer.append_output_text(BOOT_SEQUENCE_MESSAGE, ScrollBehavior::Bottom)
+                {
                     utils::log(&format!(
                         "Failed to render welcome message fallback: {:?}",
                         err
@@ -292,8 +283,7 @@ impl Terminal {
 
             if let Some(name) = profile_name {
                 let profile_line = profile_loaded_line(&name);
-                if let Err(err) =
-                    renderer.append_output_text(&profile_line, ScrollBehavior::Bottom)
+                if let Err(err) = renderer.append_output_text(&profile_line, ScrollBehavior::Bottom)
                 {
                     utils::log(&format!(
                         "Failed to append profile line `{profile_line}`: {:?}",
@@ -303,9 +293,7 @@ impl Terminal {
             }
 
             for guidance in WELCOME_GUIDANCE_LINES {
-                if let Err(err) =
-                    renderer.append_info_line(guidance, ScrollBehavior::Bottom)
-                {
+                if let Err(err) = renderer.append_info_line(guidance, ScrollBehavior::Bottom) {
                     utils::log(&format!(
                         "Failed to append guidance line `{guidance}`: {:?}",
                         err
@@ -314,17 +302,11 @@ impl Terminal {
             }
 
             let resume_html = resume_link_html(&resume_link);
-            if let Err(err) =
-                renderer.append_info_html(&resume_html, ScrollBehavior::Bottom)
-            {
+            if let Err(err) = renderer.append_info_html(&resume_html, ScrollBehavior::Bottom) {
                 utils::log(&format!("Failed to append résumé link: {:?}", err));
             }
             let ai_cta_html = r#"Prefer to talk with an AI? <button type="button" class="ai-mode-cta" data-action="activate-ai-mode">Ask the AI assistant</button>"#;
-            if let Err(err) = renderer.append_info_html(
-                ai_cta_html,
-                ScrollBehavior::Bottom,
-            )
-            {
+            if let Err(err) = renderer.append_info_html(ai_cta_html, ScrollBehavior::Bottom) {
                 utils::log(&format!(
                     "Failed to append AI assistant call-to-action: {:?}",
                     err
@@ -370,8 +352,7 @@ impl Terminal {
             } else {
                 ScrollBehavior::None
             };
-            self.renderer
-                .append_info_line(AI_DATA_LOADING, behavior)?;
+            self.renderer.append_info_line(AI_DATA_LOADING, behavior)?;
             return Ok(());
         }
 
@@ -399,10 +380,7 @@ impl Terminal {
                         render_current_suggestions(&shared_state, &renderer);
                         renderer.set_ai_indicator_text(AI_STATUS_ACTIVE);
                         if let Err(err) =
-                            renderer.append_output_markdown(
-                                &payload.answer,
-                                ScrollBehavior::Bottom,
-                            )
+                            renderer.append_output_markdown(&payload.answer, ScrollBehavior::Bottom)
                         {
                             utils::log(&format!("Failed to render AI answer: {:?}", err));
                         }
@@ -421,20 +399,16 @@ impl Terminal {
                         if let Some(reason) = payload.reason.as_ref() {
                             notice.push_str(&format!(" (limit: {reason})"));
                         }
-                        if let Err(err) = renderer.append_info_line(
-                            &notice,
-                            ScrollBehavior::Bottom,
-                        ) {
+                        if let Err(err) = renderer.append_info_line(&notice, ScrollBehavior::Bottom)
+                        {
                             utils::log(&format!("Failed to render AI limit info: {:?}", err));
                         }
                     }
                 }
                 Err(error) => {
                     let message = format!("AI error: {error}");
-                    if let Err(err) = renderer.append_output_text(
-                        &message,
-                        ScrollBehavior::Bottom,
-                    ) {
+                    if let Err(err) = renderer.append_output_text(&message, ScrollBehavior::Bottom)
+                    {
                         utils::log(&format!("Failed to render AI error: {:?}", err));
                     }
                 }
