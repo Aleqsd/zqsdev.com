@@ -107,8 +107,7 @@ impl Renderer {
             .create_element("pre")?
             .dyn_into::<HtmlElement>()?;
         pre.set_class_name("output-block");
-        pre.set_text_content(Some(text));
-        self.decorate_with_icons(&pre)?;
+        self.render_text_with_icons(&pre, text)?;
 
         wrapper.append_child(&pre)?;
         self.output.append_child(&wrapper)?;
@@ -143,8 +142,7 @@ impl Renderer {
             .create_element("div")?
             .dyn_into::<HtmlDivElement>()?;
         line.set_class_name("line info-line");
-        line.set_text_content(Some(message));
-        self.decorate_with_icons(&line)?;
+        self.render_text_with_icons(&line, message)?;
         self.output.append_child(&line)?;
         self.scroll_to_bottom();
         Ok(())
@@ -223,28 +221,7 @@ impl Renderer {
                     fragment.append_child(&node)?;
                 }
                 KeywordSegment::Icon(icon) => {
-                    let span = self
-                        .document
-                        .create_element("span")?
-                        .dyn_into::<HtmlSpanElement>()?;
-                    span.set_class_name("keyword-icon");
-
-                    let image = self
-                        .document
-                        .create_element("img")?
-                        .dyn_into::<HtmlImageElement>()?;
-                    image.set_class_name("keyword-icon__image");
-                    image.set_src(icon.icon_path);
-                    image.set_alt("");
-                    image.set_attribute("aria-hidden", "true")?;
-                    image.set_attribute("loading", "lazy")?;
-                    let image_node: Node = image.into();
-                    span.append_child(&image_node)?;
-
-                    let label_node: Node = self.document.create_text_node(&icon.token).into();
-                    span.append_child(&label_node)?;
-
-                    let span_node: Node = span.into();
+                    let span_node = self.build_icon_span(&icon)?;
                     fragment.append_child(&span_node)?;
                 }
             }
@@ -257,6 +234,60 @@ impl Renderer {
         let original: Node = text_node.clone().into();
         parent.replace_child(&replacement, &original)?;
         Ok(())
+    }
+
+    fn render_text_with_icons(&self, element: &HtmlElement, text: &str) -> Result<(), JsValue> {
+        let segments = keyword_icons::tokenize(text);
+        if !segments
+            .iter()
+            .any(|segment| matches!(segment, KeywordSegment::Icon(_)))
+        {
+            element.set_text_content(Some(text));
+            return Ok(());
+        }
+
+        element.set_text_content(None);
+        for segment in segments {
+            match segment {
+                KeywordSegment::Text(content) => {
+                    if content.is_empty() {
+                        continue;
+                    }
+                    let node: Node = self.document.create_text_node(&content).into();
+                    element.append_child(&node)?;
+                }
+                KeywordSegment::Icon(icon) => {
+                    let node = self.build_icon_span(&icon)?;
+                    element.append_child(&node)?;
+                }
+            }
+        }
+        Ok(())
+    }
+
+    fn build_icon_span(&self, icon: &keyword_icons::IconMatch) -> Result<Node, JsValue> {
+        let span = self
+            .document
+            .create_element("span")?
+            .dyn_into::<HtmlSpanElement>()?;
+        span.set_class_name("keyword-icon");
+
+        let image = self
+            .document
+            .create_element("img")?
+            .dyn_into::<HtmlImageElement>()?;
+        image.set_class_name("keyword-icon__image");
+        image.set_src(icon.icon_path);
+        image.set_alt("");
+        image.set_attribute("aria-hidden", "true")?;
+        image.set_attribute("loading", "lazy")?;
+        let image_node: Node = image.into();
+        span.append_child(&image_node)?;
+
+        let label_node: Node = self.document.create_text_node(&icon.token).into();
+        span.append_child(&label_node)?;
+
+        Ok(span.into())
     }
 
     pub fn clear_output(&self) {
@@ -288,7 +319,8 @@ impl Renderer {
                 TimeoutFuture::new(delay_ms).await;
             }
         }
-        self.decorate_with_icons(&pre)?;
+        self.render_text_with_icons(&pre, text)?;
+        self.scroll_to_bottom();
 
         Ok(())
     }

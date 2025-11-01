@@ -235,11 +235,6 @@ const KEYWORD_PATTERNS: &[KeywordPattern] = &[
         icon_path: "/icons/devicons/csharp/csharp-original.svg",
     },
     KeywordPattern {
-        pattern: "C",
-        pattern_lower: "c",
-        icon_path: "/icons/devicons/c/c-original.svg",
-    },
-    KeywordPattern {
         pattern: "XML",
         pattern_lower: "xml",
         icon_path: "/icons/devicons/xml/xml-original.svg",
@@ -475,6 +470,40 @@ mod tests {
                 }),
                 Segment::Text(" today.".to_string()),
             ]
+        );
+    }
+
+    #[test]
+    fn tokenize_detects_languages_in_bullet_list() {
+        let segments = tokenize("- Rust\n- Python\n- TypeScript");
+        let icons: Vec<String> = segments
+            .iter()
+            .filter_map(|segment| match segment {
+                Segment::Icon(icon) => Some(icon.token.to_ascii_lowercase()),
+                _ => None,
+            })
+            .collect();
+        for language in ["rust", "python", "typescript"] {
+            assert!(
+                icons.contains(&language.to_string()),
+                "Expected icon for `{language}` in bullet list, found icons: {icons:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn tokenize_detects_language_in_code_fence() {
+        let segments = tokenize("```rust\nfn main() {}\n```");
+        let icons: Vec<String> = segments
+            .iter()
+            .filter_map(|segment| match segment {
+                Segment::Icon(icon) => Some(icon.token.to_ascii_lowercase()),
+                _ => None,
+            })
+            .collect();
+        assert!(
+            icons.contains(&"rust".to_string()),
+            "Expected icon for `rust` in code fence, found icons: {icons:?}"
         );
     }
 }

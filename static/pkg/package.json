@@ -1,7 +1,7 @@
 {
   "name": "zqs_terminal",
   "type": "module",
-  "version": "0.1.9",
+  "version": "0.1.13",
   "files": [
     "zqs_terminal_bg.wasm",
     "zqs_terminal.js",

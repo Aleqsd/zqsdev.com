@@ -319,7 +319,7 @@ fn execute_ai(state: &AppState) -> Result<CommandAction, String> {
     lines.push("  • While active, type a natural-language question or use the helper chips (`help`, `quit`).".to_string());
     lines.push("  • The assistant only answers using Alexandre DO-O ALMEIDA's résumé data. If it can't find something, it will say so.".to_string());
     lines.push(format!(
-        "  • Model in use: {AI_MODEL_NAME} (Groq, OpenAI fallback on errors)."
+        "  • Model in use: {AI_MODEL_NAME} (Groq primary with Gemini then OpenAI fallback)."
     ));
     lines.push(String::new());
     if state.ai_mode {
@@ -591,6 +591,10 @@ mod tests {
         assert!(
             text.contains("currently deactivated") || text.contains("currently active"),
             "Guidance should mention the current AI state: {text}"
+        );
+        assert!(
+            text.contains("Groq primary with Gemini then OpenAI fallback"),
+            "Guidance should mention updated backend order: {text}"
         );
     }
 

@@ -23,6 +23,9 @@ use tower::ServiceExt;
 use tower_http::services::ServeDir;
 use tracing::{error, info, warn};
 
+const GOOGLE_MODEL_NAME: &str = "gemini-2.5-flash-lite";
+const GOOGLE_ENDPOINT: &str =
+    "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent";
 const GROQ_MODEL_NAME: &str = "llama-3.1-8b-instant";
 const GROQ_ENDPOINT: &str = "https://api.groq.com/openai/v1/chat/completions";
 const OPENAI_MODEL_NAME: &str = "gpt-4o-mini";
@@ -64,8 +67,16 @@ struct KnowledgeBase {
 #[derive(Clone)]
 struct AiClient {
     http: reqwest::Client,
+    google: Option<GoogleBackend>,
     groq: Option<ApiBackend>,
     openai: Option<ApiBackend>,
+}
+
+#[derive(Clone)]
+struct GoogleBackend {
+    endpoint: &'static str,
+    model: &'static str,
+    api_key: Arc<String>,
 }
 
 #[derive(Clone)]
@@ -78,6 +89,7 @@ struct ApiBackend {
 struct AiAnswer {
     text: String,
     model: &'static str,
+    cost_eur: f64,
 }
 
 #[derive(Debug, Deserialize)]
@@ -97,10 +109,21 @@ async fn main() -> anyhow::Result<()> {
     load_env_files();
     configure_tracing();
 
+    let google_key = match std::env::var("GOOGLE_API_KEY") {
+        Ok(value) => Some(value),
+        Err(VarError::NotPresent) => {
+            warn!(target: "ai", msg = "GOOGLE_API_KEY not set; defaulting to Groq/OpenAI backends");
+            None
+        }
+        Err(VarError::NotUnicode(err)) => {
+            return Err(anyhow!("GOOGLE_API_KEY contains invalid unicode: {:?}", err));
+        }
+    };
+
     let groq_key = match std::env::var("GROQ_API_KEY") {
         Ok(value) => Some(value),
         Err(VarError::NotPresent) => {
-            warn!(target: "ai", msg = "GROQ_API_KEY not set; defaulting to OpenAI backend");
+            warn!(target: "ai", msg = "GROQ_API_KEY not set; defaulting to Gemini/OpenAI backends");
             None
         }
         Err(VarError::NotUnicode(err)) => {
@@ -116,12 +139,23 @@ async fn main() -> anyhow::Result<()> {
     let data_dir = static_dir.join("data");
     let knowledge = KnowledgeBase::load(&data_dir)?;
 
-    let client = AiClient::new(groq_key, Some(openai_key))?;
+    let client = AiClient::new(google_key, groq_key, Some(openai_key))?;
     if client.has_groq() {
         info!(
             target: "ai",
             model = GROQ_MODEL_NAME,
-            msg = "Groq backend configured as default model"
+            msg = "Groq backend configured as primary model"
+        );
+    }
+    if client.has_google() {
+        info!(
+            target: "ai",
+            model = GOOGLE_MODEL_NAME,
+            msg = if client.has_groq() {
+                "Google backend configured as secondary fallback"
+            } else {
+                "Google backend configured as primary model"
+            }
         );
     }
     if client.has_openai() {
@@ -133,6 +167,8 @@ async fn main() -> anyhow::Result<()> {
     }
     let default_model = if client.has_groq() {
         GROQ_MODEL_NAME
+    } else if client.has_google() {
+        GOOGLE_MODEL_NAME
     } else {
         OPENAI_MODEL_NAME
     };
@@ -270,11 +306,12 @@ async fn handle_ai(
         return (StatusCode::BAD_REQUEST, Json(response));
     }
 
-    let estimate = state.estimate_cost(question);
+    let openai_cost_estimate = state.estimate_openai_cost(question);
+    let request_cost_estimate = state.estimate_cost(question);
 
     let ip = remote.ip().to_string();
     let mut limiter = state.limiter.lock().await;
-    if let Err(limit) = limiter.check_and_record(&ip, estimate) {
+    if let Err(limit) = limiter.check_and_record(&ip, request_cost_estimate) {
         let snapshot = limiter.usage_snapshot(&ip);
         drop(limiter);
         let (status, reason, detail) = limit.describe();
@@ -290,7 +327,7 @@ async fn handle_ai(
             ip_minute = snapshot.ip_minute,
             ip_hour = snapshot.ip_hour,
             ip_day = snapshot.ip_day,
-            cost_estimate_eur = estimate,
+            cost_estimate_eur = request_cost_estimate,
             "AI request blocked by limiter"
         );
         let response = AiResponse {
@@ -302,16 +339,53 @@ async fn handle_ai(
         };
         return (status, Json(response));
     }
-    let snapshot = limiter.usage_snapshot(&ip);
+    let mut snapshot = limiter.usage_snapshot(&ip);
     drop(limiter);
 
     match state
         .client
-        .ask(&state.knowledge, question, estimate)
+        .ask(&state.knowledge, question, openai_cost_estimate)
         .await
     {
         Ok(ai_answer) => {
-            let AiAnswer { text: answer_text, model } = ai_answer;
+            let AiAnswer {
+                text: answer_text,
+                model,
+                cost_eur,
+            } = ai_answer;
+            if cost_eur > 0.0 {
+                let mut limiter = state.limiter.lock().await;
+                if let Err(limit) = limiter.record_cost_if_within(cost_eur) {
+                    let snapshot = limiter.usage_snapshot(&ip);
+                    drop(limiter);
+                    let (status, reason, detail) = limit.describe();
+                    warn!(
+                        target: "ai",
+                        ip = %ip,
+                        model,
+                        minute_eur = snapshot.minute_spend,
+                        hour_eur = snapshot.hour_spend,
+                        day_eur = snapshot.day_spend,
+                        month_eur = snapshot.month_spend,
+                        ip_burst = snapshot.ip_burst,
+                        ip_minute = snapshot.ip_minute,
+                        ip_hour = snapshot.ip_hour,
+                        ip_day = snapshot.ip_day,
+                        cost_estimate_eur = cost_eur,
+                        "AI response discarded due to budget after backend call"
+                    );
+                    let response = AiResponse {
+                        answer: format!(
+                            "AI usage limit reached ({detail}). Switching back to the classic mode for now."
+                        ),
+                        ai_enabled: false,
+                        reason: Some(reason.to_string()),
+                    };
+                    return (status, Json(response));
+                }
+                snapshot = limiter.usage_snapshot(&ip);
+                drop(limiter);
+            }
             info!(
                 target: "ai",
                 ip = %ip,
@@ -324,7 +398,7 @@ async fn handle_ai(
                 ip_minute = snapshot.ip_minute,
                 ip_hour = snapshot.ip_hour,
                 ip_day = snapshot.ip_day,
-                cost_estimate_eur = estimate,
+                cost_estimate_eur = cost_eur,
                 "AI request served"
             );
             info!(
@@ -358,7 +432,7 @@ async fn handle_ai(
                 ip_minute = snapshot.ip_minute,
                 ip_hour = snapshot.ip_hour,
                 ip_day = snapshot.ip_day,
-                cost_estimate_eur = estimate,
+                cost_estimate_eur = request_cost_estimate,
                 "AI request failed"
             );
             error!(target: "ai", backend_error = %err, question = question);
@@ -376,6 +450,14 @@ async fn handle_ai(
 
 impl AppState {
     fn estimate_cost(&self, question: &str) -> f64 {
+        if self.client.has_free_backend() {
+            0.0
+        } else {
+            self.estimate_openai_cost(question)
+        }
+    }
+
+    fn estimate_openai_cost(&self, question: &str) -> f64 {
         let question_tokens = estimate_tokens(question);
         let input_tokens = self.knowledge.system_tokens + question_tokens + USER_OVERHEAD_TOKENS;
         let output_tokens = MAX_COMPLETION_TOKENS;
@@ -418,10 +500,14 @@ impl KnowledgeBase {
 }
 
 impl AiClient {
-    fn new(groq_key: Option<String>, openai_key: Option<String>) -> anyhow::Result<Self> {
-        if groq_key.is_none() && openai_key.is_none() {
+    fn new(
+        google_key: Option<String>,
+        groq_key: Option<String>,
+        openai_key: Option<String>,
+    ) -> anyhow::Result<Self> {
+        if google_key.is_none() && groq_key.is_none() && openai_key.is_none() {
             return Err(anyhow!(
-                "No AI provider configured. Provide GROQ_API_KEY or OPENAI_API_KEY."
+                "No AI provider configured. Provide GOOGLE_API_KEY, GROQ_API_KEY, or OPENAI_API_KEY."
             ));
         }
 
@@ -429,6 +515,11 @@ impl AiClient {
             .timeout(std::time::Duration::from_secs(20))
             .build()?;
 
+        let google = google_key.map(|key| GoogleBackend {
+            endpoint: GOOGLE_ENDPOINT,
+            model: GOOGLE_MODEL_NAME,
+            api_key: Arc::new(key),
+        });
         let groq = groq_key.map(|key| ApiBackend {
             endpoint: GROQ_ENDPOINT,
             model: GROQ_MODEL_NAME,
@@ -440,7 +531,16 @@ impl AiClient {
             api_key: Arc::new(key),
         });
 
-        Ok(Self { http, groq, openai })
+        Ok(Self {
+            http,
+            google,
+            groq,
+            openai,
+        })
+    }
+
+    fn has_google(&self) -> bool {
+        self.google.is_some()
     }
 
     fn has_groq(&self) -> bool {
@@ -451,75 +551,142 @@ impl AiClient {
         self.openai.is_some()
     }
 
+    fn has_free_backend(&self) -> bool {
+        self.groq.is_some() || self.google.is_some()
+    }
+
     async fn ask(
         &self,
         knowledge: &KnowledgeBase,
         question: &str,
-        estimate_cost: f64,
+        openai_cost: f64,
     ) -> Result<AiAnswer, AiClientError> {
+        let mut failures = Vec::new();
+
         if let Some(groq) = &self.groq {
-            match self
-                .ask_backend(groq, knowledge, question, estimate_cost)
-                .await
-            {
+            match self.ask_backend(groq, knowledge, question, 0.0).await {
                 Ok(answer) => {
                     return Ok(AiAnswer {
                         text: answer,
                         model: groq.model,
+                        cost_eur: 0.0,
                     });
                 }
-                Err(err) => {
+                Err(error) => {
+                    let fallback = match (self.google.is_some(), self.openai.is_some()) {
+                        (true, _) => "Gemini fallback",
+                        (false, true) => "OpenAI fallback",
+                        _ => "no fallback available",
+                    };
                     warn!(
                         target: "ai",
                         model = groq.model,
-                        error = %err,
-                        "Groq backend error; attempting OpenAI fallback"
+                        error = %error,
+                        fallback,
+                        "Groq backend error"
                     );
-                    if let Some(openai) = &self.openai {
-                        match self
-                            .ask_backend(openai, knowledge, question, estimate_cost)
-                            .await
-                        {
-                            Ok(answer) => {
-                                return Ok(AiAnswer {
-                                    text: answer,
-                                    model: openai.model,
-                                });
-                            }
-                            Err(openai_err) => {
-                                error!(
-                                    target: "ai",
-                                    model = openai.model,
-                                    error = %openai_err,
-                                    "OpenAI fallback failed after Groq error"
-                                );
-                                return Err(AiClientError::GroqAndFallbackFailed {
-                                    groq: err,
-                                    openai: openai_err,
-                                });
-                            }
-                        }
+                    failures.push(BackendFailure::new(BackendKind::Groq, error));
+                }
+            }
+        }
+
+        if let Some(google) = &self.google {
+            match self.ask_google(google, knowledge, question).await {
+                Ok(answer) => {
+                    return Ok(AiAnswer {
+                        text: answer,
+                        model: google.model,
+                        cost_eur: 0.0,
+                    });
+                }
+                Err(error) => {
+                    let fallback = if self.openai.is_some() {
+                        "OpenAI fallback"
                     } else {
-                        return Err(AiClientError::GroqOnlyFailed { error: err });
-                    }
+                        "no fallback available"
+                    };
+                    warn!(
+                        target: "ai",
+                        model = google.model,
+                        error = %error,
+                        fallback,
+                        "Google backend error"
+                    );
+                    failures.push(BackendFailure::new(BackendKind::Google, error));
                 }
             }
         }
 
         if let Some(openai) = &self.openai {
             match self
-                .ask_backend(openai, knowledge, question, estimate_cost)
+                .ask_backend(openai, knowledge, question, openai_cost)
                 .await
             {
-                Ok(answer) => Ok(AiAnswer {
-                    text: answer,
-                    model: openai.model,
-                }),
-                Err(err) => Err(AiClientError::OpenAiFailed { error: err }),
+                Ok(answer) => {
+                    return Ok(AiAnswer {
+                        text: answer,
+                        model: openai.model,
+                        cost_eur: openai_cost,
+                    });
+                }
+                Err(error) => {
+                    error!(
+                        target: "ai",
+                        model = openai.model,
+                        error = %error,
+                        "OpenAI fallback failed after other backends"
+                    );
+                    failures.push(BackendFailure::new(BackendKind::OpenAi, error));
+                    return Err(AiClientError::all_backends_failed(failures));
+                }
             }
-        } else {
-            Err(AiClientError::NoBackendConfigured)
         }
+
+        if failures.is_empty() {
+            Err(AiClientError::NoBackendConfigured)
+        } else {
+            Err(AiClientError::all_backends_failed(failures))
+        }
+    }
+
+    async fn ask_google(
+        &self,
+        backend: &GoogleBackend,
+        knowledge: &KnowledgeBase,
+        question: &str,
+    ) -> Result<String, BackendError> {
+        let payload = GoogleGenerateRequest::new(&knowledge.system_prompt, question);
+        let response = self
+            .http
+            .post(backend.endpoint)
+            .header("x-goog-api-key", backend.api_key.as_str())
+            .json(&payload)
+            .send()
+            .await?;
+
+        let status = response.status();
+        if !status.is_success() {
+            let detail = response.text().await.unwrap_or_default();
+            return Err(BackendError::ApiFailure(status, detail));
+        }
+
+        let body: GoogleGenerateResponse = response.json().await?;
+        let answer = body
+            .candidates
+            .unwrap_or_default()
+            .into_iter()
+            .find_map(GoogleCandidate::into_text)
+            .filter(|value| !value.is_empty())
+            .ok_or(BackendError::EmptyAnswer)?;
+
+        info!(
+            target: "ai",
+            cost_eur = 0.0,
+            chars = question.len(),
+            model = backend.model,
+            msg = "AI response generated by backend"
+        );
+        Ok(answer)
     }
 
     async fn ask_backend(
@@ -527,7 +694,7 @@ impl AiClient {
         backend: &ApiBackend,
         knowledge: &KnowledgeBase,
         question: &str,
-        estimate_cost: f64,
+        cost_eur: f64,
     ) -> Result<String, BackendError> {
         let payload = ChatRequest::new(backend.model, knowledge, question);
         let response = self
@@ -554,12 +721,41 @@ impl AiClient {
 
         info!(
             target: "ai",
-            cost_eur = estimate_cost,
+            cost_eur,
             chars = question.len(),
             model = backend.model,
             msg = "AI response generated by backend"
         );
         Ok(answer)
+    }
+}
+
+#[derive(Debug)]
+struct BackendFailure {
+    backend: BackendKind,
+    error: BackendError,
+}
+
+impl BackendFailure {
+    fn new(backend: BackendKind, error: BackendError) -> Self {
+        Self { backend, error }
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+enum BackendKind {
+    Google,
+    Groq,
+    OpenAi,
+}
+
+impl BackendKind {
+    fn as_str(&self) -> &'static str {
+        match self {
+            BackendKind::Google => "Google",
+            BackendKind::Groq => "Groq",
+            BackendKind::OpenAi => "OpenAI",
+        }
     }
 }
 
@@ -575,24 +771,83 @@ enum BackendError {
 
 #[derive(Debug, thiserror::Error)]
 enum AiClientError {
-    #[error("Groq backend failed without fallback: {error}")]
-    GroqOnlyFailed {
-        #[source]
-        error: BackendError,
-    },
-    #[error("Groq backend failed ({groq}) and OpenAI fallback failed ({openai})")]
-    GroqAndFallbackFailed {
-        #[source]
-        groq: BackendError,
-        openai: BackendError,
-    },
-    #[error("OpenAI backend failed: {error}")]
-    OpenAiFailed {
-        #[source]
-        error: BackendError,
-    },
-    #[error("Neither Groq nor OpenAI backend is configured")]
+    #[error("No AI backend is configured")]
     NoBackendConfigured,
+    #[error("All AI backends failed: {0}")]
+    AllBackendsFailed(String),
+}
+
+impl AiClientError {
+    fn all_backends_failed(failures: Vec<BackendFailure>) -> Self {
+        let summary = failures
+            .into_iter()
+            .map(|failure| format!("{} backend failed: {}", failure.backend.as_str(), failure.error))
+            .collect::<Vec<_>>()
+            .join("; ");
+        AiClientError::AllBackendsFailed(summary)
+    }
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct GoogleGenerateRequest<'a> {
+    contents: [GoogleContent<'a>; 1],
+    system_instruction: GoogleContent<'a>,
+    generation_config: GoogleGenerationConfig,
+}
+
+#[derive(Serialize)]
+struct GoogleContent<'a> {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    role: Option<&'a str>,
+    parts: [GooglePart<'a>; 1],
+}
+
+#[derive(Serialize)]
+struct GooglePart<'a> {
+    text: &'a str,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct GoogleGenerationConfig {
+    temperature: f32,
+    max_output_tokens: u32,
+}
+
+impl<'a> GoogleGenerateRequest<'a> {
+    fn new(system_prompt: &'a str, question: &'a str) -> Self {
+        Self {
+            contents: [GoogleContent::user(question)],
+            system_instruction: GoogleContent::instruction(system_prompt),
+            generation_config: GoogleGenerationConfig::new(0.3, MAX_COMPLETION_TOKENS as u32),
+        }
+    }
+}
+
+impl<'a> GoogleContent<'a> {
+    fn instruction(text: &'a str) -> Self {
+        Self {
+            role: None,
+            parts: [GooglePart { text }],
+        }
+    }
+
+    fn user(text: &'a str) -> Self {
+        Self {
+            role: Some("user"),
+            parts: [GooglePart { text }],
+        }
+    }
+}
+
+impl GoogleGenerationConfig {
+    fn new(temperature: f32, max_output_tokens: u32) -> Self {
+        Self {
+            temperature,
+            max_output_tokens,
+        }
+    }
 }
 
 #[derive(Serialize)]
@@ -644,6 +899,38 @@ struct ChatChoiceMessage {
     content: Option<String>,
 }
 
+#[derive(Deserialize)]
+struct GoogleGenerateResponse {
+    candidates: Option<Vec<GoogleCandidate>>,
+}
+
+#[derive(Deserialize)]
+struct GoogleCandidate {
+    content: Option<GoogleCandidateContent>,
+}
+
+#[derive(Deserialize)]
+struct GoogleCandidateContent {
+    parts: Option<Vec<GoogleCandidatePart>>,
+}
+
+#[derive(Deserialize)]
+struct GoogleCandidatePart {
+    text: Option<String>,
+}
+
+impl GoogleCandidate {
+    fn into_text(self) -> Option<String> {
+        self.content.and_then(|content| {
+            content.parts.unwrap_or_default().into_iter().find_map(|part| {
+                part.text
+                    .map(|text| text.trim().to_string())
+                    .filter(|value| !value.is_empty())
+            })
+        })
+    }
+}
+
 fn estimate_tokens(text: &str) -> usize {
     let chars = text.chars().count() as f64;
     (chars / 4.0).ceil() as usize
@@ -683,5 +970,59 @@ mod tests {
         assert_eq!(request.model, GROQ_MODEL_NAME);
         assert_eq!(request.messages[0].content, "prompt");
         assert_eq!(request.messages[1].content, question);
+    }
+
+    #[test]
+    fn google_request_includes_prompt_and_question() {
+        let prompt = "system instructions";
+        let question = "Tell me about Alexandre.";
+        let request = GoogleGenerateRequest::new(prompt, question);
+        assert_eq!(request.system_instruction.parts[0].text, prompt);
+        assert_eq!(request.contents[0].parts[0].text, question);
+        assert_eq!(request.contents[0].role, Some("user"));
+        assert_eq!(
+            request.generation_config.max_output_tokens,
+            MAX_COMPLETION_TOKENS as u32
+        );
+    }
+
+    #[test]
+    fn google_candidate_extracts_trimmed_text() {
+        let candidate = GoogleCandidate {
+            content: Some(GoogleCandidateContent {
+                parts: Some(vec![GoogleCandidatePart {
+                    text: Some("  Answer with whitespace  ".to_string()),
+                }]),
+            }),
+        };
+        assert_eq!(
+            GoogleCandidate::into_text(candidate),
+            Some("Answer with whitespace".to_string())
+        );
+    }
+
+    #[test]
+    fn estimate_cost_zero_when_free_backend_available() {
+        let client = AiClient::new(
+            Some("google_key".to_string()),
+            None,
+            Some("openai_key".to_string()),
+        )
+        .expect("client should construct");
+        let knowledge = KnowledgeBase {
+            system_prompt: "prompt".to_string(),
+            system_tokens: 8,
+        };
+        let app_state = AppState {
+            limiter: std::sync::Arc::new(tokio::sync::Mutex::new(RateLimiter::new(
+                PER_MINUTE_BUDGET_EUR,
+                PER_HOUR_BUDGET_EUR,
+                PER_DAY_BUDGET_EUR,
+                PER_MONTH_BUDGET_EUR,
+            ))),
+            knowledge,
+            client,
+        };
+        assert_eq!(app_state.estimate_cost("Hello AI?"), 0.0);
     }
 }

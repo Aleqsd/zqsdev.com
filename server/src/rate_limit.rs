@@ -154,6 +154,37 @@ impl RateLimiter {
             ip_day: ip_windows.map(|w| w.day.entries.len()).unwrap_or(0),
         }
     }
+
+    pub fn record_cost_if_within(&mut self, cost: f64) -> Result<(), RateLimitError> {
+        if cost <= 0.0 {
+            return Ok(());
+        }
+
+        let now = Instant::now();
+        self.minute_cost.prune(now);
+        self.hour_cost.prune(now);
+        self.day_cost.prune(now);
+        self.month_cost.prune(now);
+
+        if self.minute_cost.would_exceed(cost) {
+            return Err(RateLimitError::MinuteBudget);
+        }
+        if self.hour_cost.would_exceed(cost) {
+            return Err(RateLimitError::HourBudget);
+        }
+        if self.day_cost.would_exceed(cost) {
+            return Err(RateLimitError::DayBudget);
+        }
+        if self.month_cost.would_exceed(cost) {
+            return Err(RateLimitError::MonthBudget);
+        }
+
+        self.minute_cost.record(now, cost);
+        self.hour_cost.record(now, cost);
+        self.day_cost.record(now, cost);
+        self.month_cost.record(now, cost);
+        Ok(())
+    }
 }
 
 impl RateLimitError {

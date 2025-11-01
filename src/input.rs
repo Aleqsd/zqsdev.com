@@ -4,7 +4,9 @@ use std::rc::Rc;
 use wasm_bindgen::closure::Closure;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
-use web_sys::{ClipboardEvent, Element, EventTarget, HtmlElement, KeyboardEvent, MouseEvent};
+use web_sys::{
+    ClipboardEvent, CompositionEvent, Element, EventTarget, HtmlElement, KeyboardEvent, MouseEvent,
+};
 
 pub fn install_listeners(terminal: Rc<Terminal>) -> Result<(), JsValue> {
     let document = utils::document()?;
@@ -12,6 +14,7 @@ pub fn install_listeners(terminal: Rc<Terminal>) -> Result<(), JsValue> {
     let suggestions_terminal = Rc::clone(&terminal);
     let paste_terminal = Rc::clone(&terminal);
     let ai_activation_terminal = Rc::clone(&terminal);
+    let composition_terminal = Rc::clone(&terminal);
 
     let keydown_closure = Closure::wrap(Box::new(move |event: KeyboardEvent| {
         handle_keydown(&keydown_terminal, event);
@@ -69,6 +72,15 @@ pub fn install_listeners(terminal: Rc<Terminal>) -> Result<(), JsValue> {
         .add_event_listener_with_callback("click", ai_activate_click.as_ref().unchecked_ref())?;
     ai_activate_click.forget();
 
+    let composition_closure = Closure::wrap(Box::new(move |event: CompositionEvent| {
+        handle_composition_end(&composition_terminal, event);
+    }) as Box<dyn FnMut(_)>);
+    document.add_event_listener_with_callback(
+        "compositionend",
+        composition_closure.as_ref().unchecked_ref(),
+    )?;
+    composition_closure.forget();
+
     Ok(())
 }
 
@@ -125,12 +137,12 @@ fn handle_keydown(terminal: &Terminal, event: KeyboardEvent) {
 }
 
 fn handle_printable(terminal: &Terminal, event: &KeyboardEvent) {
-    if event.ctrl_key() || event.meta_key() || event.alt_key() {
+    if event.ctrl_key() || event.meta_key() || event.alt_key() || event.is_composing() {
         return;
     }
 
     let key = event.key();
-    if key.len() == 1 {
+    if is_printable_character_key(&key) {
         event.prevent_default();
         terminal.append_character(&key);
     }
@@ -188,6 +200,25 @@ fn sanitize_pasted_text(input: &str) -> String {
     sanitized.trim_matches(' ').to_string()
 }
 
+fn is_printable_character_key(key: &str) -> bool {
+    if matches!(key, "Dead" | "Process") {
+        return false;
+    }
+
+    let mut chars = key.chars();
+    matches!((chars.next(), chars.next()), (Some(_), None))
+}
+
+fn handle_composition_end(terminal: &Terminal, event: CompositionEvent) {
+    if let Some(data) = event.data() {
+        if data.is_empty() {
+            return;
+        }
+        event.prevent_default();
+        terminal.append_text(&data);
+    }
+}
+
 fn wants_ai_activation(target: Option<EventTarget>) -> bool {
     let mut current = target.and_then(|value| value.dyn_into::<Element>().ok());
     while let Some(element) = current {
@@ -203,7 +234,7 @@ fn wants_ai_activation(target: Option<EventTarget>) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::sanitize_pasted_text;
+    use super::{is_printable_character_key, sanitize_pasted_text};
 
     #[test]
     fn sanitize_trims_and_flattens_whitespace() {
@@ -217,5 +248,23 @@ mod tests {
         let raw = "keep  spacing";
         let cleaned = sanitize_pasted_text(raw);
         assert_eq!(cleaned, "keep  spacing");
+    }
+
+    #[test]
+    fn printable_key_detects_single_unicode_scalar() {
+        assert!(is_printable_character_key("a"));
+        assert!(is_printable_character_key(" "));
+        assert!(is_printable_character_key("é"));
+        assert!(is_printable_character_key("ç"));
+        assert!(is_printable_character_key("京"));
+    }
+
+    #[test]
+    fn printable_key_rejects_control_sequences() {
+        assert!(!is_printable_character_key(""));
+        assert!(!is_printable_character_key("Enter"));
+        assert!(!is_printable_character_key("ArrowLeft"));
+        assert!(!is_printable_character_key("Dead"));
+        assert!(!is_printable_character_key("Process"));
     }
 }

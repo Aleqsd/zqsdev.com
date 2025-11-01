@@ -1,6 +1,6 @@
 [package]
 name = "zqs_terminal"
-version = "0.1.9"
+version = "0.1.13"
 edition = "2021"
 
 [lib]
@@ -37,6 +37,7 @@ features = [
     "KeyboardEvent",
     "MouseEvent",
     "ClipboardEvent",
+    "CompositionEvent",
     "DataTransfer",
     "InputEvent",
     "Event",
