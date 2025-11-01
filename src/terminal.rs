@@ -28,7 +28,7 @@ const AI_STATUS_DEACTIVATED: &str = "AI Mode: Deactivated";
 const AI_STATUS_BUSY: &str = "AI Mode: Activated — Synthesizing…";
 const AI_ACTIVATED_INFO: &str =
     "🤖 AI Mode activated. Ask anything about Alexandre DO-O ALMEIDA's profile.";
-const AI_DEACTIVATED_INFO: &str = "AI Mode deactivated. Classic terminal helpers restored.";
+const AI_DEACTIVATED_INFO: &str = "📟 AI Mode deactivated. Classic terminal helpers restored.";
 const AI_HELP_MESSAGE: &str = "🤖 AI Mode help:\nYou're chatting with an assistant that only uses Alexandre's résumé data.\nAsk a question or type `quit` to exit AI Mode.";
 const AI_DATA_LOADING: &str = "AI knowledge base still loading. Please try again shortly.";
 
@@ -256,6 +256,13 @@ impl Terminal {
             );
             if let Err(err) = renderer.append_info_html(&link_html) {
                 utils::log(&format!("Failed to append résumé link: {:?}", err));
+            }
+            let ai_cta_html = r#"Prefer to talk with an AI? <button type="button" class="ai-mode-cta" data-action="activate-ai-mode">Ask the AI assistant</button>"#;
+            if let Err(err) = renderer.append_info_html(ai_cta_html) {
+                utils::log(&format!(
+                    "Failed to append AI assistant call-to-action: {:?}",
+                    err
+                ));
             }
         });
 

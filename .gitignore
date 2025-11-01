@@ -5,6 +5,8 @@
 /pkg/
 target/
 **/target/
+static/pkg/*
+!static/pkg/README.md
 
 # Local environment overrides
 .env

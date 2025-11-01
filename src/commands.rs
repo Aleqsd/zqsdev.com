@@ -336,12 +336,27 @@ fn execute_ai(state: &AppState) -> Result<CommandAction, String> {
 fn render_help() -> String {
     let mut lines = Vec::new();
     lines.push("Available commands:".to_string());
+    let name_width = COMMAND_DEFINITIONS
+        .iter()
+        .map(|cmd| cmd.name.len())
+        .max()
+        .unwrap_or(0)
+        + 2;
     for cmd in COMMAND_DEFINITIONS {
-        lines.push(format!("  {:10} — {}", cmd.name, cmd.description));
+        lines.push(format!(
+            "  {:width$} — {}",
+            cmd.name,
+            cmd.description,
+            width = name_width
+        ));
     }
     lines.push(String::new());
     lines.push(
         "Tip: Toggle the AI Mode button to ask the assistant questions about Alexandre."
+            .to_string(),
+    );
+    lines.push(
+        "Developed in Rust by Alexandre DO-O ALMEIDA — Open source: https://github.com/Aleqsd/zqsdev.com"
             .to_string(),
     );
     lines.join("\n")
@@ -595,6 +610,28 @@ mod tests {
         assert!(
             text.contains("Groq primary with Gemini then OpenAI fallback"),
             "Guidance should mention updated backend order: {text}"
+        );
+    }
+
+    #[test]
+    fn help_command_columns_align() {
+        let output = super::render_help();
+        let mut widths = Vec::new();
+        for line in output.lines().filter(|line| line.contains('—')) {
+            if let Some(prefix) = line.split('—').next() {
+                widths.push(prefix.chars().count());
+            }
+        }
+        let Some(first) = widths.first() else {
+            panic!("Help output should include command rows:\n{output}");
+        };
+        assert!(
+            widths.iter().all(|width| width == first),
+            "Expected help command names to align, got widths {widths:?}\n{output}"
+        );
+        assert!(
+            output.contains("Open source: https://github.com/Aleqsd/zqsdev.com"),
+            "Help output should mention open source link:\n{output}"
         );
     }
 

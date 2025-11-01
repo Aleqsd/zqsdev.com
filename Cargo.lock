@@ -349,7 +349,7 @@ dependencies = [
 
 [[package]]
 name = "zqs_terminal"
-version = "0.1.13"
+version = "0.1.14"
 dependencies = [
  "console_error_panic_hook",
  "gloo-timers",

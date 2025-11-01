@@ -62,6 +62,16 @@ body.theme-midnight {
     justify-content: center;
 }
 
+.brand-badge a {
+    display: inline-flex;
+}
+
+.brand-badge a:focus-visible {
+    outline: 2px solid var(--color-accent);
+    border-radius: 12px;
+    outline-offset: 6px;
+}
+
 .brand-badge img {
     width: 100%;
     height: auto;
@@ -437,7 +447,6 @@ body.theme-midnight {
 }
 
 #terminal.ai-mode-active .suggestions {
-    border-top: 1px solid rgba(155, 139, 255, 0.18);
     border-bottom-left-radius: 14px;
     border-bottom-right-radius: 14px;
     padding-bottom: 1.6rem;
