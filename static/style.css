@@ -221,6 +221,13 @@ body.theme-midnight {
     background: transparent;
 }
 
+.konami-kamehameha__audio {
+    position: absolute;
+    width: 0;
+    height: 0;
+    overflow: hidden;
+}
+
 .konami-message {
     margin: 1.25rem auto 0.35rem;
     text-align: center;

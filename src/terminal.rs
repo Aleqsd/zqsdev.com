@@ -62,6 +62,13 @@ const KAMEHAMEHA_MEDIA_HTML: &str = r#"
         alt="Goku unleashes a Kamehameha beam"
         loading="lazy"
     >
+    <audio
+        class="konami-kamehameha__audio"
+        src="./effects/kamehameha.mp3"
+        preload="auto"
+        autoplay
+        playsinline
+    ></audio>
 </figure>
 "#;
 const GOKU_FINISHER_HTML: &str =
