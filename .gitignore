@@ -1,0 +1,13 @@
+*.md
+!README.md
+
+# Generated build artifacts
+/pkg/
+/target/
+
+# Local environment overrides
+.env
+.env.local
+
+# Runtime logs
+server.log

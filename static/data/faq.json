@@ -1,0 +1,26 @@
+[
+    {
+        "question": "🌍 Are you open to remote roles?",
+        "answer": "Yes. I have led distributed teams across Europe and North America and work comfortably async-first."
+    },
+    {
+        "question": "🏢 What industries do you focus on?",
+        "answer": "Developer tooling, gaming platforms, and automation-heavy products are where I deliver the most value."
+    },
+    {
+        "question": "⏱️ How soon can you start?",
+        "answer": "I can begin a new engagement within four weeks, depending on contract and onboarding requirements."
+    },
+    {
+        "question": "🚀 Do you engage with early-stage startups?",
+        "answer": "Absolutely. I have shipped MVPs with founding teams and can help define roadmaps, analytics, and QA guardrails from day one."
+    },
+    {
+        "question": "🕒 What time zones do you collaborate best with?",
+        "answer": "UTC±2 is ideal, but I routinely cover Pacific and Eastern overlap windows for synchronous ceremonies when needed."
+    },
+    {
+        "question": "🛠️ Can you modernise legacy CI/CD pipelines?",
+        "answer": "Yes. I specialise in migrating brittle pipelines to reproducible infrastructure, adding observability, and coaching teams through the rollout."
+    }
+]

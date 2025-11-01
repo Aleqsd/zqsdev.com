@@ -1,0 +1,44 @@
+[
+    {
+        "name": "🧪 PlayStation Emulator Autotest Suite",
+        "desc": "Automated QA infrastructure for testing and verifying retro titles on PlayStation platforms.",
+        "tech": [
+            "Python",
+            "Rust",
+            "AWS",
+            "GitHub Actions"
+        ],
+        "link": "https://github.com/aleqsd"
+    },
+    {
+        "name": "🎮 Jam.gg Cloud Gaming Platform",
+        "desc": "Browser-based multiplayer platform with Twitch/Discord integration and custom game catalog system.",
+        "tech": [
+            "Go",
+            "React",
+            "Firebase",
+            "GCP"
+        ],
+        "link": "https://jam.gg"
+    },
+    {
+        "name": "🕹️ Arcana-Mundi",
+        "desc": "Homebrew Sega Genesis game with automated builds and emulator testing pipelines.",
+        "tech": [
+            "C",
+            "Rust",
+            "GitHub Actions"
+        ],
+        "link": "https://github.com/aleqsd"
+    },
+    {
+        "name": "🤖 QA Bot & CI Integrations",
+        "desc": "Automation bots for Slack, GitHub, and Linear to streamline QA and DevOps workflows.",
+        "tech": [
+            "Python",
+            "AWS Lambda",
+            "Slack API"
+        ],
+        "link": "https://github.com/aleqsd"
+    }
+]

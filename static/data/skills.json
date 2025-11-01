@@ -1,0 +1,39 @@
+{
+    "💻 Programming Languages": [
+        "Python",
+        "Go",
+        "C++",
+        "C#",
+        "TypeScript",
+        "Java",
+        "Bash",
+        "SQL",
+        "Lua"
+    ],
+    "☁️ Cloud & DevOps": [
+        "GitHub Actions",
+        "AWS (EC2, S3, DynamoDB, Lambda)",
+        "GCP",
+        "GitLab CI",
+        "Docker",
+        "Kubernetes"
+    ],
+    "🧰 Tools & Engines": [
+        "LLM / AI Tools",
+        "Unity",
+        "Unreal Engine 5",
+        "Figma",
+        "Visual Studio",
+        "Confluence",
+        "Jira",
+        "Linear",
+        "Datadog"
+    ],
+    "🧠 Practices": [
+        "CI/CD",
+        "QA Automation",
+        "Product Management",
+        "Team Leadership",
+        "Agile / Scrum"
+    ]
+}

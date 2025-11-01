@@ -1,0 +1,15 @@
+{
+  "name": "zqs_terminal",
+  "type": "module",
+  "version": "0.1.6",
+  "files": [
+    "zqs_terminal_bg.wasm",
+    "zqs_terminal.js",
+    "zqs_terminal.d.ts"
+  ],
+  "main": "zqs_terminal.js",
+  "types": "zqs_terminal.d.ts",
+  "sideEffects": [
+    "./snippets/*"
+  ]
+}

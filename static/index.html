@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ZQSDev Terminal</title>
+    <link rel="stylesheet" href="./style.css">
+    <link rel="icon" type="image/x-icon" href="./favicon.ico">
+</head>
+<body class="theme-midnight">
+    <noscript>
+        <div class="fallback">
+            This interactive terminal requires JavaScript and WebAssembly. Please enable JavaScript in your browser.
+        </div>
+    </noscript>
+    <main id="viewport">
+        <div class="brand-badge">
+            <img src="./zqsdev_gradient_logo.png" alt="ZQSDev logo">
+        </div>
+        <div id="terminal" role="application" aria-label="ZQSDev interactive terminal">
+            <div class="terminal-toolbar">
+                <span id="ai-mode-indicator" class="ai-mode-indicator" aria-live="polite" aria-busy="false">
+                    AI Mode: Deactivated
+                </span>
+                <button id="ai-mode-toggle" class="ai-mode-toggle" type="button" aria-pressed="false">
+                    AI Mode
+                </button>
+            </div>
+            <div id="output" class="output" aria-live="polite"></div>
+            <div id="prompt-line" class="prompt-line">
+                <span id="prompt-label" class="prompt-label">zqs@dev:~$</span>
+                <span id="prompt-input" class="prompt-input"></span>
+                <span id="prompt-caret" class="prompt-caret" aria-hidden="true"></span>
+            </div>
+            <div id="suggestions" class="suggestions" aria-live="polite" aria-label="Command suggestions"></div>
+        </div>
+    </main>
+    <footer class="page-footnote">
+        🦀 Handcrafted in Rust by Alexandre DO-O ALMEIDA.
+    </footer>
+    <script type="module" src="./main.js"></script>
+</body>
+</html>

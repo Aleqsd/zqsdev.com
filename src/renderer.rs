@@ -1,0 +1,412 @@
+use crate::keyword_icons::{self, Segment as KeywordSegment};
+use crate::utils;
+use gloo_timers::future::TimeoutFuture;
+use wasm_bindgen::prelude::*;
+use wasm_bindgen::JsCast;
+use web_sys::{
+    Document, DocumentFragment, Element, HtmlDivElement, HtmlElement, HtmlImageElement,
+    HtmlSpanElement, Node, Text,
+};
+
+const TERMINAL_ID: &str = "terminal";
+const OUTPUT_ID: &str = "output";
+const PROMPT_INPUT_ID: &str = "prompt-input";
+const PROMPT_LABEL_ID: &str = "prompt-label";
+const CARET_ID: &str = "prompt-caret";
+const SUGGESTIONS_ID: &str = "suggestions";
+const AI_TOGGLE_ID: &str = "ai-mode-toggle";
+const AI_INDICATOR_ID: &str = "ai-mode-indicator";
+const AI_LOADER_ID: &str = "ai-loader";
+
+pub struct Renderer {
+    document: Document,
+    terminal_root: HtmlElement,
+    output: HtmlElement,
+    prompt_input: HtmlElement,
+    prompt_label: HtmlElement,
+    caret: HtmlElement,
+    suggestions: HtmlElement,
+    ai_toggle: HtmlElement,
+    ai_indicator: HtmlElement,
+}
+
+impl Renderer {
+    pub fn new() -> Result<Self, JsValue> {
+        let document = utils::document()?;
+        let terminal_root = get_html_element(&document, TERMINAL_ID)?;
+        let output = get_html_element(&document, OUTPUT_ID)?;
+        let prompt_input = get_html_element(&document, PROMPT_INPUT_ID)?;
+        let prompt_label = get_html_element(&document, PROMPT_LABEL_ID)?;
+        let caret = get_html_element(&document, CARET_ID)?;
+        let suggestions = get_html_element(&document, SUGGESTIONS_ID)?;
+        let ai_toggle = get_html_element(&document, AI_TOGGLE_ID)?;
+        let ai_indicator = get_html_element(&document, AI_INDICATOR_ID)?;
+
+        Ok(Self {
+            document,
+            terminal_root,
+            output,
+            prompt_input,
+            prompt_label,
+            caret,
+            suggestions,
+            ai_toggle,
+            ai_indicator,
+        })
+    }
+
+    pub fn set_prompt_label(&self, label: &str) {
+        self.prompt_label.set_text_content(Some(label));
+    }
+
+    pub fn update_input(&self, buffer: &str) {
+        self.prompt_input.set_text_content(Some(buffer));
+    }
+
+    pub fn focus_terminal(&self) {
+        let _ = self.caret.focus();
+    }
+
+    pub fn append_command(&self, label: &str, command: &str) -> Result<(), JsValue> {
+        let line = self
+            .document
+            .create_element("div")?
+            .dyn_into::<HtmlDivElement>()?;
+        line.set_class_name("line command-line");
+
+        let label_span = self
+            .document
+            .create_element("span")?
+            .dyn_into::<HtmlSpanElement>()?;
+        label_span.set_class_name("prompt-label");
+        label_span.set_text_content(Some(label));
+
+        let command_span = self
+            .document
+            .create_element("span")?
+            .dyn_into::<HtmlSpanElement>()?;
+        command_span.set_class_name("prompt-command");
+        command_span.set_text_content(Some(command));
+
+        line.append_child(&label_span)?;
+        line.append_child(&command_span)?;
+        self.output.append_child(&line)?;
+        self.scroll_to_bottom();
+        Ok(())
+    }
+
+    pub fn append_output_text(&self, text: &str) -> Result<(), JsValue> {
+        let wrapper = self
+            .document
+            .create_element("div")?
+            .dyn_into::<HtmlDivElement>()?;
+        wrapper.set_class_name("line output-text");
+
+        let pre = self
+            .document
+            .create_element("pre")?
+            .dyn_into::<HtmlElement>()?;
+        pre.set_class_name("output-block");
+        pre.set_text_content(Some(text));
+        self.decorate_with_icons(&pre)?;
+
+        wrapper.append_child(&pre)?;
+        self.output.append_child(&wrapper)?;
+        self.scroll_to_bottom();
+        Ok(())
+    }
+
+    pub fn append_output_html(&self, html: &str) -> Result<(), JsValue> {
+        let wrapper = self
+            .document
+            .create_element("div")?
+            .dyn_into::<HtmlDivElement>()?;
+        wrapper.set_class_name("line output-text");
+
+        let container = self
+            .document
+            .create_element("div")?
+            .dyn_into::<HtmlElement>()?;
+        container.set_class_name("output-block output-block--html");
+        container.set_inner_html(html);
+        self.decorate_with_icons(&container)?;
+
+        wrapper.append_child(&container)?;
+        self.output.append_child(&wrapper)?;
+        self.scroll_to_bottom();
+        Ok(())
+    }
+
+    pub fn append_info_line(&self, message: &str) -> Result<(), JsValue> {
+        let line = self
+            .document
+            .create_element("div")?
+            .dyn_into::<HtmlDivElement>()?;
+        line.set_class_name("line info-line");
+        line.set_text_content(Some(message));
+        self.decorate_with_icons(&line)?;
+        self.output.append_child(&line)?;
+        self.scroll_to_bottom();
+        Ok(())
+    }
+
+    pub fn append_info_html(&self, message: &str) -> Result<(), JsValue> {
+        let line = self
+            .document
+            .create_element("div")?
+            .dyn_into::<HtmlDivElement>()?;
+        line.set_class_name("line info-line info-neutral");
+        line.set_inner_html(message);
+        self.decorate_with_icons(&line)?;
+        self.output.append_child(&line)?;
+        self.scroll_to_bottom();
+        Ok(())
+    }
+
+    fn decorate_with_icons(&self, element: &HtmlElement) -> Result<(), JsValue> {
+        let node: &Node = element.unchecked_ref();
+        self.decorate_node(node)
+    }
+
+    fn decorate_node(&self, node: &Node) -> Result<(), JsValue> {
+        let children = node.child_nodes();
+        let mut text_nodes = Vec::new();
+        for idx in 0..children.length() {
+            if let Some(child) = children.item(idx) {
+                if child.node_type() == Node::TEXT_NODE {
+                    if let Ok(text) = child.dyn_into::<Text>() {
+                        text_nodes.push(text);
+                    }
+                } else {
+                    if let Some(element) = child.dyn_ref::<Element>() {
+                        if element.class_list().contains("keyword-icon") {
+                            continue;
+                        }
+                    }
+                    self.decorate_node(&child)?;
+                }
+            }
+        }
+
+        for text_node in text_nodes {
+            self.decorate_text_node(&text_node)?;
+        }
+
+        Ok(())
+    }
+
+    fn decorate_text_node(&self, text_node: &Text) -> Result<(), JsValue> {
+        if let Some(parent) = text_node.parent_element() {
+            if parent.class_list().contains("keyword-icon") {
+                return Ok(());
+            }
+        }
+
+        let data = text_node.data();
+        let segments = keyword_icons::tokenize(&data);
+        if !segments
+            .iter()
+            .any(|segment| matches!(segment, KeywordSegment::Icon(_)))
+        {
+            return Ok(());
+        }
+
+        let fragment: DocumentFragment = self.document.create_document_fragment();
+        for segment in segments {
+            match segment {
+                KeywordSegment::Text(text) => {
+                    if text.is_empty() {
+                        continue;
+                    }
+                    let text_node = self.document.create_text_node(&text);
+                    let node: Node = text_node.into();
+                    fragment.append_child(&node)?;
+                }
+                KeywordSegment::Icon(icon) => {
+                    let span = self
+                        .document
+                        .create_element("span")?
+                        .dyn_into::<HtmlSpanElement>()?;
+                    span.set_class_name("keyword-icon");
+
+                    let image = self
+                        .document
+                        .create_element("img")?
+                        .dyn_into::<HtmlImageElement>()?;
+                    image.set_class_name("keyword-icon__image");
+                    image.set_src(icon.icon_path);
+                    image.set_alt("");
+                    image.set_attribute("aria-hidden", "true")?;
+                    image.set_attribute("loading", "lazy")?;
+                    let image_node: Node = image.into();
+                    span.append_child(&image_node)?;
+
+                    let label_node: Node = self.document.create_text_node(&icon.token).into();
+                    span.append_child(&label_node)?;
+
+                    let span_node: Node = span.into();
+                    fragment.append_child(&span_node)?;
+                }
+            }
+        }
+
+        let replacement: Node = fragment.into();
+        let parent = text_node
+            .parent_node()
+            .ok_or_else(|| JsValue::from_str("Text node missing parent while decorating icons"))?;
+        let original: Node = text_node.clone().into();
+        parent.replace_child(&replacement, &original)?;
+        Ok(())
+    }
+
+    pub fn clear_output(&self) {
+        self.output.set_inner_html("");
+    }
+
+    pub async fn type_output_text(&self, text: &str, delay_ms: u32) -> Result<(), JsValue> {
+        let wrapper = self
+            .document
+            .create_element("div")?
+            .dyn_into::<HtmlDivElement>()?;
+        wrapper.set_class_name("line output-text");
+
+        let pre = self
+            .document
+            .create_element("pre")?
+            .dyn_into::<HtmlElement>()?;
+        pre.set_class_name("output-block");
+
+        wrapper.append_child(&pre)?;
+        self.output.append_child(&wrapper)?;
+
+        let mut buffer = String::new();
+        for ch in text.chars() {
+            buffer.push(ch);
+            pre.set_text_content(Some(&buffer));
+            self.scroll_to_bottom();
+            if delay_ms > 0 {
+                TimeoutFuture::new(delay_ms).await;
+            }
+        }
+        self.decorate_with_icons(&pre)?;
+
+        Ok(())
+    }
+
+    pub fn render_suggestions<T>(&self, suggestions: T)
+    where
+        T: IntoIterator<Item = (String, String)>,
+    {
+        self.suggestions.set_inner_html("");
+        for (command, label) in suggestions {
+            if let Ok(div) = self.document.create_element("span") {
+                let span = div.dyn_into::<HtmlSpanElement>().ok();
+                if let Some(span) = span {
+                    span.set_class_name("suggestion");
+                    let _ = span.set_attribute("data-command", &command);
+                    let _ = span.set_attribute("role", "button");
+                    let _ = span.set_attribute("tabindex", "0");
+                    span.set_text_content(Some(&label));
+                    let _ = self.suggestions.append_child(&span);
+                }
+            }
+        }
+    }
+
+    fn scroll_to_bottom(&self) {
+        let scroll_height = self.output.scroll_height();
+        self.output.set_scroll_top(scroll_height);
+    }
+
+    pub fn apply_ai_mode(&self, active: bool) -> Result<(), JsValue> {
+        let mut indicator_text = "AI Mode: Deactivated";
+        if active {
+            indicator_text = "AI Mode: Activated";
+            self.ai_toggle.class_list().add_1("active")?;
+            self.terminal_root.class_list().add_1("ai-mode-active")?;
+        } else {
+            self.ai_toggle.class_list().remove_1("active")?;
+            self.ai_toggle.class_list().remove_1("busy")?;
+            self.terminal_root.class_list().remove_1("ai-mode-active")?;
+        }
+        self.ai_toggle
+            .set_attribute("aria-pressed", if active { "true" } else { "false" })?;
+        self.ai_indicator.set_attribute("aria-busy", "false")?;
+        self.set_ai_indicator_text(indicator_text);
+        Ok(())
+    }
+
+    pub fn set_ai_indicator_text(&self, text: &str) {
+        self.ai_indicator.set_text_content(Some(text));
+    }
+
+    pub fn set_ai_busy(&self, busy: bool) -> Result<(), JsValue> {
+        if busy {
+            self.ai_toggle.class_list().add_1("busy")?;
+            self.ai_indicator.set_attribute("aria-busy", "true")?;
+        } else {
+            self.ai_toggle.class_list().remove_1("busy")?;
+            self.ai_indicator.set_attribute("aria-busy", "false")?;
+        }
+        Ok(())
+    }
+
+    pub fn show_ai_loader(&self) -> Result<(), JsValue> {
+        if self.document.get_element_by_id(AI_LOADER_ID).is_some() {
+            return Ok(());
+        }
+
+        let wrapper = self
+            .document
+            .create_element("div")?
+            .dyn_into::<HtmlDivElement>()?;
+        wrapper.set_id(AI_LOADER_ID);
+        wrapper.set_class_name("line ai-loader");
+
+        let spinner = self
+            .document
+            .create_element("span")?
+            .dyn_into::<HtmlElement>()?;
+        spinner.set_class_name("ai-loader__spinner");
+
+        let label = self
+            .document
+            .create_element("span")?
+            .dyn_into::<HtmlSpanElement>()?;
+        label.set_class_name("ai-loader__label");
+        label.set_text_content(Some("Synthesizing answer"));
+
+        let dots = self
+            .document
+            .create_element("span")?
+            .dyn_into::<HtmlSpanElement>()?;
+        dots.set_class_name("ai-loader__dots");
+        dots.set_text_content(Some("..."));
+
+        wrapper.append_child(&spinner)?;
+        wrapper.append_child(&label)?;
+        wrapper.append_child(&dots)?;
+
+        self.output.append_child(&wrapper)?;
+        self.scroll_to_bottom();
+        Ok(())
+    }
+
+    pub fn hide_ai_loader(&self) -> Result<(), JsValue> {
+        if let Some(node) = self.document.get_element_by_id(AI_LOADER_ID) {
+            let node: web_sys::Node = node.unchecked_into();
+            let _ = self.output.remove_child(&node)?;
+        }
+        Ok(())
+    }
+}
+
+fn get_html_element(document: &Document, id: &str) -> Result<HtmlElement, JsValue> {
+    document
+        .get_element_by_id(id)
+        .ok_or_else(|| JsValue::from_str(&format!("Missing element #{id}")))
+        .and_then(|el| {
+            el.dyn_into::<HtmlElement>()
+                .map_err(|_| JsValue::from_str(&format!("Element #{id} is not HtmlElement")))
+        })
+}
