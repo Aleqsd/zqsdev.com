@@ -1,11 +1,11 @@
 [build]
-publish = "."
+publish = "static"
 command = ""
 
 # Serve the résumé viewer directly when the cv subdomain is hit
 [[redirects]]
 from = "https://cv.zqsdev.com/*"
-to = "/cv/:splat"
+to = "static/cv/:splat"
 status = 200
 force = true
 
@@ -26,5 +26,5 @@ force = true
 # Catch-all so the SPA stays routable on zqsdev.com / www.zqsdev.com
 [[redirects]]
 from = "/*"
-to = "/index.html"
+to = "static/index.html"
 status = 200
