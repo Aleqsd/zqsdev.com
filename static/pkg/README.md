@@ -110,6 +110,7 @@ The server is optional at runtime; the public site is served from the static bun
 
 ### Netlify (www.zqsdev.com & zqsdev.com)
 - `static/netlify.toml` owns redirects so the SPA loads everywhere while `cv.zqsdev.com` serves the résumé viewer and `calendly.zqsdev.com` forwards to Calendly.
+- `/api/*` requests proxy through Netlify to `https://api.zqsdev.com/api/:splat`, keeping browser requests same-origin while hitting the Axum backend.
 - Install the Netlify CLI (`npm install -g netlify-cli`) and authenticate once with `netlify login` or `NETLIFY_AUTH_TOKEN`.
 - `make deploy-preview` → runs `make build` then `netlify deploy --dir static --config static/netlify.toml`.
 - `make deploy-prod` → same flow with `--prod`. Pass extra flags via `NETLIFY_FLAGS` (e.g. `NETLIFY_FLAGS="--alias staging"`).
@@ -124,6 +125,14 @@ If you want AI Mode in production, deploy the proxy (e.g. on Fly.io, Railway, or
 - Optional `HOST`, `PORT`, and `STATIC_DIR` overrides.
 
 The proxy reads `static/data/*.json` at startup, forwards questions to `gpt-4o-mini`, and enforces spend ceilings before gracefully falling back to the classic terminal experience when limits trigger.
+
+### Systemd service (production)
+- Unit file: `/etc/systemd/system/zqs-terminal.service` runs `/opt/zqsdev/bin/zqs-terminal-server` as the `zqsdev` user with `WorkingDirectory=/opt/zqsdev`.
+- Environment lives in `/etc/zqsdev/server.env`, including `HOST=0.0.0.0`, `PORT=8787`, `STATIC_DIR=/opt/zqsdev/static`, and the API keys used at runtime.
+- Manage the service with `sudo systemctl status|restart zqs-terminal.service`; logs stream to `/opt/zqsdev/backend.log` (mirrored here as `./backend.log`) and via `journalctl -u zqs-terminal.service`.
+- Run `make backend-log` to tail the rolling log from the repository root.
+- Public ingress: `api.zqsdev.com` terminates TLS with Nginx (config at `/etc/nginx/sites-enabled/api.zqsdev.com`) and proxies to the Axum service on `127.0.0.1:8787`.
+- The binary listens on port `8787/tcp` (`/api/ai`) and restarts automatically on failure.
 
 ---
 

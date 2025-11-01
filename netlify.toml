@@ -5,7 +5,7 @@ command = ""
 # Serve the résumé viewer directly when the cv subdomain is hit
 [[redirects]]
 from = "https://cv.zqsdev.com/*"
-to = "static/cv/:splat"
+to = "/cv/:splat"
 status = 200
 force = true
 
