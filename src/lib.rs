@@ -24,6 +24,7 @@ pub fn start() -> Result<(), JsValue> {
     let renderer = Rc::new(Renderer::new()?);
     let terminal = Rc::new(Terminal::new(Rc::clone(&state), Rc::clone(&renderer)));
 
+    terminal.restore_achievements_from_storage();
     terminal.initialize()?;
     terminal.push_system_message("Booting…");
 

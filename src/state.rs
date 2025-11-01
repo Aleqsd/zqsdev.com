@@ -113,6 +113,7 @@ pub struct AppState {
     pub achievement_konami_unlocked: bool,
     pub achievement_shutdown_unlocked: bool,
     pub achievements_modal_open: bool,
+    pub achievements_spoilers_enabled: bool,
 }
 
 impl AppState {
@@ -135,6 +136,7 @@ impl AppState {
             achievement_konami_unlocked: false,
             achievement_shutdown_unlocked: false,
             achievements_modal_open: false,
+            achievements_spoilers_enabled: false,
         }
     }
 

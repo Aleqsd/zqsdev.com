@@ -185,6 +185,50 @@ pub fn install_listeners(terminal: Rc<Terminal>) -> Result<(), JsValue> {
         .add_event_listener_with_callback("click", overlay_click.as_ref().unchecked_ref())?;
     overlay_click.forget();
 
+    let achievements_modal = document
+        .get_element_by_id("achievements-modal")
+        .ok_or_else(|| JsValue::from_str("Missing #achievements-modal element"))?
+        .dyn_into::<HtmlElement>()?;
+    let achievements_modal_terminal = Rc::clone(&terminal);
+    let modal_click = Closure::wrap(Box::new(move |event: MouseEvent| {
+        if let Some(target) = event.target() {
+            if let Ok(element) = target.dyn_into::<Element>() {
+                if element
+                    .closest("[data-role=\"achievements-spoilers\"]")
+                    .ok()
+                    .flatten()
+                    .is_some()
+                {
+                    event.prevent_default();
+                    event.stop_propagation();
+                    if let Err(err) = achievements_modal_terminal.toggle_achievements_spoilers() {
+                        utils::log(&format!(
+                            "Failed to toggle achievements spoilers: {:?}",
+                            err
+                        ));
+                    }
+                    return;
+                }
+
+                if element
+                    .closest("[data-role=\"achievements-reset\"]")
+                    .ok()
+                    .flatten()
+                    .is_some()
+                {
+                    event.prevent_default();
+                    event.stop_propagation();
+                    if let Err(err) = achievements_modal_terminal.reset_achievements() {
+                        utils::log(&format!("Failed to reset achievements: {:?}", err));
+                    }
+                }
+            }
+        }
+    }) as Box<dyn FnMut(_)>);
+    achievements_modal
+        .add_event_listener_with_callback("click", modal_click.as_ref().unchecked_ref())?;
+    modal_click.forget();
+
     let composition_closure = Closure::wrap(Box::new(move |event: CompositionEvent| {
         handle_composition_end(&composition_terminal, event);
     }) as Box<dyn FnMut(_)>);

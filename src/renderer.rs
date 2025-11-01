@@ -35,14 +35,16 @@ pub enum ScrollBehavior {
 pub struct AchievementView {
     pub title: String,
     pub description: String,
+    pub hint: String,
     pub unlocked: bool,
 }
 
 impl AchievementView {
-    pub fn new(title: &str, description: &str, unlocked: bool) -> Self {
+    pub fn new(title: &str, description: &str, hint: &str, unlocked: bool) -> Self {
         Self {
             title: title.to_string(),
             description: description.to_string(),
+            hint: hint.to_string(),
             unlocked,
         }
     }
@@ -204,8 +206,21 @@ impl Renderer {
         Ok(())
     }
 
-    pub fn show_achievements_modal(&self, achievements: &[AchievementView]) -> Result<(), JsValue> {
+    pub fn show_achievements_modal(
+        &self,
+        achievements: &[AchievementView],
+        spoilers_enabled: bool,
+    ) -> Result<(), JsValue> {
         clear_children(&self.achievements_modal)?;
+        let spoilers_state = if spoilers_enabled {
+            "revealed"
+        } else {
+            "hidden"
+        };
+        self.achievements_overlay
+            .set_attribute("data-spoilers", spoilers_state)?;
+        self.achievements_modal
+            .set_attribute("data-spoilers", spoilers_state)?;
 
         let header = self
             .document
@@ -221,18 +236,53 @@ impl Renderer {
         title_el.set_class_name("achievements-modal__title");
         title_el.set_text_content(Some("Achievements"));
 
+        let actions = self
+            .document
+            .create_element("div")?
+            .dyn_into::<HtmlElement>()?;
+        actions.set_class_name("achievements-modal__actions");
+
+        let spoiler_btn = self
+            .document
+            .create_element("button")?
+            .dyn_into::<HtmlButtonElement>()?;
+        spoiler_btn.set_class_name("achievements-modal__action");
+        spoiler_btn.set_attribute("type", "button")?;
+        spoiler_btn.set_attribute("data-role", "achievements-spoilers")?;
+        spoiler_btn.set_attribute(
+            "aria-pressed",
+            if spoilers_enabled { "true" } else { "false" },
+        )?;
+        spoiler_btn.set_text_content(Some(if spoilers_enabled {
+            "Hide spoilers"
+        } else {
+            "Reveal spoilers"
+        }));
+        actions.append_child(&spoiler_btn)?;
+
+        let reset_btn = self
+            .document
+            .create_element("button")?
+            .dyn_into::<HtmlButtonElement>()?;
+        reset_btn.set_class_name("achievements-modal__action");
+        reset_btn.set_attribute("type", "button")?;
+        reset_btn.set_attribute("data-role", "achievements-reset")?;
+        reset_btn.set_text_content(Some("Reset"));
+        actions.append_child(&reset_btn)?;
+
         let close_btn = self
             .document
             .create_element("button")?
             .dyn_into::<HtmlButtonElement>()?;
-        close_btn.set_class_name("achievements-modal__close");
+        close_btn.set_class_name("achievements-modal__action achievements-modal__close");
         close_btn.set_attribute("type", "button")?;
         close_btn.set_attribute("data-role", "achievements-close")?;
         close_btn.set_attribute("aria-label", "Close achievements panel")?;
         close_btn.set_text_content(Some("Close"));
 
         header.append_child(&title_el)?;
-        header.append_child(&close_btn)?;
+        header.append_child(&actions)?;
+        actions.append_child(&close_btn)?;
         self.achievements_modal.append_child(&header)?;
 
         let unlocked_count = achievements.iter().filter(|entry| entry.unlocked).count();
@@ -256,7 +306,7 @@ impl Renderer {
             .dyn_into::<HtmlElement>()?;
         hint.set_class_name("achievements-modal__hint");
         hint.set_text_content(Some(
-            "Discover hidden interactions in the terminal to unlock them.",
+            "Hover an achievement to uncover a hint about how to trigger it.",
         ));
         self.achievements_modal.append_child(&hint)?;
 
@@ -280,6 +330,39 @@ impl Renderer {
                     "locked"
                 },
             )?;
+            item.set_attribute("data-hint", &achievement.hint)?;
+            item.set_attribute("tabindex", "0")?;
+
+            let reveal_details = spoilers_enabled || achievement.unlocked;
+            let title_text = if reveal_details {
+                achievement.title.clone()
+            } else {
+                "Hidden achievement".to_string()
+            };
+            let description_text = if reveal_details {
+                achievement.description.clone()
+            } else {
+                "Unlock this achievement to reveal the story.".to_string()
+            };
+
+            let summary = self
+                .document
+                .create_element("div")?
+                .dyn_into::<HtmlElement>()?;
+            summary.set_class_name("achievement-card__summary");
+
+            let icon = self
+                .document
+                .create_element("span")?
+                .dyn_into::<HtmlElement>()?;
+            icon.set_class_name("achievement-card__icon");
+            icon.set_text_content(Some("🏆"));
+
+            let meta = self
+                .document
+                .create_element("div")?
+                .dyn_into::<HtmlElement>()?;
+            meta.set_class_name("achievement-card__meta");
 
             let status = self
                 .document
@@ -297,17 +380,21 @@ impl Renderer {
                 .create_element("h3")?
                 .dyn_into::<HtmlElement>()?;
             title.set_class_name("achievement-card__title");
-            title.set_text_content(Some(&achievement.title));
+            title.set_text_content(Some(&title_text));
 
             let description = self
                 .document
                 .create_element("p")?
                 .dyn_into::<HtmlElement>()?;
             description.set_class_name("achievement-card__description");
-            description.set_text_content(Some(&achievement.description));
+            description.set_text_content(Some(&description_text));
 
-            item.append_child(&status)?;
-            item.append_child(&title)?;
+            meta.append_child(&status)?;
+            meta.append_child(&title)?;
+            summary.append_child(&icon)?;
+            summary.append_child(&meta)?;
+
+            item.append_child(&summary)?;
             item.append_child(&description)?;
             list.append_child(&item)?;
         }

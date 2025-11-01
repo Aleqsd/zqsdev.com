@@ -4,6 +4,7 @@ use crate::renderer::{AchievementView, Renderer, ScrollBehavior};
 use crate::state::AppState;
 use crate::utils;
 use gloo_timers::future::TimeoutFuture;
+use serde::{Deserialize, Serialize};
 use std::cell::RefCell;
 use std::rc::Rc;
 use wasm_bindgen::JsValue;
@@ -84,6 +85,12 @@ const ACHIEVEMENT_KONAMI_TITLE: &str = "Kamehameha!";
 const ACHIEVEMENT_KONAMI_DESCRIPTION: &str = "And this... is to go even further beyond!";
 const ACHIEVEMENT_SHUTDOWN_TITLE: &str = "AAAAAAAAAAAAAH";
 const ACHIEVEMENT_SHUTDOWN_DESCRIPTION: &str = "Why would you do that?!";
+const ACHIEVEMENTS_STORAGE_KEY: &str = "zqs_terminal_achievements";
+const ACHIEVEMENTS_STORAGE_VERSION: &str = env!("CARGO_PKG_VERSION");
+const ACHIEVEMENT_SHAW_HINT: &str = "Hornet shouts can be heard in the terminal.";
+const ACHIEVEMENT_POKEMON_HINT: &str = "Gotta catch 'em all!";
+const ACHIEVEMENT_KONAMI_HINT: &str = "Konami";
+const ACHIEVEMENT_SHUTDOWN_HINT: &str = "Why would you remove my files?";
 
 impl Terminal {
     pub fn new(state: SharedState, renderer: SharedRenderer) -> Self {
@@ -115,9 +122,20 @@ impl Terminal {
         self.renderer.focus_terminal();
     }
 
+    pub fn restore_achievements_from_storage(&self) {
+        if let Err(err) = self.try_restore_achievements_from_storage() {
+            utils::log(&format!(
+                "Failed to restore achievements state from storage: {:?}",
+                err
+            ));
+        }
+    }
+
     pub fn open_achievements_modal(&self) -> Result<(), JsValue> {
         let achievements = self.collect_achievement_views();
-        self.renderer.show_achievements_modal(&achievements)?;
+        let spoilers_enabled = self.achievements_spoilers_enabled();
+        self.renderer
+            .show_achievements_modal(&achievements, spoilers_enabled)?;
         {
             let mut state = self.state.borrow_mut();
             state.achievements_modal_open = true;
@@ -131,6 +149,37 @@ impl Terminal {
             state.achievements_modal_open = false;
         }
         self.renderer.hide_achievements_modal()
+    }
+
+    pub fn toggle_achievements_spoilers(&self) -> Result<(), JsValue> {
+        {
+            let mut state = self.state.borrow_mut();
+            state.achievements_spoilers_enabled = !state.achievements_spoilers_enabled;
+        }
+        self.persist_achievements_state();
+        self.refresh_achievements_modal_if_visible()
+    }
+
+    pub fn reset_achievements(&self) -> Result<(), JsValue> {
+        {
+            let mut state = self.state.borrow_mut();
+            state.achievement_shaw_unlocked = false;
+            state.achievement_pokemon_unlocked = false;
+            state.achievement_konami_unlocked = false;
+            state.achievement_shutdown_unlocked = false;
+            state.achievements_spoilers_enabled = false;
+            state.konami_triggered = false;
+            state.konami_index = 0;
+            state.pokemon_capture_chance = 1;
+        }
+        if let Err(err) = self.clear_achievements_storage() {
+            utils::log(&format!(
+                "Failed to clear achievements storage during reset: {:?}",
+                err
+            ));
+        }
+        self.persist_achievements_state();
+        self.refresh_achievements_modal_if_visible()
     }
 
     pub fn handle_escape(&self) {
@@ -203,6 +252,7 @@ impl Terminal {
                     ACHIEVEMENT_SHUTDOWN_TITLE,
                     ACHIEVEMENT_SHUTDOWN_DESCRIPTION,
                 )?;
+                self.persist_achievements_state();
                 self.refresh_achievements_modal_if_visible()?;
             }
 
@@ -298,6 +348,7 @@ impl Terminal {
                     ACHIEVEMENT_KONAMI_TITLE,
                     ACHIEVEMENT_KONAMI_DESCRIPTION,
                 )?;
+                self.persist_achievements_state();
                 self.refresh_achievements_modal_if_visible()?;
             }
             return Ok(true);
@@ -558,6 +609,7 @@ impl Terminal {
                     ACHIEVEMENT_POKEMON_TITLE,
                     ACHIEVEMENT_POKEMON_DESCRIPTION,
                 )?;
+                self.persist_achievements_state();
                 self.refresh_achievements_modal_if_visible()?;
             }
             let success_effect = self.renderer.render_pokemon_capture_success()?;
@@ -648,7 +700,9 @@ impl Terminal {
             return Ok(());
         }
         let achievements = self.collect_achievement_views();
-        self.renderer.show_achievements_modal(&achievements)
+        let spoilers_enabled = self.achievements_spoilers_enabled();
+        self.renderer
+            .show_achievements_modal(&achievements, spoilers_enabled)
     }
 
     fn collect_achievement_views(&self) -> Vec<AchievementView> {
@@ -665,26 +719,34 @@ impl Terminal {
         let mut unlocked = Vec::new();
         let mut locked = Vec::new();
         let entries = [
-            (shaw, ACHIEVEMENT_SHAW_TITLE, ACHIEVEMENT_SHAW_DESCRIPTION),
+            (
+                shaw,
+                ACHIEVEMENT_SHAW_TITLE,
+                ACHIEVEMENT_SHAW_DESCRIPTION,
+                ACHIEVEMENT_SHAW_HINT,
+            ),
             (
                 pokemon,
                 ACHIEVEMENT_POKEMON_TITLE,
                 ACHIEVEMENT_POKEMON_DESCRIPTION,
+                ACHIEVEMENT_POKEMON_HINT,
             ),
             (
                 konami,
                 ACHIEVEMENT_KONAMI_TITLE,
                 ACHIEVEMENT_KONAMI_DESCRIPTION,
+                ACHIEVEMENT_KONAMI_HINT,
             ),
             (
                 shutdown,
                 ACHIEVEMENT_SHUTDOWN_TITLE,
                 ACHIEVEMENT_SHUTDOWN_DESCRIPTION,
+                ACHIEVEMENT_SHUTDOWN_HINT,
             ),
         ];
 
-        for (is_unlocked, title, description) in entries {
-            let view = AchievementView::new(title, description, is_unlocked);
+        for (is_unlocked, title, description, hint) in entries {
+            let view = AchievementView::new(title, description, hint, is_unlocked);
             if is_unlocked {
                 unlocked.push(view);
             } else {
@@ -710,6 +772,90 @@ impl Terminal {
         true
     }
 
+    fn achievements_spoilers_enabled(&self) -> bool {
+        let state = self.state.borrow();
+        state.achievements_spoilers_enabled
+    }
+
+    fn persist_achievements_state(&self) {
+        if let Err(err) = self.save_achievements_to_storage() {
+            utils::log(&format!("Failed to persist achievements state: {:?}", err));
+        }
+    }
+
+    fn try_restore_achievements_from_storage(&self) -> Result<(), JsValue> {
+        let Some(window) = utils::window() else {
+            return Ok(());
+        };
+        let storage = match window.local_storage()? {
+            Some(storage) => storage,
+            None => return Ok(()),
+        };
+        let raw = match storage.get_item(ACHIEVEMENTS_STORAGE_KEY)? {
+            Some(value) => value,
+            None => return Ok(()),
+        };
+        let data: StoredAchievements = match serde_json::from_str(&raw) {
+            Ok(data) => data,
+            Err(err) => {
+                utils::log(&format!("Discarding corrupt achievements cache: {err}"));
+                let _ = storage.remove_item(ACHIEVEMENTS_STORAGE_KEY);
+                return Ok(());
+            }
+        };
+        if data.version != ACHIEVEMENTS_STORAGE_VERSION {
+            let _ = storage.remove_item(ACHIEVEMENTS_STORAGE_KEY);
+            return Ok(());
+        }
+        {
+            let mut state = self.state.borrow_mut();
+            state.achievement_shaw_unlocked = data.shaw;
+            state.achievement_pokemon_unlocked = data.pokemon;
+            state.achievement_konami_unlocked = data.konami;
+            state.achievement_shutdown_unlocked = data.shutdown;
+            state.achievements_spoilers_enabled = data.spoilers_enabled;
+        }
+        Ok(())
+    }
+
+    fn save_achievements_to_storage(&self) -> Result<(), JsValue> {
+        let Some(window) = utils::window() else {
+            return Ok(());
+        };
+        let storage = match window.local_storage()? {
+            Some(storage) => storage,
+            None => return Ok(()),
+        };
+        let payload = {
+            let state = self.state.borrow();
+            StoredAchievements {
+                version: ACHIEVEMENTS_STORAGE_VERSION.to_string(),
+                shaw: state.achievement_shaw_unlocked,
+                pokemon: state.achievement_pokemon_unlocked,
+                konami: state.achievement_konami_unlocked,
+                shutdown: state.achievement_shutdown_unlocked,
+                spoilers_enabled: state.achievements_spoilers_enabled,
+            }
+        };
+        let serialized = serde_json::to_string(&payload).map_err(|err| {
+            JsValue::from_str(&format!("Failed to serialize achievements payload: {err}"))
+        })?;
+        storage.set_item(ACHIEVEMENTS_STORAGE_KEY, &serialized)?;
+        Ok(())
+    }
+
+    fn clear_achievements_storage(&self) -> Result<(), JsValue> {
+        let Some(window) = utils::window() else {
+            return Ok(());
+        };
+        let storage = match window.local_storage()? {
+            Some(storage) => storage,
+            None => return Ok(()),
+        };
+        storage.remove_item(ACHIEVEMENTS_STORAGE_KEY)?;
+        Ok(())
+    }
+
     fn play_shaw_effect(&self) -> Result<(), JsValue> {
         let celebrate = {
             let mut state = self.state.borrow_mut();
@@ -718,6 +864,7 @@ impl Terminal {
 
         if celebrate {
             self.trigger_achievement_popup(ACHIEVEMENT_SHAW_TITLE, ACHIEVEMENT_SHAW_DESCRIPTION)?;
+            self.persist_achievements_state();
             self.refresh_achievements_modal_if_visible()?;
         }
 
@@ -1170,6 +1317,16 @@ fn resume_link_html(url: &str) -> String {
         r#"If you want, you can just <a href="{url}" target="_blank" rel="noopener noreferrer">open the résumé</a>."#,
         url = url
     )
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct StoredAchievements {
+    version: String,
+    shaw: bool,
+    pokemon: bool,
+    konami: bool,
+    shutdown: bool,
+    spoilers_enabled: bool,
 }
 
 #[cfg(test)]
