@@ -23,6 +23,13 @@ to = "https://calendly.com/alexandre-zqsdev/30min"
 status = 301
 force = true
 
+# Proxy API requests to the self-hosted Axum backend
+[[redirects]]
+from = "/api/*"
+to = "https://api.zqsdev.com/:splat"
+status = 200
+force = true
+
 # Catch-all so the SPA stays routable on zqsdev.com / www.zqsdev.com
 [[redirects]]
 from = "/*"
