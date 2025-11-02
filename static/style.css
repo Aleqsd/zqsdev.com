@@ -21,8 +21,8 @@ body {
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: clamp(0.75rem, 2vh, 1.25rem);
-    padding-block: clamp(0.75rem, 2vh, 1.25rem);
+    gap: clamp(0.6rem, 1.6vh, 1.1rem);
+    padding-block: clamp(0.65rem, 1.8vh, 1.15rem);
     padding-inline: clamp(1rem, 4vw, 1.75rem);
     font-family: "Fira Code", "Source Code Pro", "Roboto Mono", monospace;
     background: var(--color-bg);
@@ -47,19 +47,20 @@ body.theme-midnight {
 
 #viewport {
     width: 100%;
-    padding: clamp(0.5rem, 1.5vh, 0.9rem) clamp(1rem, 4vw, 1.5rem);
+    padding: clamp(0.3rem, 1vh, 0.6rem) clamp(1rem, 4vw, 1.5rem);
     padding-bottom: clamp(0.9rem, 2.5vh, 1.35rem);
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: clamp(0.9rem, 2vh, 1.3rem);
+    gap: clamp(0.8rem, 1.8vh, 1.2rem);
 }
 
 .brand-badge {
-    width: min(300px, 60vw);
+    width: min(220px, 45vw);
     display: flex;
     justify-content: center;
+    margin-top: clamp(0.15rem, 0.6vh, 0.4rem);
 }
 
 .brand-badge a {
@@ -82,7 +83,7 @@ body.theme-midnight {
 #terminal {
     position: relative;
     width: min(960px, 95vw);
-    height: clamp(520px, 68vh, 600px);
+    height: clamp(540px, 72vh, 640px);
     display: flex;
     flex-direction: column;
     border: 1px solid var(--color-panel-border);
@@ -963,7 +964,7 @@ body.theme-midnight {
     align-items: center;
     justify-content: space-between;
     gap: 1rem;
-    padding: 1.05rem 2.5rem 0.75rem;
+    padding: 0.8rem 2.3rem;
     border-bottom: 1px solid var(--color-panel-border);
     background: linear-gradient(var(--color-panel-overlay), transparent);
     flex: 0 0 auto;
@@ -992,7 +993,7 @@ body.theme-midnight {
     align-items: center;
     justify-content: center;
     gap: 0.35rem;
-    padding: 0.55rem 1.4rem;
+    padding: 0.45rem 1.35rem;
     border-radius: 999px;
     border: 1px solid rgba(255, 255, 255, 0.18);
     background: linear-gradient(
@@ -1524,7 +1525,7 @@ a:hover {
     }
 
     .terminal-toolbar {
-        padding: 0.9rem 1.6rem 0.65rem;
+        padding: 0.75rem 1.6rem 0.5rem;
         flex-wrap: wrap;
         gap: 0.6rem;
     }
@@ -1563,7 +1564,7 @@ a:hover {
     }
 
     .terminal-toolbar {
-        padding: 0.75rem 1.1rem 0.55rem;
+        padding: 0.6rem 1.05rem 0.45rem;
         gap: 0.5rem;
     }
 
@@ -1573,7 +1574,7 @@ a:hover {
     }
 
     .ai-mode-toggle {
-        padding: 0.45rem 1.05rem;
+        padding: 0.38rem 1rem;
         font-size: 0.62rem;
         letter-spacing: 0.14em;
     }
