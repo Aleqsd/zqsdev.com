@@ -8,7 +8,7 @@
                 "Python",
                 "GitHub Actions",
                 "Lua",
-                "CI/CD" 
+                "CI/CD"
             ],
             "link": "https://store.playstation.com/en-us/concept/10008684"
         },
@@ -30,7 +30,7 @@
             "description": "Developed a web and mobile platform for Ynov students to share and attend peer-to-peer trainings. Implemented wiki-based documentation to manage professional certification processes.",
             "tech": [
                 "Android",
-                "Node.js"
+                "NodeJS"
             ],
             "link": "https://x.com/BeeToBee_Ynov"
         },
@@ -42,7 +42,6 @@
                 "C++",
                 "Qt",
                 "MySQL",
-                "SVN",
                 "Visual Studio"
             ]
         },
@@ -63,8 +62,8 @@
             "description": "Master thesis exploring the use of XGBoost and interpretable machine learning in cancer prediction. Includes interview with Dr. Moulin, oncologist in Marseille.",
             "tech": [
                 "Python",
-                "Machine Learning",
-                "Jupyter Notebook"
+                "Jupyter Notebook",
+                "Machine Learning"
             ],
             "link": "https://drive.google.com/file/d/1vSn7ih7-lTybVDkfm3Re2lNdA2dCDqO_/view"
         }
