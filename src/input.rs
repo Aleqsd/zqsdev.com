@@ -117,6 +117,19 @@ pub fn install_listeners(terminal: Rc<Terminal>) -> Result<(), JsValue> {
         .add_event_listener_with_callback("click", ai_activate_click.as_ref().unchecked_ref())?;
     ai_activate_click.forget();
 
+    let helper_click_terminal = Rc::clone(&terminal);
+    let helper_click = Closure::wrap(Box::new(move |event: MouseEvent| {
+        if let Some(command) = lookup_command_trigger(event.target()) {
+            event.prevent_default();
+            event.stop_propagation();
+            if let Err(err) = helper_click_terminal.execute_suggestion(&command) {
+                utils::log(&format!("Failed to trigger helper command `{command}`: {:?}", err));
+            }
+        }
+    }) as Box<dyn FnMut(_)>);
+    document.add_event_listener_with_callback("click", helper_click.as_ref().unchecked_ref())?;
+    helper_click.forget();
+
     let achievements_terminal = Rc::clone(&terminal);
     let achievements_trigger = document
         .get_element_by_id("achievements-trigger")
@@ -443,6 +456,23 @@ fn wants_ai_activation(target: Option<EventTarget>) -> bool {
         current = element.parent_element();
     }
     false
+}
+
+fn lookup_command_trigger(target: Option<EventTarget>) -> Option<String> {
+    let mut current = target.and_then(|value| value.dyn_into::<Element>().ok());
+    while let Some(element) = current {
+        if element.class_list().contains("suggestion") {
+            return None;
+        }
+        if let Some(command) = element.get_attribute("data-command") {
+            let trimmed = command.trim();
+            if !trimmed.is_empty() {
+                return Some(trimmed.to_string());
+            }
+        }
+        current = element.parent_element();
+    }
+    None
 }
 
 #[cfg(test)]

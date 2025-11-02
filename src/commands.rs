@@ -659,8 +659,8 @@ mod tests {
             "English summary missing from contact output:\n{output}"
         );
         assert!(
-            output.contains("ENGLISH (TOEIC 990/990) - FULL PROFESSIONAL PROFICIENCY"),
-            "Languages should surface detailed proficiency in contact output:\n{output}"
+            output.contains("<li>English (TOEIC 990/990) - Full professional proficiency</li>"),
+            "Languages should surface detailed proficiency in contact output with preserved casing:\n{output}"
         );
     }
 
@@ -1158,14 +1158,14 @@ fn render_contact_html(profile: &Profile) -> String {
     }
 
     if let Some(languages) = profile.languages.as_ref().filter(|langs| !langs.is_empty()) {
-        let languages_text = languages
+        let languages_html = languages
             .iter()
-            .map(|lang| utils::escape_html(&lang.to_uppercase()))
+            .map(|lang| format!("<li>{}</li>", utils::escape_html(lang)))
             .collect::<Vec<_>>()
-            .join(", ");
+            .join("");
         html.push_str(&format!(
-            "<div class=\"contact-meta\"><span class=\"contact-label\">Languages</span><span class=\"contact-value\">{}</span></div>",
-            languages_text
+            "<div class=\"contact-meta contact-languages\"><span class=\"contact-label\">Languages</span><ul class=\"contact-language-list\">{}</ul></div>",
+            languages_html
         ));
     }
 

@@ -191,6 +191,51 @@ const KEYWORD_PATTERNS: &[KeywordPattern] = &[
         icon_path: "/icons/slack-original.svg",
     },
     KeywordPattern {
+        pattern: "Discord",
+        pattern_lower: "discord",
+        icon_path: "/icons/discord.svg",
+    },
+    KeywordPattern {
+        pattern: "Discord API",
+        pattern_lower: "discord api",
+        icon_path: "/icons/discord.svg",
+    },
+    KeywordPattern {
+        pattern: "Discord Bot",
+        pattern_lower: "discord bot",
+        icon_path: "/icons/discord.svg",
+    },
+    KeywordPattern {
+        pattern: "Twitch",
+        pattern_lower: "twitch",
+        icon_path: "/icons/twitch.svg",
+    },
+    KeywordPattern {
+        pattern: "Twitch API",
+        pattern_lower: "twitch api",
+        icon_path: "/icons/twitch.svg",
+    },
+    KeywordPattern {
+        pattern: "Twitch Bot",
+        pattern_lower: "twitch bot",
+        icon_path: "/icons/twitch.svg",
+    },
+    KeywordPattern {
+        pattern: "PlayStation",
+        pattern_lower: "playstation",
+        icon_path: "/icons/playstation.svg",
+    },
+    KeywordPattern {
+        pattern: "PlayStation 5",
+        pattern_lower: "playstation 5",
+        icon_path: "/icons/playstation.svg",
+    },
+    KeywordPattern {
+        pattern: "PS5",
+        pattern_lower: "ps5",
+        icon_path: "/icons/playstation.svg",
+    },
+    KeywordPattern {
         pattern: "LinkedIn",
         pattern_lower: "linkedin",
         icon_path: "/icons/linkedin-original.svg",
@@ -214,6 +259,16 @@ const KEYWORD_PATTERNS: &[KeywordPattern] = &[
         pattern: "Meta",
         pattern_lower: "meta",
         icon_path: "/icons/meta-original.svg",
+    },
+    KeywordPattern {
+        pattern: "Y Combinator",
+        pattern_lower: "y combinator",
+        icon_path: "/icons/ycombinator.svg",
+    },
+    KeywordPattern {
+        pattern: "YC",
+        pattern_lower: "yc",
+        icon_path: "/icons/ycombinator.svg",
     },
     KeywordPattern {
         pattern: "AWS",

@@ -1478,6 +1478,11 @@ fn default_suggestions() -> Vec<&'static str> {
         let resume = names.remove(index);
         names.insert(0, resume);
     }
+    if let Some(index) = names.iter().position(|name| *name == "contact") {
+        let contact = names.remove(index);
+        let insert_at = if names.is_empty() { 0 } else { 1 };
+        names.insert(insert_at, contact);
+    }
     names
 }
 
@@ -1547,7 +1552,16 @@ fn profile_loaded_line(name: &str) -> String {
 
 fn resume_link_html(url: &str) -> String {
     format!(
-        r#"If you want, you can just <a href="{url}" target="_blank" rel="noopener noreferrer">open the résumé</a>."#,
+        r#"<div class="welcome-helpers">
+    <a class="welcome-helper welcome-helper--resume" href="{url}" target="_blank" rel="noopener noreferrer">
+        <span aria-hidden="true">📄</span>
+        <span class="welcome-helper__text">Open the résumé</span>
+    </a>
+    <button type="button" class="welcome-helper welcome-helper--contact" data-command="contact">
+        <span aria-hidden="true">✉️</span>
+        <span class="welcome-helper__text">Show contact</span>
+    </button>
+</div>"#,
         url = url
     )
 }
@@ -1634,15 +1648,21 @@ mod tests {
     }
 
     #[test]
-    fn resume_link_html_wraps_anchor() {
+    fn resume_link_html_renders_resume_and_contact_helpers() {
         let html = super::resume_link_html("https://cv.zqsdev.com");
         assert!(
-            html.contains(r#"href="https://cv.zqsdev.com""#),
-            "Expected résumé anchor to include the provided URL: {html}"
+            html.contains(r#"class="welcome-helpers""#),
+            "Expected résumé helper container: {html}"
         );
         assert!(
-            html.contains("open the résumé"),
-            "Anchor markup should include the résumé label: {html}"
+            html.contains(r#"class="welcome-helper welcome-helper--resume""#)
+                && html.contains(r#"href="https://cv.zqsdev.com""#),
+            "Expected résumé helper to link to provided URL: {html}"
+        );
+        assert!(
+            html.contains(r#"class="welcome-helper welcome-helper--contact""#)
+                && html.contains(r#"data-command="contact""#),
+            "Expected contact helper to surface command trigger: {html}"
         );
     }
 
@@ -1655,10 +1675,15 @@ mod tests {
             let resume = expected.remove(index);
             expected.insert(0, resume);
         }
+        if let Some(index) = expected.iter().position(|name| *name == "contact") {
+            let contact = expected.remove(index);
+            let insert_at = if expected.is_empty() { 0 } else { 1 };
+            expected.insert(insert_at, contact);
+        }
         assert_eq!(
             super::default_suggestions(),
             expected,
-            "Default suggestions should list every command with résumé primed first"
+            "Default suggestions should list every command with résumé/contact helpers prioritised"
         );
         for command in super::default_suggestions() {
             let result = crate::commands::execute(command, &state, &[]);
