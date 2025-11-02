@@ -59,6 +59,21 @@ async fn load_terminal_data(terminal: Rc<Terminal>, state: Rc<RefCell<AppState>>
 }
 
 async fn fetch_all_data() -> Result<TerminalData, JsValue> {
+    match utils::fetch_json::<TerminalData>("/api/data").await {
+        Ok(data) => Ok(data),
+        Err(err) => {
+            let fallback_reason = err
+                .as_string()
+                .unwrap_or_else(|| "unknown error".to_string());
+            utils::log(&format!(
+                "Primary data fetch failed ({fallback_reason}); falling back to static files."
+            ));
+            fetch_all_data_from_static().await
+        }
+    }
+}
+
+async fn fetch_all_data_from_static() -> Result<TerminalData, JsValue> {
     use state::{Education, Experience, FaqEntry, ProjectsCollection, Testimonial};
     use std::collections::BTreeMap;
 

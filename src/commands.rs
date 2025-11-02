@@ -485,8 +485,8 @@ fn format_education(education: &[Education]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use wasm_bindgen_test::wasm_bindgen_test;
     use crate::state::{Project, Publication};
+    use wasm_bindgen_test::wasm_bindgen_test;
 
     fn stub_state() -> AppState {
         use crate::state::{FaqEntry, Profile, ProfileLinks, Testimonial};
@@ -816,8 +816,7 @@ mod tests {
             projects: vec![Project {
                 title: "No Tech Listed".to_string(),
                 date: None,
-                description: "An entry focusing on achievements without a tech stack."
-                    .to_string(),
+                description: "An entry focusing on achievements without a tech stack.".to_string(),
                 tech: Vec::new(),
                 link: Some("https://example.com".to_string()),
             }],
@@ -1089,14 +1088,22 @@ fn push_award(html: &mut String, award: &Award) {
     html.push_str("<article class=\"award\">");
     html.push_str("<h3>");
     html.push_str(&utils::escape_html(&award.title));
-    if let Some(date) = award.date.as_deref().filter(|value| !value.trim().is_empty()) {
+    if let Some(date) = award
+        .date
+        .as_deref()
+        .filter(|value| !value.trim().is_empty())
+    {
         html.push_str(" <small>");
         html.push_str(&utils::escape_html(date));
         html.push_str("</small>");
     }
     html.push_str("</h3>");
 
-    if let Some(issuer) = award.issuer.as_deref().filter(|value| !value.trim().is_empty()) {
+    if let Some(issuer) = award
+        .issuer
+        .as_deref()
+        .filter(|value| !value.trim().is_empty())
+    {
         html.push_str("<p><strong>Issuer:</strong> ");
         html.push_str(&utils::escape_html(issuer));
         html.push_str("</p>");

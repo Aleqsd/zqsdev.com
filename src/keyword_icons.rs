@@ -1,4 +1,5 @@
 use crate::utils;
+use futures::{pin_mut, stream, StreamExt};
 use std::cell::RefCell;
 use std::collections::HashMap;
 use wasm_bindgen::JsCast;
@@ -26,266 +27,268 @@ struct KeywordPattern {
     icon_path: &'static str,
 }
 
+const ICON_PRELOAD_CONCURRENCY: usize = 4;
+
 const KEYWORD_PATTERNS: &[KeywordPattern] = &[
     KeywordPattern {
         pattern: "Amazon Web Services",
         pattern_lower: "amazon web services",
-        icon_path: "/icons/devicons/amazonwebservices/amazonwebservices-original-wordmark.svg",
+        icon_path: "/icons/amazonwebservices-original-wordmark.svg",
     },
     KeywordPattern {
         pattern: "Google Cloud Platform",
         pattern_lower: "google cloud platform",
-        icon_path: "/icons/devicons/googlecloud/googlecloud-original.svg",
+        icon_path: "/icons/googlecloud-original.svg",
     },
     KeywordPattern {
         pattern: "GitHub Actions",
         pattern_lower: "github actions",
-        icon_path: "/icons/devicons/githubactions/githubactions-original.svg",
+        icon_path: "/icons/githubactions-original.svg",
     },
     KeywordPattern {
         pattern: "Visual Studio",
         pattern_lower: "visual studio",
-        icon_path: "/icons/devicons/visualstudio/visualstudio-original.svg",
+        icon_path: "/icons/visualstudio-original.svg",
     },
     KeywordPattern {
         pattern: "Google Cloud",
         pattern_lower: "google cloud",
-        icon_path: "/icons/devicons/googlecloud/googlecloud-original.svg",
+        icon_path: "/icons/googlecloud-original.svg",
+    },
+        KeywordPattern {
+        pattern: "Google",
+        pattern_lower: "google",
+        icon_path: "/icons/google-original.svg",
     },
     KeywordPattern {
         pattern: "AWS Lambda",
         pattern_lower: "aws lambda",
-        icon_path: "/icons/devicons/amazonwebservices/amazonwebservices-original-wordmark.svg",
+        icon_path: "/icons/amazonwebservices-original-wordmark.svg",
     },
     KeywordPattern {
         pattern: "GitLab CI",
         pattern_lower: "gitlab ci",
-        icon_path: "/icons/devicons/gitlab/gitlab-original.svg",
+        icon_path: "/icons/gitlab-original.svg",
     },
     KeywordPattern {
         pattern: "Unreal Engine 5",
         pattern_lower: "unreal engine 5",
-        icon_path: "/icons/devicons/unrealengine/unrealengine-original.svg",
+        icon_path: "/icons/unrealengine-original.svg",
     },
     KeywordPattern {
         pattern: "Slack API",
         pattern_lower: "slack api",
-        icon_path: "/icons/devicons/slack/slack-original.svg",
+        icon_path: "/icons/slack-original.svg",
     },
     KeywordPattern {
         pattern: "Unreal Engine",
         pattern_lower: "unreal engine",
-        icon_path: "/icons/devicons/unrealengine/unrealengine-original.svg",
+        icon_path: "/icons/unrealengine-original.svg",
     },
     KeywordPattern {
         pattern: "Node.js",
         pattern_lower: "node.js",
-        icon_path: "/icons/devicons/nodejs/nodejs-original.svg",
+        icon_path: "/icons/nodejs-original.svg",
     },
     KeywordPattern {
         pattern: "NodeJS",
         pattern_lower: "nodejs",
-        icon_path: "/icons/devicons/nodejs/nodejs-original.svg",
+        icon_path: "/icons/nodejs-original.svg",
     },
     KeywordPattern {
         pattern: "TypeScript",
         pattern_lower: "typescript",
-        icon_path: "/icons/devicons/typescript/typescript-original.svg",
+        icon_path: "/icons/typescript-original.svg",
     },
     KeywordPattern {
         pattern: "JavaScript",
         pattern_lower: "javascript",
-        icon_path: "/icons/devicons/javascript/javascript-original.svg",
+        icon_path: "/icons/javascript-original.svg",
     },
     KeywordPattern {
         pattern: "Kubernetes",
         pattern_lower: "kubernetes",
-        icon_path: "/icons/devicons/kubernetes/kubernetes-original.svg",
+        icon_path: "/icons/kubernetes-original.svg",
     },
     KeywordPattern {
         pattern: "Figma",
         pattern_lower: "figma",
-        icon_path: "/icons/devicons/figma/figma-original.svg",
+        icon_path: "/icons/figma-original.svg",
     },
     KeywordPattern {
         pattern: "Datadog",
         pattern_lower: "datadog",
-        icon_path: "/icons/devicons/datadog/datadog-original.svg",
+        icon_path: "/icons/datadog-original.svg",
     },
     KeywordPattern {
         pattern: "Firebase",
         pattern_lower: "firebase",
-        icon_path: "/icons/devicons/firebase/firebase-original.svg",
+        icon_path: "/icons/firebase-original.svg",
     },
     KeywordPattern {
         pattern: "Confluence",
         pattern_lower: "confluence",
-        icon_path: "/icons/devicons/confluence/confluence-original.svg",
+        icon_path: "/icons/confluence-original.svg",
     },
     KeywordPattern {
         pattern: "Grafana",
         pattern_lower: "grafana",
-        icon_path: "/icons/devicons/grafana/grafana-original.svg",
-    },
-    KeywordPattern {
-        pattern: "Discord",
-        pattern_lower: "discord",
-        icon_path: "/icons/devicons/discordjs/discordjs-original.svg",
+        icon_path: "/icons/grafana-original.svg",
     },
     KeywordPattern {
         pattern: "Android",
         pattern_lower: "android",
-        icon_path: "/icons/devicons/android/android-original.svg",
+        icon_path: "/icons/android-original.svg",
     },
     KeywordPattern {
         pattern: "Docker",
         pattern_lower: "docker",
-        icon_path: "/icons/devicons/docker/docker-original.svg",
+        icon_path: "/icons/docker-original.svg",
     },
     KeywordPattern {
         pattern: "GitHub",
         pattern_lower: "github",
-        icon_path: "/icons/devicons/github/github-original.svg",
+        icon_path: "/icons/github-original.svg",
     },
     KeywordPattern {
         pattern: "Azure",
         pattern_lower: "azure",
-        icon_path: "/icons/devicons/azure/azure-original.svg",
+        icon_path: "/icons/azure-original.svg",
     },
     KeywordPattern {
         pattern: "Python",
         pattern_lower: "python",
-        icon_path: "/icons/devicons/python/python-original.svg",
+        icon_path: "/icons/python-original.svg",
     },
     KeywordPattern {
         pattern: "GitLab",
         pattern_lower: "gitlab",
-        icon_path: "/icons/devicons/gitlab/gitlab-original.svg",
+        icon_path: "/icons/gitlab-original.svg",
     },
     KeywordPattern {
         pattern: "Jira",
         pattern_lower: "jira",
-        icon_path: "/icons/devicons/jira/jira-original.svg",
+        icon_path: "/icons/jira-original.svg",
     },
     KeywordPattern {
         pattern: "Jupyter Notebook",
         pattern_lower: "jupyter notebook",
-        icon_path: "/icons/devicons/jupyter/jupyter-original-wordmark.svg",
+        icon_path: "/icons/jupyter-original-wordmark.svg",
     },
     KeywordPattern {
         pattern: "Unity",
         pattern_lower: "unity",
-        icon_path: "/icons/devicons/unity/unity-original.svg",
+        icon_path: "/icons/unity-original.svg",
     },
     KeywordPattern {
         pattern: "Unreal",
         pattern_lower: "unreal",
-        icon_path: "/icons/devicons/unrealengine/unrealengine-original.svg",
+        icon_path: "/icons/unrealengine-original.svg",
     },
     KeywordPattern {
         pattern: "Slack",
         pattern_lower: "slack",
-        icon_path: "/icons/devicons/slack/slack-original.svg",
+        icon_path: "/icons/slack-original.svg",
     },
     KeywordPattern {
         pattern: "LinkedIn",
         pattern_lower: "linkedin",
-        icon_path: "/icons/devicons/linkedin/linkedin-original.svg",
+        icon_path: "/icons/linkedin-original.svg",
     },
     KeywordPattern {
         pattern: "Linear",
         pattern_lower: "linear",
-        icon_path: "/icons/devicons/linear/linear-original.svg",
+        icon_path: "/icons/linear-original.svg",
     },
     KeywordPattern {
         pattern: "Alexandre DO-O ALMEIDA",
         pattern_lower: "alexandre do-o almeida",
-        icon_path: "/icons/devicons/alexandre.webp",
+        icon_path: "/images/alexandre.webp",
     },
     KeywordPattern {
         pattern: "Meta Platforms",
         pattern_lower: "meta platforms",
-        icon_path: "/icons/devicons/meta/meta-original.svg",
+        icon_path: "/icons/meta-original.svg",
     },
     KeywordPattern {
         pattern: "Meta",
         pattern_lower: "meta",
-        icon_path: "/icons/devicons/meta/meta-original.svg",
+        icon_path: "/icons/meta-original.svg",
     },
     KeywordPattern {
         pattern: "AWS",
         pattern_lower: "aws",
-        icon_path: "/icons/devicons/amazonwebservices/amazonwebservices-original-wordmark.svg",
+        icon_path: "/icons/amazonwebservices-original-wordmark.svg",
     },
     KeywordPattern {
         pattern: "GCP",
         pattern_lower: "gcp",
-        icon_path: "/icons/devicons/googlecloud/googlecloud-original.svg",
+        icon_path: "/icons/googlecloud-original.svg",
     },
     KeywordPattern {
         pattern: "Rust",
         pattern_lower: "rust",
-        icon_path: "/icons/devicons/rust/rust-original.svg",
+        icon_path: "/icons/rust-original.svg",
     },
     KeywordPattern {
         pattern: "React",
         pattern_lower: "react",
-        icon_path: "/icons/devicons/react/react-original.svg",
+        icon_path: "/icons/react-original.svg",
     },
     KeywordPattern {
         pattern: "Go",
         pattern_lower: "go",
-        icon_path: "/icons/devicons/go/go-original.svg",
+        icon_path: "/icons/go-original.svg",
     },
     KeywordPattern {
         pattern: "Java",
         pattern_lower: "java",
-        icon_path: "/icons/devicons/java/java-original.svg",
+        icon_path: "/icons/java-original.svg",
     },
     KeywordPattern {
         pattern: "Lua",
         pattern_lower: "lua",
-        icon_path: "/icons/devicons/lua/lua-original.svg",
+        icon_path: "/icons/lua-original.svg",
     },
     KeywordPattern {
         pattern: "Maya",
         pattern_lower: "maya",
-        icon_path: "/icons/devicons/maya/maya-original.svg",
+        icon_path: "/icons/maya-original.svg",
     },
     KeywordPattern {
         pattern: "SQL",
         pattern_lower: "sql",
-        icon_path: "/icons/devicons/sqldeveloper/sqldeveloper-original.svg",
+        icon_path: "/icons/sqldeveloper-original.svg",
     },
     KeywordPattern {
         pattern: "MySQL",
         pattern_lower: "mysql",
-        icon_path: "/icons/devicons/mysql/mysql-original.svg",
+        icon_path: "/icons/mysql-original.svg",
     },
     KeywordPattern {
         pattern: "Bash",
         pattern_lower: "bash",
-        icon_path: "/icons/devicons/bash/bash-original.svg",
+        icon_path: "/icons/bash-original.svg",
     },
     KeywordPattern {
         pattern: "C++",
         pattern_lower: "c++",
-        icon_path: "/icons/devicons/cplusplus/cplusplus-original.svg",
+        icon_path: "/icons/cplusplus-original.svg",
     },
     KeywordPattern {
         pattern: "C#",
         pattern_lower: "c#",
-        icon_path: "/icons/devicons/csharp/csharp-original.svg",
+        icon_path: "/icons/csharp-original.svg",
     },
     KeywordPattern {
         pattern: "Qt",
         pattern_lower: "qt",
-        icon_path: "/icons/devicons/qt/qt-original.svg",
+        icon_path: "/icons/qt-original.svg",
     },
     KeywordPattern {
         pattern: "XML",
         pattern_lower: "xml",
-        icon_path: "/icons/devicons/xml/xml-original.svg",
+        icon_path: "/icons/xml-original.svg",
     },
 ];
 
@@ -543,9 +546,9 @@ async fn preload_icons_async() -> Result<(), JsValue> {
         return Ok(());
     };
 
-    let priority = ["/favicon.ico", "/icons/devicons/alexandre.webp"];
+    let priority = ["/favicon.ico", "/images/alexandre.webp"];
     for &asset in &priority {
-        if asset == "/icons/devicons/alexandre.webp" {
+        if asset == "/images/alexandre.webp" {
             if ICON_SOURCES.with(|store| store.borrow().contains_key(asset)) {
                 continue;
             }
@@ -563,14 +566,24 @@ async fn preload_icons_async() -> Result<(), JsValue> {
     ICON_SOURCES.with(|store| {
         let store = store.borrow();
         for icon_path in KEYWORD_PATTERNS.iter().map(|pattern| pattern.icon_path) {
-            if !store.contains_key(icon_path) && icon_path != "/icons/devicons/alexandre.webp" {
+            if !store.contains_key(icon_path) && icon_path != "/images/alexandre.webp" {
                 pending.push(icon_path);
             }
         }
     });
 
-    for icon_path in pending {
-        match fetch_icon_url(&window, icon_path).await {
+    let tasks = pending.into_iter().map(|icon_path| {
+        let window = window.clone();
+        async move {
+            let result = fetch_icon_url(&window, icon_path).await;
+            (icon_path, result)
+        }
+    });
+
+    let stream = stream::iter(tasks).buffer_unordered(ICON_PRELOAD_CONCURRENCY);
+    pin_mut!(stream);
+    while let Some((icon_path, result)) = stream.next().await {
+        match result {
             Ok(url) => ICON_SOURCES.with(|store| {
                 store.borrow_mut().insert(icon_path, url);
             }),
@@ -628,12 +641,12 @@ mod tests {
                 Segment::Text("Working with ".to_string()),
                 Segment::Icon(IconMatch {
                     token: "GitHub Actions".to_string(),
-                    icon_path: "/icons/devicons/githubactions/githubactions-original.svg"
+                    icon_path: "/icons/githubactions-original.svg"
                 }),
                 Segment::Text(" and ".to_string()),
                 Segment::Icon(IconMatch {
                     token: "Rust".to_string(),
-                    icon_path: "/icons/devicons/rust/rust-original.svg"
+                    icon_path: "/icons/rust-original.svg"
                 }),
                 Segment::Text(".".to_string())
             ]
@@ -649,7 +662,7 @@ mod tests {
                 Segment::Text("Goal oriented ".to_string()),
                 Segment::Icon(IconMatch {
                     token: "Go".to_string(),
-                    icon_path: "/icons/devicons/go/go-original.svg"
+                    icon_path: "/icons/go-original.svg"
                 }),
                 Segment::Text(" developer".to_string()),
             ]
@@ -664,18 +677,18 @@ mod tests {
             vec![
                 Segment::Icon(IconMatch {
                     token: "Rust".to_string(),
-                    icon_path: "/icons/devicons/rust/rust-original.svg"
+                    icon_path: "/icons/rust-original.svg"
                 }),
                 Segment::Text(", ".to_string()),
                 Segment::Icon(IconMatch {
                     token: "Python".to_string(),
-                    icon_path: "/icons/devicons/python/python-original.svg"
+                    icon_path: "/icons/python-original.svg"
                 }),
                 Segment::Text("; ".to_string()),
                 Segment::Icon(IconMatch {
                     token: "AWS".to_string(),
                     icon_path:
-                        "/icons/devicons/amazonwebservices/amazonwebservices-original-wordmark.svg"
+                        "/icons/amazonwebservices-original-wordmark.svg"
                 }),
                 Segment::Text(".".to_string())
             ]
@@ -691,7 +704,7 @@ mod tests {
                 Segment::Text("Shipping builds in ".to_string()),
                 Segment::Icon(IconMatch {
                     token: "Unreal Engine 5".to_string(),
-                    icon_path: "/icons/devicons/unrealengine/unrealengine-original.svg"
+                    icon_path: "/icons/unrealengine-original.svg"
                 }),
                 Segment::Text(" pipelines.".to_string()),
             ]
@@ -707,12 +720,12 @@ mod tests {
                 Segment::Text("Tooling: ".to_string()),
                 Segment::Icon(IconMatch {
                     token: "Figma".to_string(),
-                    icon_path: "/icons/devicons/figma/figma-original.svg"
+                    icon_path: "/icons/figma-original.svg"
                 }),
                 Segment::Text(", ".to_string()),
                 Segment::Icon(IconMatch {
                     token: "Jira".to_string(),
-                    icon_path: "/icons/devicons/jira/jira-original.svg"
+                    icon_path: "/icons/jira-original.svg"
                 }),
                 Segment::Text(".".to_string()),
             ]
@@ -728,12 +741,12 @@ mod tests {
                 Segment::Text("Data layer runs on ".to_string()),
                 Segment::Icon(IconMatch {
                     token: "SQL".to_string(),
-                    icon_path: "/icons/devicons/sqldeveloper/sqldeveloper-original.svg"
+                    icon_path: "/icons/sqldeveloper-original.svg"
                 }),
                 Segment::Text(" with ".to_string()),
                 Segment::Icon(IconMatch {
                     token: "GCP".to_string(),
-                    icon_path: "/icons/devicons/googlecloud/googlecloud-original.svg"
+                    icon_path: "/icons/googlecloud-original.svg"
                 }),
                 Segment::Text(" services.".to_string()),
             ]
@@ -748,7 +761,7 @@ mod tests {
             vec![
                 Segment::Icon(IconMatch {
                     token: "Android".to_string(),
-                    icon_path: "/icons/devicons/android/android-original.svg"
+                    icon_path: "/icons/android-original.svg"
                 }),
                 Segment::Text(" development with Jetpack.".to_string()),
             ]
@@ -763,12 +776,12 @@ mod tests {
             vec![
                 Segment::Icon(IconMatch {
                     token: "MySQL".to_string(),
-                    icon_path: "/icons/devicons/mysql/mysql-original.svg"
+                    icon_path: "/icons/mysql-original.svg"
                 }),
                 Segment::Text(" backups and ".to_string()),
                 Segment::Icon(IconMatch {
                     token: "SQL".to_string(),
-                    icon_path: "/icons/devicons/sqldeveloper/sqldeveloper-original.svg"
+                    icon_path: "/icons/sqldeveloper-original.svg"
                 }),
                 Segment::Text(" migrations.".to_string()),
             ]
@@ -784,22 +797,22 @@ mod tests {
                 Segment::Text("Stack: ".to_string()),
                 Segment::Icon(IconMatch {
                     token: "Jupyter Notebook".to_string(),
-                    icon_path: "/icons/devicons/jupyter/jupyter-original-wordmark.svg"
+                    icon_path: "/icons/jupyter-original-wordmark.svg"
                 }),
                 Segment::Text(", ".to_string()),
                 Segment::Icon(IconMatch {
                     token: "Linear".to_string(),
-                    icon_path: "/icons/devicons/linear/linear-original.svg"
+                    icon_path: "/icons/linear-original.svg"
                 }),
                 Segment::Text(", ".to_string()),
                 Segment::Icon(IconMatch {
                     token: "Maya".to_string(),
-                    icon_path: "/icons/devicons/maya/maya-original.svg"
+                    icon_path: "/icons/maya-original.svg"
                 }),
                 Segment::Text(", ".to_string()),
                 Segment::Icon(IconMatch {
                     token: "Qt".to_string(),
-                    icon_path: "/icons/devicons/qt/qt-original.svg"
+                    icon_path: "/icons/qt-original.svg"
                 }),
                 Segment::Text(".".to_string()),
             ]
@@ -824,7 +837,7 @@ mod tests {
                 Segment::Text("Connect on ".to_string()),
                 Segment::Icon(IconMatch {
                     token: "LinkedIn".to_string(),
-                    icon_path: "/icons/devicons/linkedin/linkedin-original.svg"
+                    icon_path: "/icons/linkedin-original.svg"
                 }),
                 Segment::Text(" today.".to_string()),
             ]
@@ -840,12 +853,12 @@ mod tests {
                 Segment::Text("Shipped experiences with ".to_string()),
                 Segment::Icon(IconMatch {
                     token: "Meta Platforms".to_string(),
-                    icon_path: "/icons/devicons/meta/meta-original.svg"
+                    icon_path: "/icons/meta-original.svg"
                 }),
                 Segment::Text(" and ".to_string()),
                 Segment::Icon(IconMatch {
                     token: "Meta".to_string(),
-                    icon_path: "/icons/devicons/meta/meta-original.svg"
+                    icon_path: "/icons/meta-original.svg"
                 }),
                 Segment::Text(" teams.".to_string()),
             ]
@@ -861,7 +874,7 @@ mod tests {
                 Segment::Text("Meet ".to_string()),
                 Segment::Icon(IconMatch {
                     token: "Alexandre DO-O ALMEIDA".to_string(),
-                    icon_path: "/icons/devicons/alexandre.webp"
+                    icon_path: "/images/alexandre.webp"
                 }),
                 Segment::Text(", better known as Alexandre.".to_string()),
             ]
@@ -877,7 +890,7 @@ mod tests {
                 Segment::Text("Profile loaded for ".to_string()),
                 Segment::Icon(IconMatch {
                     token: "Alexandre DO-O ALMEIDA".to_string(),
-                    icon_path: "/icons/devicons/alexandre.webp"
+                    icon_path: "/images/alexandre.webp"
                 }),
                 Segment::Text(".".to_string()),
             ]

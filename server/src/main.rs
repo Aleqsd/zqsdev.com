@@ -1,14 +1,15 @@
 mod rate_limit;
+mod static_data;
 
 use crate::rate_limit::RateLimiter;
+use crate::static_data::TerminalDataPayload;
 use anyhow::{anyhow, Context};
 use axum::extract::{ConnectInfo, State};
 use axum::http::{header::CACHE_CONTROL, HeaderValue, Request, StatusCode};
 use axum::response::{IntoResponse, Response};
-use axum::routing::post;
+use axum::routing::{get, post};
 use axum::{body::Body, Json, Router};
 use dotenvy::Error as DotenvError;
-use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
 use std::convert::Infallible;
 use std::env::VarError;
@@ -39,23 +40,12 @@ const PER_HOUR_BUDGET_EUR: f64 = 2.00;
 const PER_DAY_BUDGET_EUR: f64 = 2.00; // Align daily to €2 hard cap
 const PER_MONTH_BUDGET_EUR: f64 = 10.00;
 
-static KNOWLEDGE_FILES: Lazy<[&str; 7]> = Lazy::new(|| {
-    [
-        "profile.json",
-        "skills.json",
-        "experience.json",
-        "education.json",
-        "projects.json",
-        "testimonials.json",
-        "faq.json",
-    ]
-});
-
 #[derive(Clone)]
 struct AppState {
     limiter: Arc<Mutex<RateLimiter>>,
     knowledge: KnowledgeBase,
     client: AiClient,
+    terminal_data: Arc<TerminalDataPayload>,
 }
 
 #[derive(Debug, Clone)]
@@ -141,7 +131,8 @@ async fn main() -> anyhow::Result<()> {
     let static_dir =
         PathBuf::from(std::env::var("STATIC_DIR").unwrap_or_else(|_| "static".to_string()));
     let data_dir = static_dir.join("data");
-    let knowledge = KnowledgeBase::load(&data_dir)?;
+    let terminal_data = Arc::new(TerminalDataPayload::load(&data_dir)?);
+    let knowledge = KnowledgeBase::from_payload(terminal_data.as_ref())?;
 
     let client = AiClient::new(google_key, groq_key, Some(openai_key))?;
     if client.has_groq() {
@@ -179,6 +170,7 @@ async fn main() -> anyhow::Result<()> {
         ))),
         knowledge,
         client,
+        terminal_data,
     });
 
     let static_root = Arc::new(static_dir.clone());
@@ -209,6 +201,7 @@ async fn main() -> anyhow::Result<()> {
 
     let router = Router::new()
         .route("/api/ai", post(handle_ai))
+        .route("/api/data", get(handle_data))
         .with_state(state)
         .fallback_service(static_service);
 
@@ -304,6 +297,14 @@ fn load_env_files() {
 
     load(".env.local");
     load(".env");
+}
+
+async fn handle_data(State(state): State<Arc<AppState>>) -> impl IntoResponse {
+    let payload = state.terminal_data.as_ref().clone();
+    let mut response = Json(payload).into_response();
+    let header = HeaderValue::from_static("public, max-age=60, must-revalidate");
+    response.headers_mut().insert(CACHE_CONTROL, header);
+    response
 }
 
 async fn handle_ai(
@@ -499,18 +500,12 @@ impl AppState {
 
 impl KnowledgeBase {
     fn load(dir: &Path) -> anyhow::Result<Self> {
-        let mut merged = serde_json::Map::new();
-        for file in KNOWLEDGE_FILES.iter() {
-            let path = dir.join(file);
-            let data = std::fs::read_to_string(&path)
-                .with_context(|| format!("Failed to read knowledge file {path:?}"))?;
-            let value: serde_json::Value = serde_json::from_str(&data)
-                .with_context(|| format!("Failed to parse JSON from {path:?}"))?;
-            let key = file.trim_end_matches(".json").to_string();
-            merged.insert(key, value);
-        }
+        let payload = TerminalDataPayload::load(dir)?;
+        Self::from_payload(&payload)
+    }
 
-        let combined = serde_json::Value::Object(merged);
+    fn from_payload(payload: &TerminalDataPayload) -> anyhow::Result<Self> {
+        let combined = payload.knowledge_json();
         let pretty = serde_json::to_string_pretty(&combined)?;
         let system_prompt = format!(
             concat!(

@@ -77,11 +77,10 @@ impl RateLimiter {
     }
 
     fn prune_stale_ips(&mut self, now: Instant) {
-        self.per_ip
-            .retain(|_, windows| {
-                windows.prune(now);
-                !windows.is_idle()
-            });
+        self.per_ip.retain(|_, windows| {
+            windows.prune(now);
+            !windows.is_idle()
+        });
     }
 
     pub fn check_and_record(&mut self, ip: &str, cost: f64) -> Result<(), RateLimitError> {

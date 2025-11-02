@@ -7,7 +7,7 @@
         "end": "2025",
         "highlights": [
             "Built from scratch the CI/CD and autotest infrastructure for PlayStation emulators used in the Classics Catalog on PS4 and PS5.",
-            "Automated testing of 5,000+ retro games on console devkits and OS environments, using Python, GitHub Actions, AWS and Google/Slack/Linear APIs.",
+            "Automated testing of 5,000+ retro games on console devkits and OS environments, using Python, GitHub Actions, AWS and Google / Slack / Linear APIs.",
             "Ensured QA and non-regression testing for 50+ PlayStation Classics, including Resident Evil, Tomb Raider Legend, Tekken 2 and Legend of Dragoon.",
             "Maintainer of CI/CD pipelines used by 15+ engineers; provided QA consulting for Sony’s team of 60+ manual testers.",
             "Contributed via Implicit Conversions to porting and publishing retro titles on PlayStation, Switch, and PC."
@@ -46,7 +46,7 @@
         "end": "2018",
         "highlights": [
             "Built immersive Unity simulators (C#) for HTC Vive and HoloLens to train helicopter technicians.",
-            "Developed a Python/XML tool for Dassault to automate maintenance documentation."
+            "Developed a Python & XML tool for Dassault to automate maintenance documentation."
         ]
     },
     {
@@ -56,7 +56,7 @@
         "start": "2016",
         "end": "2016",
         "highlights": [
-            "Extended VisualTE (Java/Swing) with modules for 3D structure analysis, multiple alignments, and phylogenetic visualization."
+            "Extended VisualTE (Java & Swing) with modules for 3D structure analysis, multiple alignments, and phylogenetic visualization."
         ]
     }
 ]
