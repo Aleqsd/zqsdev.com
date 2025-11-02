@@ -853,6 +853,36 @@ body.theme-midnight {
     opacity: 0.6;
 }
 
+.projects {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+}
+
+.projects .projects-group > h2 {
+    margin: 0 0 0.65rem;
+    font-size: 1.05rem;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: rgba(201, 235, 255, 0.9);
+}
+
+.projects .projects-group > article {
+    margin: 0 0 1rem 1.5rem;
+}
+
+.projects .projects-group > article:last-of-type {
+    margin-bottom: 0;
+}
+
+.projects .projects-group > article > h3 {
+    margin: 0;
+}
+
+.projects .projects-group > article > p {
+    margin: 0.4rem 0;
+}
+
 .achievement-card__meta {
     display: flex;
     flex-direction: column;

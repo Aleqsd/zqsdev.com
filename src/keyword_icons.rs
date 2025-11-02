@@ -168,6 +168,11 @@ const KEYWORD_PATTERNS: &[KeywordPattern] = &[
         icon_path: "/icons/devicons/jira/jira-original.svg",
     },
     KeywordPattern {
+        pattern: "Jupyter Notebook",
+        pattern_lower: "jupyter notebook",
+        icon_path: "/icons/devicons/jupyter/jupyter-original-wordmark.svg",
+    },
+    KeywordPattern {
         pattern: "Unity",
         pattern_lower: "unity",
         icon_path: "/icons/devicons/unity/unity-original.svg",
@@ -186,6 +191,11 @@ const KEYWORD_PATTERNS: &[KeywordPattern] = &[
         pattern: "LinkedIn",
         pattern_lower: "linkedin",
         icon_path: "/icons/devicons/linkedin/linkedin-original.svg",
+    },
+    KeywordPattern {
+        pattern: "Linear",
+        pattern_lower: "linear",
+        icon_path: "/icons/devicons/linear/linear-original.svg",
     },
     KeywordPattern {
         pattern: "Alexandre DO-O ALMEIDA",
@@ -238,6 +248,11 @@ const KEYWORD_PATTERNS: &[KeywordPattern] = &[
         icon_path: "/icons/devicons/lua/lua-original.svg",
     },
     KeywordPattern {
+        pattern: "Maya",
+        pattern_lower: "maya",
+        icon_path: "/icons/devicons/maya/maya-original.svg",
+    },
+    KeywordPattern {
         pattern: "SQL",
         pattern_lower: "sql",
         icon_path: "/icons/devicons/sqldeveloper/sqldeveloper-original.svg",
@@ -261,6 +276,11 @@ const KEYWORD_PATTERNS: &[KeywordPattern] = &[
         pattern: "C#",
         pattern_lower: "c#",
         icon_path: "/icons/devicons/csharp/csharp-original.svg",
+    },
+    KeywordPattern {
+        pattern: "Qt",
+        pattern_lower: "qt",
+        icon_path: "/icons/devicons/qt/qt-original.svg",
     },
     KeywordPattern {
         pattern: "XML",
@@ -751,6 +771,37 @@ mod tests {
                     icon_path: "/icons/devicons/sqldeveloper/sqldeveloper-original.svg"
                 }),
                 Segment::Text(" migrations.".to_string()),
+            ]
+        );
+    }
+
+    #[test]
+    fn tokenize_detects_jupyter_linear_maya_qt() {
+        let segments = tokenize("Stack: Jupyter Notebook, Linear, Maya, Qt.");
+        assert_eq!(
+            segments,
+            vec![
+                Segment::Text("Stack: ".to_string()),
+                Segment::Icon(IconMatch {
+                    token: "Jupyter Notebook".to_string(),
+                    icon_path: "/icons/devicons/jupyter/jupyter-original-wordmark.svg"
+                }),
+                Segment::Text(", ".to_string()),
+                Segment::Icon(IconMatch {
+                    token: "Linear".to_string(),
+                    icon_path: "/icons/devicons/linear/linear-original.svg"
+                }),
+                Segment::Text(", ".to_string()),
+                Segment::Icon(IconMatch {
+                    token: "Maya".to_string(),
+                    icon_path: "/icons/devicons/maya/maya-original.svg"
+                }),
+                Segment::Text(", ".to_string()),
+                Segment::Icon(IconMatch {
+                    token: "Qt".to_string(),
+                    icon_path: "/icons/devicons/qt/qt-original.svg"
+                }),
+                Segment::Text(".".to_string()),
             ]
         );
     }
