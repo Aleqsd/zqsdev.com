@@ -13,8 +13,9 @@ NETLIFY_CONFIG ?= $(STATIC_DIR)/netlify.toml
 NETLIFY_FLAGS ?=
 PROJECT_VERSION := $(shell cat VERSION 2>/dev/null)
 NETLIFY_MESSAGE ?= Deploy $(PROJECT_VERSION)
+AUTOTEST_FLAGS ?=
 
-.PHONY: build clean check fmt serve serve-static test deploy-preview deploy-prod deploy update backend-log
+.PHONY: build clean check fmt serve serve-static test autotest deploy-preview deploy-prod deploy update backend-log
 
 build:
 	@command -v wasm-pack >/dev/null 2>&1 || { echo "wasm-pack not found. Install with 'cargo install wasm-pack'."; exit 1; }
@@ -34,6 +35,11 @@ test:
 	rustup target add $(WASM_TARGET) >/dev/null 2>&1 || true
 	wasm-pack test --node
 	cargo test --manifest-path $(SERVER_MANIFEST)
+
+autotest:
+	@command -v python3 >/dev/null 2>&1 || { echo "python3 not found. Install Python 3 to continue."; exit 1; }
+	@python3 -c "import requests" >/dev/null 2>&1 || { echo "Python package 'requests' not found. Install with 'pip install requests'."; exit 1; }
+	python3 scripts/live_smoke_test.py $(AUTOTEST_FLAGS)
 
 check:
 	cargo check --target $(WASM_TARGET)

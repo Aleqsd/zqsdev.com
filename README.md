@@ -86,6 +86,21 @@ make check  # cargo check --target wasm32-unknown-unknown
 
 The CI pipeline should run the same trio so local runs stay in lockstep with automation.
 
+## Live Production Smoke Test
+
+Run `make autotest` (or directly `python3 scripts/live_smoke_test.py`) to exercise the deployed site once end-to-end. It validates the Netlify bundle, the `/api/data` payloads, and sends a single question to the AI concierge. Install the lone dependency with `pip install requests`, then wire either command into your scheduler (cron, GitHub Actions, etc.). Optional flags:
+
+```bash
+python3 scripts/live_smoke_test.py --json-output live-smoke.json
+python3 scripts/live_smoke_test.py --ai-question "What's new with Alexandre?"
+# Or via make (flags are forwarded):
+make autotest AUTOTEST_FLAGS="--json-output live-smoke.json"
+```
+
+The script exits non-zero on failure so monitors can trigger alerts. Leave the AI question count at one per run to respect the production rate limits.
+
+If `PUSHOVER_API_TOKEN` and `PUSHOVER_USER_KEY` are present (in the environment, `.env.local`, or `.env`), the script will send a Pushover alert only when a check fails or the run ends early with skipped tests. Disable that behaviour with `--no-pushover` or `AUTOTEST_FLAGS="--no-pushover"` if needed.
+
 ## Environment Variables
 
 1. Copy the template:
