@@ -32,6 +32,7 @@ version = "0.3"
 features = [
     "Document",
     "HtmlDocument",
+    "HtmlHeadElement",
     "Window",
     "Node",
     "Element",
@@ -57,6 +58,8 @@ features = [
     "RequestInit",
     "RequestMode",
     "Response",
+    "Blob",
+    "Url",
     "Headers",
     "Location",
     "console",

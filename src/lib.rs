@@ -45,6 +45,9 @@ async fn load_terminal_data(terminal: Rc<Terminal>, state: Rc<RefCell<AppState>>
             if let Err(err) = terminal.on_data_ready() {
                 utils::log(&format!("Failed to render welcome message: {:?}", err));
             }
+            if let Err(err) = keyword_icons::preload_all_icons() {
+                utils::log(&format!("Failed to preload keyword icons: {:?}", err));
+            }
         }
         Err(err) => {
             utils::log(&format!("Failed to load résumé data: {:?}", err));

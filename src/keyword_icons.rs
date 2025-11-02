@@ -1,3 +1,11 @@
+use crate::utils;
+use std::cell::RefCell;
+use std::collections::HashMap;
+use wasm_bindgen::JsCast;
+use wasm_bindgen::JsValue;
+use wasm_bindgen_futures::{spawn_local, JsFuture};
+use web_sys::{Blob, Request, RequestInit, RequestMode, Response, Url};
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum Segment {
     Text(String),
@@ -477,6 +485,114 @@ fn is_end_boundary(text: &str, end: usize) -> bool {
 
 fn is_keyword_char(ch: char) -> bool {
     ch.is_ascii_alphanumeric() || matches!(ch, '+' | '#' | '/')
+}
+
+thread_local! {
+    static ICON_SOURCES: RefCell<HashMap<&'static str, String>> = RefCell::new(HashMap::new());
+    static PRELOAD_STARTED: RefCell<bool> = RefCell::new(false);
+}
+
+pub fn preload_all_icons() -> Result<(), JsValue> {
+    PRELOAD_STARTED.with(|flag| {
+        let mut started = flag.borrow_mut();
+        if *started {
+            return;
+        }
+        *started = true;
+        spawn_local(async {
+            if let Err(err) = preload_icons_async().await {
+                utils::log(&format!("Failed to preload keyword icons: {:?}", err));
+            }
+        });
+    });
+    Ok(())
+}
+
+pub fn icon_source(icon_path: &str) -> String {
+    ICON_SOURCES.with(|store| {
+        store
+            .borrow()
+            .get(icon_path)
+            .cloned()
+            .unwrap_or_else(|| icon_path.to_string())
+    })
+}
+
+async fn preload_icons_async() -> Result<(), JsValue> {
+    let Some(window) = web_sys::window() else {
+        return Ok(());
+    };
+
+    let priority = ["/favicon.ico", "/icons/devicons/alexandre.webp"];
+    for &asset in &priority {
+        if asset == "/icons/devicons/alexandre.webp" {
+            if ICON_SOURCES.with(|store| store.borrow().contains_key(asset)) {
+                continue;
+            }
+            if let Ok(url) = fetch_icon_url(&window, asset).await {
+                ICON_SOURCES.with(|store| {
+                    store.borrow_mut().insert(asset, url);
+                });
+            }
+        } else {
+            let _ = fetch_resource(&window, asset).await;
+        }
+    }
+
+    let mut pending = Vec::new();
+    ICON_SOURCES.with(|store| {
+        let store = store.borrow();
+        for icon_path in KEYWORD_PATTERNS.iter().map(|pattern| pattern.icon_path) {
+            if !store.contains_key(icon_path) && icon_path != "/icons/devicons/alexandre.webp" {
+                pending.push(icon_path);
+            }
+        }
+    });
+
+    for icon_path in pending {
+        match fetch_icon_url(&window, icon_path).await {
+            Ok(url) => ICON_SOURCES.with(|store| {
+                store.borrow_mut().insert(icon_path, url);
+            }),
+            Err(err) => utils::log(&format!("Failed to cache icon {icon_path}: {:?}", err)),
+        }
+    }
+
+    Ok(())
+}
+
+async fn fetch_icon_url(
+    window: &web_sys::Window,
+    icon_path: &'static str,
+) -> Result<String, JsValue> {
+    let opts = RequestInit::new();
+    opts.set_method("GET");
+    opts.set_mode(RequestMode::SameOrigin);
+    let request = Request::new_with_str_and_init(icon_path, &opts)?;
+    let response_value = JsFuture::from(window.fetch_with_request(&request)).await?;
+    let response: Response = response_value.dyn_into()?;
+    if !response.ok() {
+        return Err(JsValue::from_str("icon fetch response not ok"));
+    }
+    let blob_promise = response.blob()?;
+    let blob_value = JsFuture::from(blob_promise).await?;
+    let blob: Blob = blob_value.dyn_into()?;
+    Url::create_object_url_with_blob(&blob)
+}
+
+async fn fetch_resource(window: &web_sys::Window, path: &str) -> Result<(), JsValue> {
+    let opts = RequestInit::new();
+    opts.set_method("GET");
+    opts.set_mode(RequestMode::SameOrigin);
+    let request = Request::new_with_str_and_init(path, &opts)?;
+    let response_value = JsFuture::from(window.fetch_with_request(&request)).await?;
+    let response: Response = response_value.dyn_into()?;
+    if response.ok() {
+        if let Ok(buffer_promise) = response.array_buffer() {
+            let _ = JsFuture::from(buffer_promise).await;
+        }
+    }
+    Ok(())
 }
 
 #[cfg(test)]

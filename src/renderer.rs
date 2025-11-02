@@ -615,8 +615,8 @@ impl Renderer {
             .document
             .create_element("img")?
             .dyn_into::<HtmlImageElement>()?;
+        image.set_src(&keyword_icons::icon_source(icon.icon_path));
         image.set_class_name("keyword-icon__image");
-        image.set_src(icon.icon_path);
         image.set_alt("");
         image.set_attribute("aria-hidden", "true")?;
         image.set_attribute("loading", "lazy")?;
