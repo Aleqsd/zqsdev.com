@@ -27,6 +27,7 @@ build:
 	fi
 	mkdir -p $(STATIC_PKG)
 	cp -r $(PKG_DIR)/* $(STATIC_PKG)/
+	python3 scripts/minify_css.py $(STATIC_DIR)/style.css -o $(STATIC_DIR)/style.min.css
 
 test:
 	@command -v wasm-pack >/dev/null 2>&1 || { echo "wasm-pack not found. Install with 'cargo install wasm-pack'."; exit 1; }

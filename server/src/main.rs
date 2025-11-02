@@ -3,7 +3,7 @@ mod rate_limit;
 use crate::rate_limit::RateLimiter;
 use anyhow::{anyhow, Context};
 use axum::extract::{ConnectInfo, State};
-use axum::http::{Request, StatusCode};
+use axum::http::{header::CACHE_CONTROL, HeaderValue, Request, StatusCode};
 use axum::response::{IntoResponse, Response};
 use axum::routing::post;
 use axum::{body::Body, Json, Router};
@@ -183,11 +183,21 @@ async fn main() -> anyhow::Result<()> {
 
     let static_root = Arc::new(static_dir.clone());
     let static_service = service_fn(move |req: Request<Body>| {
+        let path = req.uri().path().to_owned();
         let dir =
             ServeDir::new(static_root.as_ref().clone()).append_index_html_on_directories(true);
         async move {
             match dir.oneshot(req).await {
-                Ok(response) => Ok::<Response, Infallible>(response.into_response()),
+                Ok(response) => {
+                    let mut response = response.into_response();
+                    if response.status().is_success() {
+                        let cache_value = cache_control_for_path(&path);
+                        if let Ok(header) = HeaderValue::from_static(cache_value) {
+                            response.headers_mut().insert(CACHE_CONTROL, header);
+                        }
+                    }
+                    Ok::<Response, Infallible>(response)
+                }
                 Err(err) => Ok((
                     StatusCode::INTERNAL_SERVER_ERROR,
                     format!("Static file error: {err}"),
@@ -264,6 +274,23 @@ fn configure_tracing() {
                 .unwrap_or_else(|_| default_filter.into()),
         )
         .init();
+}
+
+fn cache_control_for_path(path: &str) -> &'static str {
+    let path = if path.is_empty() { "/" } else { path };
+    if path == "/" || path.ends_with('/') || path.ends_with(".html") {
+        "no-store"
+    } else if path.ends_with(".css") || path.ends_with(".json") {
+        "no-store"
+    } else if path.ends_with(".webp")
+        || path.ends_with(".ico")
+        || path.ends_with(".svg")
+        || path.ends_with(".png")
+    {
+        "public, max-age=31536000, immutable"
+    } else {
+        "public, max-age=3600, must-revalidate"
+    }
 }
 
 fn load_env_files() {

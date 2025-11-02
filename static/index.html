@@ -21,7 +21,8 @@
     <meta name="twitter:description" content="Explore the ZQSDev Terminal, a Rust-powered interactive resume with AI-assisted commands, curated by Alexandre DO-O ALMEIDA.">
     <meta name="twitter:image" content="https://zqsdev.com/zqsdev_gradient_logo.webp">
     <meta name="twitter:image:alt" content="ZQSDev gradient logo">
-    <link rel="stylesheet" href="./style.css">
+    <link rel="preload" href="./style.min.css" as="style">
+    <link rel="stylesheet" href="./style.min.css">
     <link rel="modulepreload" href="./pkg/zqs_terminal.js">
     <link
         rel="preload"
@@ -34,7 +35,6 @@
         rel="preload"
         href="./zqsdev_gradient_logo.webp"
         as="image"
-        imagesrcset="./zqsdev_gradient_logo.webp 1x, ./zqsdev_gradient_logo.png 2x"
         fetchpriority="high"
     >
     <link rel="icon" type="image/x-icon" href="./favicon.ico">
@@ -50,10 +50,9 @@
             <a href="./index.html" aria-label="Go back to the ZQSDev terminal home">
                 <img
                     src="./zqsdev_gradient_logo.webp"
-                    srcset="./zqsdev_gradient_logo.webp 1x, ./zqsdev_gradient_logo.png 2x"
                     alt="ZQSDev logo"
-                    width="744"
-                    height="364"
+                    width="238"
+                    height="116"
                     fetchpriority="high"
                     decoding="async"
                 >
