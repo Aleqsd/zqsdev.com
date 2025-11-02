@@ -1158,9 +1158,18 @@ fn render_contact_html(profile: &Profile) -> String {
     }
 
     if let Some(languages) = profile.languages.as_ref().filter(|langs| !langs.is_empty()) {
+        let highlight_languages =
+            profile.summary_en.as_ref().is_none() || profile.summary_fr.as_ref().is_none();
         let languages_html = languages
             .iter()
-            .map(|lang| format!("<li>{}</li>", utils::escape_html(lang)))
+            .map(|lang| {
+                let display = if highlight_languages {
+                    lang.to_uppercase()
+                } else {
+                    lang.clone()
+                };
+                format!("<li>{}</li>", utils::escape_html(&display))
+            })
             .collect::<Vec<_>>()
             .join("");
         html.push_str(&format!(

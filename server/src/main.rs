@@ -184,9 +184,8 @@ async fn main() -> anyhow::Result<()> {
                     let mut response = response.into_response();
                     if response.status().is_success() {
                         let cache_value = cache_control_for_path(&path);
-                        if let Ok(header) = HeaderValue::from_static(cache_value) {
-                            response.headers_mut().insert(CACHE_CONTROL, header);
-                        }
+                        let header = HeaderValue::from_static(cache_value);
+                        response.headers_mut().insert(CACHE_CONTROL, header);
                     }
                     Ok::<Response, Infallible>(response)
                 }
@@ -992,6 +991,7 @@ fn tokens_to_cost(input_tokens: usize, output_tokens: usize) -> f64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serde_json::json;
 
     fn load_embedded_knowledge() -> serde_json::Value {
         let data_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../static/data");
@@ -1002,6 +1002,18 @@ mod tests {
             .split_once("Knowledge base (JSON):\n")
             .expect("system prompt should embed knowledge JSON");
         serde_json::from_str(json_text).expect("embedded knowledge should be valid JSON")
+    }
+
+    fn empty_terminal_data() -> std::sync::Arc<TerminalDataPayload> {
+        std::sync::Arc::new(TerminalDataPayload {
+            profile: json!({}),
+            skills: json!([]),
+            experiences: json!([]),
+            education: json!([]),
+            projects: json!([]),
+            testimonials: json!([]),
+            faqs: json!([]),
+        })
     }
 
     #[test]
@@ -1147,6 +1159,7 @@ mod tests {
             ))),
             knowledge,
             client,
+            terminal_data: empty_terminal_data(),
         };
         assert_eq!(app_state.estimate_cost("Hello AI?"), 0.0);
     }

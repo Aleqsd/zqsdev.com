@@ -226,16 +226,6 @@ const KEYWORD_PATTERNS: &[KeywordPattern] = &[
         icon_path: "/icons/playstation.svg",
     },
     KeywordPattern {
-        pattern: "PlayStation 5",
-        pattern_lower: "playstation 5",
-        icon_path: "/icons/playstation.svg",
-    },
-    KeywordPattern {
-        pattern: "PS5",
-        pattern_lower: "ps5",
-        icon_path: "/icons/playstation.svg",
-    },
-    KeywordPattern {
         pattern: "LinkedIn",
         pattern_lower: "linkedin",
         icon_path: "/icons/linkedin-original.svg",
