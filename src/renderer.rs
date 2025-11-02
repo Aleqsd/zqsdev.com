@@ -234,7 +234,7 @@ impl Renderer {
             .dyn_into::<HtmlElement>()?;
         title_el.set_id("achievements-modal-title");
         title_el.set_class_name("achievements-modal__title");
-        title_el.set_text_content(Some("Achievements"));
+        title_el.set_text_content(Some("Easter Eggs"));
 
         let actions = self
             .document
@@ -277,7 +277,7 @@ impl Renderer {
         close_btn.set_class_name("achievements-modal__action achievements-modal__close");
         close_btn.set_attribute("type", "button")?;
         close_btn.set_attribute("data-role", "achievements-close")?;
-        close_btn.set_attribute("aria-label", "Close achievements panel")?;
+        close_btn.set_attribute("aria-label", "Close Easter Eggs panel")?;
         close_btn.set_text_content(Some("Close"));
 
         header.append_child(&title_el)?;
@@ -294,7 +294,7 @@ impl Renderer {
             .dyn_into::<HtmlElement>()?;
         summary.set_class_name("achievements-modal__summary");
         summary.set_text_content(Some(&format!(
-            "{unlocked}/{total} unlocked",
+            "Easter eggs found: {unlocked}/{total}",
             unlocked = unlocked_count,
             total = total_count
         )));
@@ -306,7 +306,7 @@ impl Renderer {
             .dyn_into::<HtmlElement>()?;
         hint.set_class_name("achievements-modal__hint");
         hint.set_text_content(Some(
-            "Hover an achievement to uncover a hint about how to trigger it.",
+            "Hover an Easter egg to uncover a clue about how to trigger it.",
         ));
         self.achievements_modal.append_child(&hint)?;
 
@@ -337,12 +337,12 @@ impl Renderer {
             let title_text = if reveal_details {
                 achievement.title.clone()
             } else {
-                "Hidden achievement".to_string()
+                "Hidden Easter egg".to_string()
             };
             let description_text = if reveal_details {
                 achievement.description.clone()
             } else {
-                "Unlock this achievement to reveal the story.".to_string()
+                "Find this Easter egg to reveal the story.".to_string()
             };
 
             let summary = self
@@ -356,7 +356,7 @@ impl Renderer {
                 .create_element("span")?
                 .dyn_into::<HtmlElement>()?;
             icon.set_class_name("achievement-card__icon");
-            icon.set_text_content(Some("🏆"));
+            icon.set_text_content(Some("🥚"));
 
             let meta = self
                 .document
@@ -877,7 +877,7 @@ impl Renderer {
             .create_element("div")?
             .dyn_into::<HtmlElement>()?;
         icon.set_class_name("achievement-toast__icon");
-        icon.set_text_content(Some("🏆"));
+        icon.set_text_content(Some("🥚"));
 
         let content = self
             .document

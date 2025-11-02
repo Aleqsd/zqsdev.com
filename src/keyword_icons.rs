@@ -274,7 +274,10 @@ pub fn tokenize(text: &str) -> Vec<Segment> {
         for (start, _) in lower.match_indices(pattern.pattern_lower) {
             let end = start + pattern.pattern_lower.len();
 
-            if is_boundary(text, start, end) && !occupied[start..end].iter().any(|slot| *slot) {
+            if is_boundary(text, start, end)
+                && !is_within_url(text, start, end)
+                && !occupied[start..end].iter().any(|slot| *slot)
+            {
                 matches.push(MatchedRange {
                     start,
                     end,
@@ -323,6 +326,129 @@ struct MatchedRange {
 
 fn is_boundary(text: &str, start: usize, end: usize) -> bool {
     is_start_boundary(text, start) && is_end_boundary(text, end)
+}
+
+fn is_within_url(text: &str, start: usize, end: usize) -> bool {
+    let (segment_start, segment_end) = surrounding_segment(text, start, end);
+    if segment_start >= segment_end {
+        return false;
+    }
+    let raw_segment = &text[segment_start..segment_end];
+    let segment = raw_segment
+        .trim_matches(|ch: char| matches!(ch, '"' | '\'' | '(' | ')' | '[' | ']' | '<' | '>' ));
+    if segment.is_empty() {
+        return false;
+    }
+    let segment = segment.trim_end_matches(|ch: char| matches!(ch, '.' | ',' | ';' | ':' | '!' | '?'));
+    if segment.is_empty() {
+        return false;
+    }
+
+    let lower = segment.to_ascii_lowercase();
+    if lower.starts_with("http://")
+        || lower.starts_with("https://")
+        || lower.starts_with("ftp://")
+        || lower.starts_with("mailto:")
+        || lower.starts_with("tel:")
+        || lower.starts_with("www.")
+        || lower.contains("://")
+    {
+        return true;
+    }
+
+    if looks_like_domain(&segment) {
+        return true;
+    }
+
+    false
+}
+
+fn surrounding_segment(text: &str, start: usize, end: usize) -> (usize, usize) {
+    let segment_start = locate_segment_start(text, start);
+    let segment_end = locate_segment_end(text, end);
+    (segment_start, segment_end)
+}
+
+fn locate_segment_start(text: &str, mut index: usize) -> usize {
+    while index > 0 {
+        if let Some((prev_index, ch)) = text[..index].char_indices().next_back() {
+            if ch.is_whitespace() || matches!(ch, '(' | '[' | '{' | '<' | '"' | '\'') {
+                return prev_index + ch.len_utf8();
+            }
+            index = prev_index;
+        } else {
+            break;
+        }
+    }
+    0
+}
+
+fn locate_segment_end(text: &str, mut index: usize) -> usize {
+    let len = text.len();
+    while index < len {
+        if let Some((offset, ch)) = text[index..].char_indices().next() {
+            if ch.is_whitespace() || matches!(ch, ')' | ']' | '}' | '>' | '"' | '\'') {
+                return index + offset;
+            }
+            index += ch.len_utf8();
+        } else {
+            break;
+        }
+    }
+    len
+}
+
+fn looks_like_domain(segment: &str) -> bool {
+    if segment.chars().any(|ch| ch.is_whitespace()) {
+        return false;
+    }
+    if !segment.contains('.') {
+        return false;
+    }
+
+    let mut trimmed = segment;
+    if let Some(eq_index) = trimmed.find("://") {
+        trimmed = &trimmed[eq_index + 3..];
+    }
+
+    let mut parts = trimmed.splitn(2, '/');
+    let host = parts.next().unwrap_or("");
+    if host.is_empty() {
+        return false;
+    }
+
+    if host.contains('@') {
+        // Likely an email address or similar; treat as URL-like.
+        return true;
+    }
+
+    let mut labels = host.split('.');
+    let mut label_count = 0;
+    while let Some(label) = labels.next() {
+        if label.is_empty()
+            || !label
+                .chars()
+                .all(|ch| ch.is_ascii_alphanumeric() || ch == '-' || ch == '_')
+        {
+            return false;
+        }
+        label_count += 1;
+    }
+
+    if label_count < 2 {
+        return false;
+    }
+
+    let tld = host
+        .rsplit('.')
+        .next()
+        .unwrap_or("")
+        .trim_matches(|ch: char| matches!(ch, '-' | '_'));
+    if tld.len() < 2 || !tld.chars().all(|ch| ch.is_ascii_alphabetic()) {
+        return false;
+    }
+
+    true
 }
 
 fn is_start_boundary(text: &str, start: usize) -> bool {
@@ -622,5 +748,19 @@ mod tests {
             icons.contains(&"rust".to_string()),
             "Expected icon for `rust` in code fence, found icons: {icons:?}"
         );
+    }
+
+    #[test]
+    fn tokenize_ignores_keywords_inside_urls() {
+        let text = "Visit https://www.linkedin.com/in/aleqs for details.";
+        let segments = tokenize(text);
+        assert_eq!(segments, vec![Segment::Text(text.to_string())]);
+    }
+
+    #[test]
+    fn tokenize_ignores_keywords_inside_domain_only_urls() {
+        let text = "Docs live at google.com/cloud.";
+        let segments = tokenize(text);
+        assert_eq!(segments, vec![Segment::Text(text.to_string())]);
     }
 }
