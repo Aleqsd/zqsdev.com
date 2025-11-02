@@ -14,14 +14,29 @@
     <meta property="og:title" content="ZQSDev Terminal">
     <meta property="og:description" content="Explore the ZQSDev Terminal, a Rust-powered interactive resume with AI-assisted commands, curated by Alexandre DO-O ALMEIDA.">
     <meta property="og:url" content="https://zqsdev.com/">
-    <meta property="og:image" content="https://zqsdev.com/zqsdev_gradient_logo.png">
+    <meta property="og:image" content="https://zqsdev.com/zqsdev_gradient_logo.webp">
     <meta property="og:image:alt" content="ZQSDev gradient logo">
     <meta name="twitter:card" content="summary_large_image">
     <meta name="twitter:title" content="ZQSDev Terminal">
     <meta name="twitter:description" content="Explore the ZQSDev Terminal, a Rust-powered interactive resume with AI-assisted commands, curated by Alexandre DO-O ALMEIDA.">
-    <meta name="twitter:image" content="https://zqsdev.com/zqsdev_gradient_logo.png">
+    <meta name="twitter:image" content="https://zqsdev.com/zqsdev_gradient_logo.webp">
     <meta name="twitter:image:alt" content="ZQSDev gradient logo">
     <link rel="stylesheet" href="./style.css">
+    <link rel="modulepreload" href="./pkg/zqs_terminal.js">
+    <link
+        rel="preload"
+        href="./pkg/zqs_terminal_bg.wasm"
+        as="fetch"
+        type="application/wasm"
+        crossorigin
+    >
+    <link
+        rel="preload"
+        href="./zqsdev_gradient_logo.webp"
+        as="image"
+        imagesrcset="./zqsdev_gradient_logo.webp 1x, ./zqsdev_gradient_logo.png 2x"
+        fetchpriority="high"
+    >
     <link rel="icon" type="image/x-icon" href="./favicon.ico">
 </head>
 <body class="theme-midnight">
@@ -33,7 +48,15 @@
     <main id="viewport">
         <div class="brand-badge">
             <a href="./index.html" aria-label="Go back to the ZQSDev terminal home">
-                <img src="./zqsdev_gradient_logo.png" alt="ZQSDev logo">
+                <img
+                    src="./zqsdev_gradient_logo.webp"
+                    srcset="./zqsdev_gradient_logo.webp 1x, ./zqsdev_gradient_logo.png 2x"
+                    alt="ZQSDev logo"
+                    width="744"
+                    height="364"
+                    fetchpriority="high"
+                    decoding="async"
+                >
             </a>
         </div>
         <div id="terminal" role="application" aria-label="ZQSDev interactive terminal">
@@ -93,6 +116,22 @@
     <footer class="page-footnote">
         🦀 Developed in Rust by Alexandre DO-O ALMEIDA — Open source on <a href="https://github.com/Aleqsd/zqsdev.com" target="_blank" rel="noopener noreferrer">GitHub</a>.
     </footer>
-    <script type="module" src="./main.js"></script>
+    <script type="module">
+        import init from "./pkg/zqs_terminal.js";
+
+        async function boot() {
+            try {
+                await init();
+            } catch (err) {
+                console.error("Failed to bootstrap WebAssembly terminal:", err);
+                const fallback = document.getElementById("output");
+                if (fallback) {
+                    fallback.textContent = "Failed to load the terminal. Please refresh the page.";
+                }
+            }
+        }
+
+        boot();
+    </script>
 </body>
 </html>

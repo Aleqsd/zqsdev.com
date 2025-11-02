@@ -78,6 +78,11 @@ pub const COMMAND_DEFINITIONS: &[CommandDefinition] = &[
         icon: "⚡️",
     },
     CommandDefinition {
+        name: "cookie",
+        description: "Summon a secret cookie clicker mini game.",
+        icon: "🍪",
+    },
+    CommandDefinition {
         name: "clear",
         description: "Clear the terminal output.",
         icon: "🧹",
@@ -92,6 +97,7 @@ pub enum CommandAction {
     Download(String),
     ShawEffect,
     PokemonAttempt(PokemonAttemptOutcome),
+    CookieClicker,
 }
 
 #[derive(Debug)]
@@ -156,6 +162,7 @@ pub fn execute(
         "faq" => execute_faq(state),
         "shaw" | "sha" => execute_shaw(),
         "pokemon" | "pokeball" => execute_pokemon(state),
+        "cookie" => execute_cookie(),
         "ai" => execute_ai(state),
         "clear" => Ok(CommandAction::Clear),
         _ => {
@@ -406,6 +413,10 @@ fn execute_pokemon(state: &AppState) -> Result<CommandAction, String> {
     }))
 }
 
+fn execute_cookie() -> Result<CommandAction, String> {
+    Ok(CommandAction::CookieClicker)
+}
+
 fn format_skills(skills: &BTreeMap<String, Vec<String>>) -> String {
     let mut lines = Vec::new();
     for (category, items) in skills {
@@ -606,6 +617,16 @@ mod tests {
             "FAQ question missing numbering:\n{output}"
         );
         assert!(output.contains("A: Yes."), "FAQ answer missing:\n{output}");
+    }
+
+    #[wasm_bindgen_test]
+    fn cookie_command_triggers_cookie_action() {
+        let state = stub_state();
+        let action = execute("cookie", &state, &[]).expect("cookie command should succeed");
+        match action {
+            CommandAction::CookieClicker => {}
+            other => panic!("expected cookie clicker action, got {other:?}"),
+        }
     }
 
     #[wasm_bindgen_test]

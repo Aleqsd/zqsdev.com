@@ -110,6 +110,7 @@ pub struct AppState {
     pub pokemon_capture_chance: u8,
     pub achievement_shaw_unlocked: bool,
     pub achievement_pokemon_unlocked: bool,
+    pub achievement_cookie_unlocked: bool,
     pub achievement_konami_unlocked: bool,
     pub achievement_shutdown_unlocked: bool,
     pub achievements_modal_open: bool,
@@ -133,6 +134,7 @@ impl AppState {
             pokemon_capture_chance: 1,
             achievement_shaw_unlocked: false,
             achievement_pokemon_unlocked: false,
+            achievement_cookie_unlocked: false,
             achievement_konami_unlocked: false,
             achievement_shutdown_unlocked: false,
             achievements_modal_open: false,
@@ -182,6 +184,10 @@ impl AppState {
 
     pub fn unlock_pokemon_master(&mut self) -> bool {
         Self::unlock_flag(&mut self.achievement_pokemon_unlocked)
+    }
+
+    pub fn unlock_cookie_rain(&mut self) -> bool {
+        Self::unlock_flag(&mut self.achievement_cookie_unlocked)
     }
 
     pub fn unlock_konami_secret(&mut self) -> bool {

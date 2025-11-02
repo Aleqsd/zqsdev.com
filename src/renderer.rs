@@ -2,6 +2,7 @@ use crate::keyword_icons::{self, Segment as KeywordSegment};
 use crate::markdown;
 use crate::utils;
 use gloo_timers::future::TimeoutFuture;
+use js_sys::Math;
 use wasm_bindgen::closure::Closure;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
@@ -48,6 +49,15 @@ impl AchievementView {
             unlocked,
         }
     }
+}
+
+#[derive(Clone)]
+pub struct CookieClickerView {
+    pub line: HtmlElement,
+    pub wrapper: HtmlElement,
+    pub button: HtmlButtonElement,
+    pub counter: HtmlElement,
+    pub prompt: HtmlElement,
 }
 
 pub struct Renderer {
@@ -925,6 +935,129 @@ impl Renderer {
             "Pikachu has been captured successfully",
             Some("./effects/captured.mp3"),
         )
+    }
+
+    pub fn render_cookie_clicker(&self) -> Result<CookieClickerView, JsValue> {
+        let line = self
+            .document
+            .create_element("div")?
+            .dyn_into::<HtmlDivElement>()?;
+        line.set_class_name("line output-text cookie-clicker-line");
+
+        let wrapper = self
+            .document
+            .create_element("div")?
+            .dyn_into::<HtmlElement>()?;
+        wrapper.set_class_name("cookie-clicker");
+
+        let prompt = self
+            .document
+            .create_element("p")?
+            .dyn_into::<HtmlElement>()?;
+        prompt.set_class_name("cookie-clicker__prompt");
+        prompt.set_text_content(Some("Click the cookie to start baking the sweetest storm."));
+
+        let button = self
+            .document
+            .create_element("button")?
+            .dyn_into::<HtmlButtonElement>()?;
+        button.set_class_name("cookie-clicker__button");
+        button.set_type("button");
+        button.set_attribute("aria-label", "Click the cookie to bake more points")?;
+
+        let image = self
+            .document
+            .create_element("img")?
+            .dyn_into::<HtmlImageElement>()?;
+        image.set_class_name("cookie-clicker__image");
+        image.set_src("./effects/cookie.webp");
+        image.set_alt("A delicious chocolate chip cookie ready to be clicked");
+        image.set_attribute("draggable", "false")?;
+        image.set_attribute("loading", "lazy")?;
+        let image_node: Node = image.into();
+        button.append_child(&image_node)?;
+
+        let counter = self
+            .document
+            .create_element("div")?
+            .dyn_into::<HtmlElement>()?;
+        counter.set_class_name("cookie-clicker__counter cookie-clicker__counter--tier0");
+        counter.set_text_content(Some("0 / 100"));
+
+        let hint = self
+            .document
+            .create_element("p")?
+            .dyn_into::<HtmlElement>()?;
+        hint.set_class_name("cookie-clicker__hint");
+        hint.set_text_content(Some("Every tap powers the oven. Keep going!"));
+
+        let prompt_node: Node = prompt.clone().into();
+        wrapper.append_child(&prompt_node)?;
+
+        let button_node: Node = button.clone().into();
+        wrapper.append_child(&button_node)?;
+
+        let counter_node: Node = counter.clone().into();
+        wrapper.append_child(&counter_node)?;
+
+        let hint_node: Node = hint.clone().into();
+        wrapper.append_child(&hint_node)?;
+
+        let wrapper_node: Node = wrapper.clone().into();
+        line.append_child(&wrapper_node)?;
+        self.output.append_child(&line)?;
+
+        let line_element: HtmlElement = line.clone().dyn_into::<HtmlElement>()?;
+        self.apply_scroll(&line_element, ScrollBehavior::Bottom)?;
+
+        Ok(CookieClickerView {
+            line: line_element,
+            wrapper,
+            button,
+            counter,
+            prompt,
+        })
+    }
+
+    pub fn render_cookie_rain(&self, drops: usize) -> Result<HtmlElement, JsValue> {
+        let layer = self
+            .document
+            .create_element("div")?
+            .dyn_into::<HtmlDivElement>()?;
+        layer.set_class_name("cookie-rain");
+        layer.set_attribute("aria-hidden", "true")?;
+
+        let drops = drops.clamp(12, 96);
+        for _ in 0..drops {
+            let drop = self
+                .document
+                .create_element("img")?
+                .dyn_into::<HtmlImageElement>()?;
+            drop.set_class_name("cookie-rain__drop");
+            drop.set_src("./effects/small_cookie.webp");
+            drop.set_alt("");
+            drop.set_attribute("loading", "lazy")?;
+            drop.set_attribute("draggable", "false")?;
+
+            let drop_element: HtmlElement = drop.clone().dyn_into::<HtmlElement>()?;
+            let style = drop_element.style();
+            let left = format!("{:.2}%", Math::random() * 100.0);
+            let scale = 0.78 + (Math::random() * 0.42);
+            let duration = 2.1 + (Math::random() * 1.2);
+            let delay = Math::random() * 0.9;
+            style.set_property("left", &left)?;
+            style.set_property("--cookie-scale", &format!("{scale:.3}"))?;
+            style.set_property("animation-duration", &format!("{duration:.2}s"))?;
+            style.set_property("animation-delay", &format!("{delay:.2}s"))?;
+
+            let drop_node: Node = drop.into();
+            layer.append_child(&drop_node)?;
+        }
+
+        let layer_element: HtmlElement = layer.clone().dyn_into::<HtmlElement>()?;
+        let layer_node: Node = layer.into();
+        self.terminal_root.append_child(&layer_node)?;
+        Ok(layer_element)
     }
 
     fn render_pokemon_effect(

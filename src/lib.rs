@@ -61,16 +61,42 @@ async fn fetch_all_data() -> Result<TerminalData, JsValue> {
 
     let base = "./data";
 
-    let profile: Profile = utils::fetch_json(&format!("{base}/profile.json")).await?;
-    let skills: BTreeMap<String, Vec<String>> =
-        utils::fetch_json(&format!("{base}/skills.json")).await?;
-    let experiences: Vec<Experience> =
-        utils::fetch_json(&format!("{base}/experience.json")).await?;
-    let education: Vec<Education> = utils::fetch_json(&format!("{base}/education.json")).await?;
-    let projects: Vec<Project> = utils::fetch_json(&format!("{base}/projects.json")).await?;
-    let testimonials: Vec<Testimonial> =
-        utils::fetch_json(&format!("{base}/testimonials.json")).await?;
-    let faqs: Vec<FaqEntry> = utils::fetch_json(&format!("{base}/faq.json")).await?;
+    let profile_path = format!("{base}/profile.json");
+    let skills_path = format!("{base}/skills.json");
+    let experiences_path = format!("{base}/experience.json");
+    let education_path = format!("{base}/education.json");
+    let projects_path = format!("{base}/projects.json");
+    let testimonials_path = format!("{base}/testimonials.json");
+    let faqs_path = format!("{base}/faq.json");
+
+    let profile_fut = utils::fetch_json::<Profile>(&profile_path);
+    let skills_fut = utils::fetch_json::<BTreeMap<String, Vec<String>>>(&skills_path);
+    let experiences_fut =
+        utils::fetch_json::<Vec<Experience>>(&experiences_path);
+    let education_fut =
+        utils::fetch_json::<Vec<Education>>(&education_path);
+    let projects_fut = utils::fetch_json::<Vec<Project>>(&projects_path);
+    let testimonials_fut =
+        utils::fetch_json::<Vec<Testimonial>>(&testimonials_path);
+    let faqs_fut = utils::fetch_json::<Vec<FaqEntry>>(&faqs_path);
+
+    let (
+        profile,
+        skills,
+        experiences,
+        education,
+        projects,
+        testimonials,
+        faqs,
+    ) = futures::try_join!(
+        profile_fut,
+        skills_fut,
+        experiences_fut,
+        education_fut,
+        projects_fut,
+        testimonials_fut,
+        faqs_fut,
+    )?;
 
     Ok(TerminalData::new(
         profile,

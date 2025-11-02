@@ -54,9 +54,12 @@ header a:hover {
     rgba(155, 139, 255, 0.18)
   );
   color: rgba(243, 251, 255, 0.82);
-  box-shadow: none;
+  box-shadow: 0 0 0 0 rgba(64, 242, 255, 0.4);
   text-shadow: none;
-  transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+  transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease,
+    transform 0.2s ease;
+  position: relative;
+  animation: terminalCtaPulse 2.8s ease-in-out infinite;
 }
 .terminal-cta:hover,
 .terminal-cta:focus-visible {
@@ -67,10 +70,26 @@ header a:hover {
   );
   border-color: rgba(155, 139, 255, 0.45);
   color: #f7fbff;
+    transform: translateY(-1px) scale(1.02);
 }
 .terminal-cta:focus-visible {
   outline: 2px solid rgba(64, 242, 255, 0.5);
   outline-offset: 2px;
+}
+
+@keyframes terminalCtaPulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(64, 242, 255, 0.32);
+    filter: brightness(1);
+  }
+  50% {
+    box-shadow: 0 0 24px 8px rgba(64, 242, 255, 0.22);
+    filter: brightness(1.05);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(64, 242, 255, 0.32);
+    filter: brightness(1);
+  }
 }
 main {
   height: 100%;
@@ -174,5 +193,9 @@ canvas {
 @media (prefers-reduced-motion: reduce) {
   .toast {
     transition: none;
+  }
+  .terminal-cta {
+    animation: none;
+    filter: none;
   }
 }

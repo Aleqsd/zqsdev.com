@@ -182,7 +182,7 @@ const KEYWORD_PATTERNS: &[KeywordPattern] = &[
     KeywordPattern {
         pattern: "Alexandre DO-O ALMEIDA",
         pattern_lower: "alexandre do-o almeida",
-        icon_path: "/icons/devicons/alexandre.png",
+        icon_path: "/icons/devicons/alexandre.webp",
     },
     KeywordPattern {
         pattern: "Meta Platforms",
@@ -335,11 +335,12 @@ fn is_within_url(text: &str, start: usize, end: usize) -> bool {
     }
     let raw_segment = &text[segment_start..segment_end];
     let segment = raw_segment
-        .trim_matches(|ch: char| matches!(ch, '"' | '\'' | '(' | ')' | '[' | ']' | '<' | '>' ));
+        .trim_matches(|ch: char| matches!(ch, '"' | '\'' | '(' | ')' | '[' | ']' | '<' | '>'));
     if segment.is_empty() {
         return false;
     }
-    let segment = segment.trim_end_matches(|ch: char| matches!(ch, '.' | ',' | ';' | ':' | '!' | '?'));
+    let segment =
+        segment.trim_end_matches(|ch: char| matches!(ch, '.' | ',' | ';' | ':' | '!' | '?'));
     if segment.is_empty() {
         return false;
     }
@@ -693,7 +694,7 @@ mod tests {
                 Segment::Text("Meet ".to_string()),
                 Segment::Icon(IconMatch {
                     token: "Alexandre DO-O ALMEIDA".to_string(),
-                    icon_path: "/icons/devicons/alexandre.png"
+                    icon_path: "/icons/devicons/alexandre.webp"
                 }),
                 Segment::Text(", better known as Alexandre.".to_string()),
             ]
@@ -709,7 +710,7 @@ mod tests {
                 Segment::Text("Profile loaded for ".to_string()),
                 Segment::Icon(IconMatch {
                     token: "Alexandre DO-O ALMEIDA".to_string(),
-                    icon_path: "/icons/devicons/alexandre.png"
+                    icon_path: "/icons/devicons/alexandre.webp"
                 }),
                 Segment::Text(".".to_string()),
             ]

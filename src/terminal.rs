@@ -5,8 +5,10 @@ use crate::state::AppState;
 use crate::utils;
 use gloo_timers::future::TimeoutFuture;
 use serde::{Deserialize, Serialize};
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::rc::Rc;
+use wasm_bindgen::closure::Closure;
+use wasm_bindgen::JsCast;
 use wasm_bindgen::JsValue;
 use wasm_bindgen_futures::spawn_local;
 use web_sys::HtmlElement;
@@ -81,6 +83,8 @@ const ACHIEVEMENT_SHAW_TITLE: &str = "Shaw!";
 const ACHIEVEMENT_SHAW_DESCRIPTION: &str = "Could she be... a Hunter?";
 const ACHIEVEMENT_POKEMON_TITLE: &str = "Who's that Pokemon?";
 const ACHIEVEMENT_POKEMON_DESCRIPTION: &str = "It's Pikachu!";
+const ACHIEVEMENT_COOKIE_TITLE: &str = "Cookie Storm!";
+const ACHIEVEMENT_COOKIE_DESCRIPTION: &str = "Summoned the sweetest downpour.";
 const ACHIEVEMENT_KONAMI_TITLE: &str = "Kamehameha!";
 const ACHIEVEMENT_KONAMI_DESCRIPTION: &str = "And this... is to go even further beyond!";
 const ACHIEVEMENT_SHUTDOWN_TITLE: &str = "AAAAAAAAAAAAAH";
@@ -89,6 +93,7 @@ const ACHIEVEMENTS_STORAGE_KEY: &str = "zqs_terminal_achievements";
 const ACHIEVEMENTS_STORAGE_VERSION: &str = env!("CARGO_PKG_VERSION");
 const ACHIEVEMENT_SHAW_HINT: &str = "Hornet shouts can be heard in the terminal.";
 const ACHIEVEMENT_POKEMON_HINT: &str = "Gotta catch 'em all!";
+const ACHIEVEMENT_COOKIE_HINT: &str = "Tap into the cookie zone.";
 const ACHIEVEMENT_KONAMI_HINT: &str = "Konami";
 const ACHIEVEMENT_SHUTDOWN_HINT: &str = "Why would you remove my files?";
 
@@ -291,6 +296,9 @@ impl Terminal {
             }
             Ok(CommandAction::PokemonAttempt(outcome)) => {
                 self.play_pokemon_attempt(&outcome, output_scroll)?;
+            }
+            Ok(CommandAction::CookieClicker) => {
+                self.start_cookie_clicker(output_scroll)?;
             }
             Ok(CommandAction::Clear) => {
                 self.renderer.clear_output();
@@ -635,6 +643,70 @@ impl Terminal {
         Ok(())
     }
 
+    fn start_cookie_clicker(&self, behavior: ScrollBehavior) -> Result<(), JsValue> {
+        let _ = behavior;
+        self.renderer.append_info_line(
+            "🍪 Cookie protocol initiated! Click the cookie to reach 100 and unlock the secret.",
+            ScrollBehavior::Bottom,
+        )?;
+
+        let view = self.renderer.render_cookie_clicker()?;
+        view.prompt
+            .set_text_content(Some(Self::cookie_prompt_for(0)));
+        Self::apply_cookie_counter_tier(&view.counter, 0);
+        Self::apply_cookie_wrapper_state(&view.wrapper, 0);
+
+        let state = Rc::clone(&self.state);
+        let renderer = Rc::clone(&self.renderer);
+
+        let counter_cell = Rc::new(Cell::new(0u32));
+        let finished = Rc::new(Cell::new(false));
+
+        let counter_el = view.counter.clone();
+        let prompt_el = view.prompt.clone();
+        let wrapper_el = view.wrapper.clone();
+        let line_el = view.line.clone();
+        let button_el = view.button.clone();
+
+        let click_handler = {
+            let state = Rc::clone(&state);
+            let renderer = Rc::clone(&renderer);
+            let counter_cell = Rc::clone(&counter_cell);
+            let finished = Rc::clone(&finished);
+            Closure::wrap(Box::new(move |event: web_sys::MouseEvent| {
+                event.prevent_default();
+                if finished.get() {
+                    return;
+                }
+                let next = counter_cell.get().saturating_add(1).min(100);
+                counter_cell.set(next);
+
+                let label = format!("{next} / 100");
+                counter_el.set_text_content(Some(&label));
+                Terminal::apply_cookie_counter_tier(&counter_el, next);
+                Terminal::apply_cookie_wrapper_state(&wrapper_el, next);
+                prompt_el.set_text_content(Some(Terminal::cookie_prompt_for(next)));
+
+                if next == 100 {
+                    finished.set(true);
+                    let _ = button_el.set_attribute("disabled", "true");
+                    Terminal::celebrate_cookie_unlock(Rc::clone(&state), Rc::clone(&renderer));
+                    Terminal::launch_cookie_rain_sequence(
+                        Rc::clone(&renderer),
+                        line_el.clone(),
+                        Some(wrapper_el.clone()),
+                    );
+                }
+            }) as Box<dyn FnMut(_)>)
+        };
+
+        view.button
+            .add_event_listener_with_callback("click", click_handler.as_ref().unchecked_ref())?;
+        click_handler.forget();
+
+        Ok(())
+    }
+
     fn dismiss_pokemon_effect_after_delay(&self, element: &HtmlElement, delay_ms: u32) {
         let renderer = Rc::clone(&self.renderer);
         let element = element.clone();
@@ -662,13 +734,11 @@ impl Terminal {
 
     fn trigger_achievement_popup(&self, title: &str, description: &str) -> Result<(), JsValue> {
         let toast = self.renderer.render_achievement_toast(title, description)?;
-        self.dismiss_achievement_after_delay(&toast, 5200);
+        Self::schedule_toast_dismissal(Rc::clone(&self.renderer), toast, 5200);
         Ok(())
     }
 
-    fn dismiss_achievement_after_delay(&self, toast: &HtmlElement, delay_ms: u32) {
-        let renderer = Rc::clone(&self.renderer);
-        let toast = toast.clone();
+    fn schedule_toast_dismissal(renderer: SharedRenderer, toast: HtmlElement, delay_ms: u32) {
         spawn_local(async move {
             TimeoutFuture::new(delay_ms).await;
 
@@ -692,53 +762,66 @@ impl Terminal {
     }
 
     fn refresh_achievements_modal_if_visible(&self) -> Result<(), JsValue> {
-        let should_refresh = {
-            let state = self.state.borrow();
-            state.achievements_modal_open
+        Self::refresh_achievements_modal_for_shared(&self.state, &self.renderer)
+    }
+
+    fn collect_achievement_views(&self) -> Vec<AchievementView> {
+        let state = self.state.borrow();
+        Self::build_achievement_views(&state)
+    }
+
+    fn refresh_achievements_modal_for_shared(
+        state: &SharedState,
+        renderer: &SharedRenderer,
+    ) -> Result<(), JsValue> {
+        let (should_refresh, spoilers_enabled) = {
+            let state_ref = state.borrow();
+            (
+                state_ref.achievements_modal_open,
+                state_ref.achievements_spoilers_enabled,
+            )
         };
         if !should_refresh {
             return Ok(());
         }
-        let achievements = self.collect_achievement_views();
-        let spoilers_enabled = self.achievements_spoilers_enabled();
-        self.renderer
-            .show_achievements_modal(&achievements, spoilers_enabled)
+        let achievements = {
+            let state_ref = state.borrow();
+            Self::build_achievement_views(&state_ref)
+        };
+        renderer.show_achievements_modal(&achievements, spoilers_enabled)
     }
 
-    fn collect_achievement_views(&self) -> Vec<AchievementView> {
-        let (shaw, pokemon, konami, shutdown) = {
-            let state = self.state.borrow();
-            (
-                state.achievement_shaw_unlocked,
-                state.achievement_pokemon_unlocked,
-                state.achievement_konami_unlocked,
-                state.achievement_shutdown_unlocked,
-            )
-        };
-
+    fn build_achievement_views(state: &AppState) -> Vec<AchievementView> {
         let mut unlocked = Vec::new();
         let mut locked = Vec::new();
+
         let entries = [
             (
-                shaw,
+                state.achievement_shaw_unlocked,
                 ACHIEVEMENT_SHAW_TITLE,
                 ACHIEVEMENT_SHAW_DESCRIPTION,
                 ACHIEVEMENT_SHAW_HINT,
             ),
             (
-                pokemon,
+                state.achievement_pokemon_unlocked,
                 ACHIEVEMENT_POKEMON_TITLE,
                 ACHIEVEMENT_POKEMON_DESCRIPTION,
                 ACHIEVEMENT_POKEMON_HINT,
             ),
             (
-                konami,
+                state.achievement_cookie_unlocked,
+                ACHIEVEMENT_COOKIE_TITLE,
+                ACHIEVEMENT_COOKIE_DESCRIPTION,
+                ACHIEVEMENT_COOKIE_HINT,
+            ),
+            (
+                state.achievement_konami_unlocked,
                 ACHIEVEMENT_KONAMI_TITLE,
                 ACHIEVEMENT_KONAMI_DESCRIPTION,
                 ACHIEVEMENT_KONAMI_HINT,
             ),
             (
-                shutdown,
+                state.achievement_shutdown_unlocked,
                 ACHIEVEMENT_SHUTDOWN_TITLE,
                 ACHIEVEMENT_SHUTDOWN_DESCRIPTION,
                 ACHIEVEMENT_SHUTDOWN_HINT,
@@ -778,9 +861,7 @@ impl Terminal {
     }
 
     fn persist_achievements_state(&self) {
-        if let Err(err) = self.save_achievements_to_storage() {
-            utils::log(&format!("Failed to persist achievements state: {:?}", err));
-        }
+        Self::persist_achievements_snapshot_shared(&self.state);
     }
 
     fn try_restore_achievements_from_storage(&self) -> Result<(), JsValue> {
@@ -811,36 +892,11 @@ impl Terminal {
             let mut state = self.state.borrow_mut();
             state.achievement_shaw_unlocked = data.shaw;
             state.achievement_pokemon_unlocked = data.pokemon;
+            state.achievement_cookie_unlocked = data.cookie;
             state.achievement_konami_unlocked = data.konami;
             state.achievement_shutdown_unlocked = data.shutdown;
             state.achievements_spoilers_enabled = data.spoilers_enabled;
         }
-        Ok(())
-    }
-
-    fn save_achievements_to_storage(&self) -> Result<(), JsValue> {
-        let Some(window) = utils::window() else {
-            return Ok(());
-        };
-        let storage = match window.local_storage()? {
-            Some(storage) => storage,
-            None => return Ok(()),
-        };
-        let payload = {
-            let state = self.state.borrow();
-            StoredAchievements {
-                version: ACHIEVEMENTS_STORAGE_VERSION.to_string(),
-                shaw: state.achievement_shaw_unlocked,
-                pokemon: state.achievement_pokemon_unlocked,
-                konami: state.achievement_konami_unlocked,
-                shutdown: state.achievement_shutdown_unlocked,
-                spoilers_enabled: state.achievements_spoilers_enabled,
-            }
-        };
-        let serialized = serde_json::to_string(&payload).map_err(|err| {
-            JsValue::from_str(&format!("Failed to serialize achievements payload: {err}"))
-        })?;
-        storage.set_item(ACHIEVEMENTS_STORAGE_KEY, &serialized)?;
         Ok(())
     }
 
@@ -854,6 +910,203 @@ impl Terminal {
         };
         storage.remove_item(ACHIEVEMENTS_STORAGE_KEY)?;
         Ok(())
+    }
+
+    fn persist_achievements_snapshot_shared(state: &SharedState) {
+        let payload = {
+            let state_ref = state.borrow();
+            Self::build_achievements_payload(&state_ref)
+        };
+        if let Err(err) = Self::write_achievements_payload(&payload) {
+            utils::log(&format!("Failed to persist achievements state: {:?}", err));
+        }
+    }
+
+    fn build_achievements_payload(state: &AppState) -> StoredAchievements {
+        StoredAchievements {
+            version: ACHIEVEMENTS_STORAGE_VERSION.to_string(),
+            shaw: state.achievement_shaw_unlocked,
+            pokemon: state.achievement_pokemon_unlocked,
+            cookie: state.achievement_cookie_unlocked,
+            konami: state.achievement_konami_unlocked,
+            shutdown: state.achievement_shutdown_unlocked,
+            spoilers_enabled: state.achievements_spoilers_enabled,
+        }
+    }
+
+    fn write_achievements_payload(payload: &StoredAchievements) -> Result<(), JsValue> {
+        let Some(window) = utils::window() else {
+            return Ok(());
+        };
+        let storage = match window.local_storage()? {
+            Some(storage) => storage,
+            None => return Ok(()),
+        };
+        let serialized = serde_json::to_string(payload).map_err(|err| {
+            JsValue::from_str(&format!("Failed to serialize achievements payload: {err}"))
+        })?;
+        storage.set_item(ACHIEVEMENTS_STORAGE_KEY, &serialized)?;
+        Ok(())
+    }
+
+    fn celebrate_cookie_unlock(state: SharedState, renderer: SharedRenderer) {
+        let celebrate = {
+            let mut state_mut = state.borrow_mut();
+            state_mut.unlock_cookie_rain()
+        };
+        if !celebrate {
+            return;
+        }
+
+        match renderer
+            .render_achievement_toast(ACHIEVEMENT_COOKIE_TITLE, ACHIEVEMENT_COOKIE_DESCRIPTION)
+        {
+            Ok(toast) => {
+                Self::schedule_toast_dismissal(Rc::clone(&renderer), toast, 5200);
+            }
+            Err(err) => {
+                utils::log(&format!(
+                    "Failed to display cookie achievement toast: {:?}",
+                    err
+                ));
+            }
+        }
+
+        Self::persist_achievements_snapshot_shared(&state);
+
+        if let Err(err) = Self::refresh_achievements_modal_for_shared(&state, &renderer) {
+            utils::log(&format!(
+                "Failed to refresh achievements modal after cookie unlock: {:?}",
+                err
+            ));
+        }
+    }
+
+    fn launch_cookie_rain_sequence(
+        renderer: SharedRenderer,
+        line: HtmlElement,
+        wrapper: Option<HtmlElement>,
+    ) {
+        if let Err(err) =
+            renderer.append_info_line("🍪 100/100! Cookie storm incoming!", ScrollBehavior::Bottom)
+        {
+            utils::log(&format!("Failed to announce cookie celebration: {:?}", err));
+        }
+
+        let rain = match renderer.render_cookie_rain(120) {
+            Ok(layer) => Some(layer),
+            Err(err) => {
+                utils::log(&format!("Failed to render cookie rain: {:?}", err));
+                None
+            }
+        };
+
+        if let Some(wrapper_el) = wrapper.as_ref() {
+            if let Err(err) = wrapper_el.class_list().add_1("cookie-clicker--celebrating") {
+                utils::log(&format!(
+                    "Failed to flag cookie wrapper celebration: {:?}",
+                    err
+                ));
+            }
+        }
+
+        let cleanup_renderer = Rc::clone(&renderer);
+        let cleanup_line = line.clone();
+        let cleanup_wrapper = wrapper.clone();
+        let cleanup_rain = rain.clone();
+        spawn_local(async move {
+            TimeoutFuture::new(5000).await;
+
+            if let Some(wrapper_el) = cleanup_wrapper {
+                let _ = wrapper_el.set_attribute("data-state", "hiding");
+            }
+            if let Err(err) = cleanup_line.set_attribute("data-state", "hiding") {
+                utils::log(&format!(
+                    "Failed to mark cookie clicker line for dismissal: {:?}",
+                    err
+                ));
+            }
+            if let Some(rain_layer) = cleanup_rain.as_ref() {
+                let _ = rain_layer.set_attribute("data-state", "hiding");
+            }
+
+            TimeoutFuture::new(320).await;
+
+            if let Some(rain_layer) = cleanup_rain {
+                if let Err(err) = cleanup_renderer.remove_effect(&rain_layer) {
+                    utils::log(&format!("Failed to remove cookie rain layer: {:?}", err));
+                }
+            }
+            if let Err(err) = cleanup_renderer.remove_effect(&cleanup_line) {
+                utils::log(&format!("Failed to remove cookie clicker line: {:?}", err));
+            }
+        });
+    }
+
+    fn cookie_prompt_for(count: u32) -> &'static str {
+        match count {
+            0 => "Click the cookie to start baking the sweetest storm.",
+            1..=24 => "Nice! Keep tapping to build up momentum.",
+            25..=49 => "The oven is warming up. Stay on the cookie!",
+            50..=74 => "Halfway there—the kitchen smells amazing!",
+            75..=89 => "Crumbs are flying! Don't stop now!",
+            90..=99 => "Critical cookie mass! Just a few more taps!",
+            _ => "Sweet victory! Enjoy that cookie rain!",
+        }
+    }
+
+    fn apply_cookie_counter_tier(counter: &HtmlElement, count: u32) {
+        let class_list = counter.class_list();
+        for tier in 0..=5 {
+            let class_name = format!("cookie-clicker__counter--tier{tier}");
+            let _ = class_list.remove_1(&class_name);
+        }
+        let tier = match count {
+            0..=9 => 0,
+            10..=24 => 1,
+            25..=49 => 2,
+            50..=74 => 3,
+            75..=95 => 4,
+            _ => 5,
+        };
+        if let Err(err) = class_list.add_1(&format!("cookie-clicker__counter--tier{tier}")) {
+            utils::log(&format!(
+                "Failed to update cookie counter tier class: {:?}",
+                err
+            ));
+        }
+    }
+
+    fn apply_cookie_wrapper_state(wrapper: &HtmlElement, count: u32) {
+        let class_list = wrapper.class_list();
+        for class_name in [
+            "cookie-clicker--warm",
+            "cookie-clicker--toasty",
+            "cookie-clicker--glowing",
+            "cookie-clicker--celebrating",
+        ] {
+            let _ = class_list.remove_1(class_name);
+        }
+        let next_class = if count >= 100 {
+            Some("cookie-clicker--celebrating")
+        } else if count >= 75 {
+            Some("cookie-clicker--glowing")
+        } else if count >= 50 {
+            Some("cookie-clicker--toasty")
+        } else if count >= 25 {
+            Some("cookie-clicker--warm")
+        } else {
+            None
+        };
+
+        if let Some(class_name) = next_class {
+            if let Err(err) = class_list.add_1(class_name) {
+                utils::log(&format!(
+                    "Failed to update cookie wrapper class `{class_name}`: {:?}",
+                    err
+                ));
+            }
+        }
     }
 
     fn play_shaw_effect(&self) -> Result<(), JsValue> {
@@ -1228,7 +1481,7 @@ fn select_history_entry(state: &mut AppState, direction: HistoryDirection) -> Op
     Some(buffer)
 }
 
-const HIDDEN_HELPER_COMMANDS: [&str; 2] = ["shaw", "pokemon"];
+const HIDDEN_HELPER_COMMANDS: [&str; 3] = ["shaw", "pokemon", "cookie"];
 
 fn is_hidden_helper(command: &str) -> bool {
     HIDDEN_HELPER_COMMANDS
@@ -1324,6 +1577,8 @@ struct StoredAchievements {
     version: String,
     shaw: bool,
     pokemon: bool,
+    #[serde(default)]
+    cookie: bool,
     konami: bool,
     shutdown: bool,
     spoilers_enabled: bool,
@@ -1414,6 +1669,7 @@ mod tests {
     fn default_suggestions_execute_without_errors() {
         let state = make_state_with_data();
         let mut expected = crate::commands::command_names();
+        expected.retain(|name| !super::is_hidden_helper(name));
         if let Some(index) = expected.iter().position(|name| *name == "resume") {
             let resume = expected.remove(index);
             expected.insert(0, resume);

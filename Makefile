@@ -20,6 +20,11 @@ build:
 	@command -v wasm-pack >/dev/null 2>&1 || { echo "wasm-pack not found. Install with 'cargo install wasm-pack'."; exit 1; }
 	rustup target add $(WASM_TARGET) >/dev/null 2>&1 || true
 	wasm-pack build --target web --release
+	@if command -v wasm-opt >/dev/null 2>&1; then \
+		wasm-opt -Oz $(PKG_DIR)/zqs_terminal_bg.wasm -o $(PKG_DIR)/zqs_terminal_bg.wasm; \
+	else \
+		echo "wasm-opt not found. Install binaryen to optimize the WebAssembly output."; \
+	fi
 	mkdir -p $(STATIC_PKG)
 	cp -r $(PKG_DIR)/* $(STATIC_PKG)/
 
