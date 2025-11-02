@@ -61,6 +61,85 @@ pub fn escape_html(input: &str) -> String {
     escaped
 }
 
+pub fn tag_resume_source(url: &str) -> String {
+    const CV_HOST: &str = "cv.zqsdev.com";
+    const PARAM_KEY: &str = "from";
+    const PARAM_VALUE: &str = "interactive";
+
+    if url.is_empty() {
+        return String::new();
+    }
+
+    let lower = url.to_ascii_lowercase();
+    let host_target = lower
+        .split_once("://")
+        .map(|(_, rest)| rest)
+        .unwrap_or_else(|| lower.as_str())
+        .split(&['/', '?', '#'][..])
+        .next()
+        .unwrap_or("");
+    if host_target != CV_HOST {
+        return url.to_string();
+    }
+
+    let (without_fragment, fragment) = match url.split_once('#') {
+        Some((base, frag)) => (base, Some(frag)),
+        None => (url, None),
+    };
+
+    let (prefix, query) = match without_fragment.split_once('?') {
+        Some((p, q)) => (p, Some(q)),
+        None => (without_fragment, None),
+    };
+
+    let mut result =
+        String::with_capacity(url.len() + PARAM_KEY.len() + PARAM_VALUE.len() + 4);
+    result.push_str(prefix);
+    result.push('?');
+
+    let mut wrote_any = false;
+    if let Some(query) = query {
+        for pair in query.split('&') {
+            if pair.is_empty() {
+                continue;
+            }
+            let (name, value) = pair
+                .split_once('=')
+                .map(|(n, v)| (n, Some(v)))
+                .unwrap_or((pair, None));
+            if name.eq_ignore_ascii_case(PARAM_KEY) {
+                if value
+                    .map(|v| v.eq_ignore_ascii_case(PARAM_VALUE))
+                    .unwrap_or(false)
+                {
+                    return url.to_string();
+                }
+                continue;
+            }
+            if wrote_any {
+                result.push('&');
+            }
+            result.push_str(pair);
+            wrote_any = true;
+        }
+    }
+
+    if wrote_any {
+        result.push('&');
+    }
+
+    result.push_str(PARAM_KEY);
+    result.push('=');
+    result.push_str(PARAM_VALUE);
+
+    if let Some(fragment) = fragment {
+        result.push('#');
+        result.push_str(fragment);
+    }
+
+    result
+}
+
 pub fn window() -> Option<web_sys::Window> {
     web_sys::window()
 }
@@ -77,6 +156,52 @@ mod tests {
         assert!(
             !escaped.contains('<') && !escaped.contains('>'),
             "Escaped string should not contain raw angle brackets: {escaped}"
+        );
+    }
+
+    #[test]
+    fn tag_resume_source_appends_param_without_query() {
+        let url = "https://cv.zqsdev.com/";
+        let tagged = tag_resume_source(url);
+        assert_eq!(tagged, "https://cv.zqsdev.com/?from=interactive");
+    }
+
+    #[test]
+    fn tag_resume_source_appends_param_with_existing_query_and_fragment() {
+        let url = "https://cv.zqsdev.com/view?lang=en#top";
+        let tagged = tag_resume_source(url);
+        assert_eq!(
+            tagged,
+            "https://cv.zqsdev.com/view?lang=en&from=interactive#top"
+        );
+    }
+
+    #[test]
+    fn tag_resume_source_ignores_non_cv_hosts() {
+        let url = "https://example.com/resume";
+        assert_eq!(tag_resume_source(url), url);
+    }
+
+    #[test]
+    fn tag_resume_source_does_not_duplicate_existing_param() {
+        let url = "https://cv.zqsdev.com/?from=interactive";
+        assert_eq!(tag_resume_source(url), url);
+        let url_mixed = "https://cv.zqsdev.com/?From=Interactive";
+        assert_eq!(tag_resume_source(url_mixed), url_mixed);
+    }
+
+    #[test]
+    fn tag_resume_source_replaces_different_from_value() {
+        let url = "https://cv.zqsdev.com/?from=www";
+        assert_eq!(
+            tag_resume_source(url),
+            "https://cv.zqsdev.com/?from=interactive"
+        );
+
+        let url_complex = "https://cv.zqsdev.com/?lang=en&from=www#top";
+        assert_eq!(
+            tag_resume_source(url_complex),
+            "https://cv.zqsdev.com/?lang=en&from=interactive#top"
         );
     }
 }

@@ -309,12 +309,13 @@ fn execute_contact(state: &AppState) -> Result<CommandAction, String> {
 
 fn execute_resume(state: &AppState) -> Result<CommandAction, String> {
     let data = ensure_data(state)?;
-    let target = data
+    let base = data
         .profile
         .links
         .resume_url
         .clone()
         .unwrap_or_else(|| "https://cv.zqsdev.com".to_string());
+    let target = utils::tag_resume_source(&base);
     Ok(CommandAction::Download(target))
 }
 
@@ -956,8 +957,8 @@ mod tests {
 
         let html = super::render_links_html(&links).expect("links should render");
         assert!(
-            html.contains("https://cv.zqsdev.com"),
-            "Résumé link should surface the configured URL: {html}"
+            html.contains(&crate::utils::tag_resume_source("https://cv.zqsdev.com")),
+            "Résumé link should surface the tagged URL: {html}"
         );
         assert!(
             html.contains("📄 Résumé"),
@@ -1198,7 +1199,8 @@ fn render_links_html(links: &crate::state::ProfileLinks) -> Option<String> {
         items.push(render_link_item("🌐 Website", website, false));
     }
     if let Some(resume_url) = links.resume_url.as_deref().filter(|url| !url.is_empty()) {
-        items.push(render_link_item("📄 Résumé", resume_url, false));
+        let tagged = utils::tag_resume_source(resume_url);
+        items.push(render_link_item("📄 Résumé", &tagged, false));
     }
 
     if items.is_empty() {

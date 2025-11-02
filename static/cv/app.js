@@ -11,6 +11,44 @@ const viewer = document.getElementById("viewer");
 const loading = document.getElementById("loading");
 
 const state = { pdf: null, pages: [], scaleByWidth: true };
+const CTA_PARAM = "from";
+const CTA_INTERACTIVE_VALUE = "interactive";
+const CTA_SELF_VALUE = "cv";
+const KNOWN_HELPER_HOSTS = ["www.zqsdev.com", "zqsdev.com"];
+
+function configureResumeCta() {
+  const cta = document.querySelector(".terminal-cta");
+  if (!cta) return;
+
+  const search = new URL(window.location.href).searchParams;
+  const marker = search.get(CTA_PARAM);
+  const fromHelper =
+    marker?.toLowerCase() === CTA_INTERACTIVE_VALUE ||
+    (() => {
+      if (!document.referrer) return false;
+      try {
+        const host = new URL(document.referrer).hostname.toLowerCase();
+        return KNOWN_HELPER_HOSTS.includes(host);
+      } catch {
+        return false;
+      }
+    })();
+
+  if (fromHelper) {
+    cta.remove();
+    return;
+  }
+
+  try {
+    const url = new URL(cta.href, window.location.href);
+    url.searchParams.set(CTA_PARAM, CTA_SELF_VALUE);
+    cta.href = url.toString();
+  } catch {
+    // Ignore malformed hrefs
+  }
+}
+
+configureResumeCta();
 
 function clearViewer() {
   viewer.querySelectorAll(".page").forEach((el) => el.remove());

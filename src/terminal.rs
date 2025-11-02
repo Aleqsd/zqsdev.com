@@ -472,21 +472,10 @@ impl Terminal {
     }
 
     pub fn on_data_ready(&self) -> Result<(), JsValue> {
-        let (profile_name, resume_link) = {
+        let profile_name = {
             let state = self.state.borrow();
             let name = state.data.as_ref().map(|data| data.profile.name.clone());
-            let link = state
-                .data
-                .as_ref()
-                .and_then(|data| {
-                    data.profile
-                        .links
-                        .resume_url
-                        .clone()
-                        .filter(|value| !value.trim().is_empty())
-                })
-                .unwrap_or_else(|| "https://cv.zqsdev.com".to_string());
-            (name, link)
+            name
         };
 
         let renderer = Rc::clone(&self.renderer);
@@ -526,10 +515,6 @@ impl Terminal {
                 }
             }
 
-            let resume_html = resume_link_html(&resume_link);
-            if let Err(err) = renderer.append_info_html(&resume_html, ScrollBehavior::Bottom) {
-                utils::log(&format!("Failed to append résumé link: {:?}", err));
-            }
             let ai_cta_html = r#"Prefer to talk with an AI? <button type="button" class="ai-mode-cta" data-action="activate-ai-mode">Ask the AI assistant</button>"#;
             if let Err(err) = renderer.append_info_html(ai_cta_html, ScrollBehavior::Bottom) {
                 utils::log(&format!(
@@ -1550,22 +1535,6 @@ fn profile_loaded_line(name: &str) -> String {
     format!("Profile loaded for {}.", name)
 }
 
-fn resume_link_html(url: &str) -> String {
-    format!(
-        r#"<div class="welcome-helpers">
-    <a class="welcome-helper welcome-helper--resume" href="{url}" target="_blank" rel="noopener noreferrer">
-        <span aria-hidden="true">📄</span>
-        <span class="welcome-helper__text">Open the résumé</span>
-    </a>
-    <button type="button" class="welcome-helper welcome-helper--contact" data-command="contact">
-        <span aria-hidden="true">✉️</span>
-        <span class="welcome-helper__text">Show contact</span>
-    </button>
-</div>"#,
-        url = url
-    )
-}
-
 #[derive(Debug, Serialize, Deserialize)]
 struct StoredAchievements {
     version: String,
@@ -1644,25 +1613,6 @@ mod tests {
         assert_eq!(
             super::profile_loaded_line("Alex"),
             "Profile loaded for Alex."
-        );
-    }
-
-    #[test]
-    fn resume_link_html_renders_resume_and_contact_helpers() {
-        let html = super::resume_link_html("https://cv.zqsdev.com");
-        assert!(
-            html.contains(r#"class="welcome-helpers""#),
-            "Expected résumé helper container: {html}"
-        );
-        assert!(
-            html.contains(r#"class="welcome-helper welcome-helper--resume""#)
-                && html.contains(r#"href="https://cv.zqsdev.com""#),
-            "Expected résumé helper to link to provided URL: {html}"
-        );
-        assert!(
-            html.contains(r#"class="welcome-helper welcome-helper--contact""#)
-                && html.contains(r#"data-command="contact""#),
-            "Expected contact helper to surface command trigger: {html}"
         );
     }
 
