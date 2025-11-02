@@ -1,6 +1,5 @@
 use crate::state::{
-    AppState, Award, Education, Experience, Profile, Project, ProjectsCollection, Publication,
-    TerminalData,
+    AppState, Award, Education, Experience, Profile, ProjectsCollection, TerminalData,
 };
 use crate::utils;
 use js_sys::Math;
@@ -487,6 +486,7 @@ fn format_education(education: &[Education]) -> String {
 mod tests {
     use super::*;
     use wasm_bindgen_test::wasm_bindgen_test;
+    use crate::state::{Project, Publication};
 
     fn stub_state() -> AppState {
         use crate::state::{FaqEntry, Profile, ProfileLinks, Testimonial};
