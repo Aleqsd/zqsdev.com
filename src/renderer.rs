@@ -4,7 +4,6 @@ use crate::utils;
 use gloo_timers::future::TimeoutFuture;
 use js_sys::Math;
 use std::cell::RefCell;
-use wasm_bindgen::closure::Closure;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
 use web_sys::{
@@ -69,6 +68,8 @@ pub struct Renderer {
     prompt_hidden_input: HtmlInputElement,
     prompt_label: HtmlElement,
     suggestions: HtmlElement,
+    suggestion_items: RefCell<Vec<HtmlSpanElement>>,
+    suggestion_toggle: RefCell<Option<HtmlButtonElement>>,
     ai_toggle: HtmlElement,
     ai_indicator: HtmlElement,
     achievement_layer: HtmlElement,
@@ -123,6 +124,8 @@ impl Renderer {
             prompt_hidden_input,
             prompt_label,
             suggestions,
+            suggestion_items: RefCell::new(Vec::new()),
+            suggestion_toggle: RefCell::new(None),
             ai_toggle,
             ai_indicator,
             achievement_layer,
@@ -669,46 +672,80 @@ impl Renderer {
     where
         T: IntoIterator<Item = (String, String)>,
     {
-        self.suggestions.set_inner_html("");
         let items: Vec<(String, String)> = suggestions.into_iter().collect();
         let total = items.len();
         let has_extras = total > COMPACT_SUGGESTION_VISIBLE_COUNT;
+        let mut extras_rendered = has_extras;
         let expanded = self
             .suggestions
             .get_attribute("data-expanded")
             .map(|value| value == "true")
             .unwrap_or(false);
 
-        let fragment = self.document.create_document_fragment();
-        for (index, (command, label)) in items.into_iter().enumerate() {
-            if let Ok(div) = self.document.create_element("span") {
-                let span = div.dyn_into::<HtmlSpanElement>().ok();
-                if let Some(span) = span {
-                    let mut classes = String::from("suggestion");
-                    if has_extras && index >= COMPACT_SUGGESTION_VISIBLE_COUNT {
-                        classes.push_str(" suggestion--extra");
-                    }
-                    span.set_class_name(&classes);
-                    let _ = span.set_attribute("data-command", &command);
-                    let _ = span.set_attribute("role", "button");
-                    let _ = span.set_attribute("tabindex", "0");
-                    span.set_text_content(Some(&label));
-                    let _ = fragment.append_child(&span);
+        {
+            let mut cache = self.suggestion_items.borrow_mut();
+            let mut toggle = self.suggestion_toggle.borrow_mut();
+
+            if let Some(button) = toggle.as_ref() {
+                if let Some(parent) = button.parent_node() {
+                    let node: Node = button.clone().into();
+                    let _ = parent.remove_child(&node);
                 }
             }
-        }
-        let _ = self.suggestions.append_child(&fragment);
 
-        if has_extras {
-            let _ = self
-                .suggestions
-                .set_attribute("data-expanded", if expanded { "true" } else { "false" });
-            let _ = self.suggestions.set_attribute("data-collapsible", "true");
+            while cache.len() > total {
+                if let Some(span) = cache.pop() {
+                    if let Some(parent) = span.parent_node() {
+                        let node: Node = span.into();
+                        let _ = parent.remove_child(&node);
+                    }
+                }
+            }
 
-            if let Ok(toggle_el) = self.document.create_element("button") {
-                if let Ok(button) = toggle_el.dyn_into::<HtmlButtonElement>() {
-                    button.set_class_name("suggestions__toggle");
-                    button.set_type("button");
+            while cache.len() < total {
+                if let Ok(element) = self.document.create_element("span") {
+                    if let Ok(span) = element.dyn_into::<HtmlSpanElement>() {
+                        let _ = span.set_attribute("role", "button");
+                        let _ = span.set_attribute("tabindex", "0");
+                        let node: Node = span.clone().into();
+                        let _ = self.suggestions.append_child(&node);
+                        cache.push(span);
+                    }
+                } else {
+                    break;
+                }
+            }
+
+            for (index, (span, (command, label))) in cache.iter().zip(items.iter()).enumerate() {
+                let mut classes = String::from("suggestion");
+                if has_extras && index >= COMPACT_SUGGESTION_VISIBLE_COUNT {
+                    classes.push_str(" suggestion--extra");
+                }
+                span.set_class_name(&classes);
+                let _ = span.set_attribute("data-command", command);
+                span.set_text_content(Some(label));
+            }
+
+            if has_extras {
+                let button = if let Some(existing) = toggle.as_ref() {
+                    Some(existing.clone())
+                } else {
+                    match self.document.create_element("button") {
+                        Ok(element) => match element.dyn_into::<HtmlButtonElement>() {
+                            Ok(button) => {
+                                button.set_class_name("suggestions__toggle");
+                                button.set_type("button");
+                                let _ = button.set_attribute("aria-controls", SUGGESTIONS_ID);
+                                let clone = button.clone();
+                                *toggle = Some(clone);
+                                Some(button)
+                            }
+                            Err(_) => None,
+                        },
+                        Err(_) => None,
+                    }
+                };
+                if let Some(button) = button {
                     button.set_text_content(Some(if expanded {
                         SUGGESTION_COLLAPSE_LABEL
                     } else {
@@ -716,47 +753,55 @@ impl Renderer {
                     }));
                     let _ = button
                         .set_attribute("aria-expanded", if expanded { "true" } else { "false" });
-                    let _ = button.set_attribute("aria-controls", SUGGESTIONS_ID);
-
-                    let suggestions_ref = self.suggestions.clone();
-                    let button_ref = button.clone();
-                    let toggle_handler =
-                        Closure::wrap(Box::new(move |event: web_sys::MouseEvent| {
-                            event.prevent_default();
-                            event.stop_propagation();
-
-                            let is_expanded = suggestions_ref
-                                .get_attribute("data-expanded")
-                                .map(|value| value == "true")
-                                .unwrap_or(false);
-                            let next_state = !is_expanded;
-                            let _ = suggestions_ref.set_attribute(
-                                "data-expanded",
-                                if next_state { "true" } else { "false" },
-                            );
-                            button_ref.set_text_content(Some(if next_state {
-                                SUGGESTION_COLLAPSE_LABEL
-                            } else {
-                                SUGGESTION_EXPAND_LABEL
-                            }));
-                            let _ = button_ref.set_attribute(
-                                "aria-expanded",
-                                if next_state { "true" } else { "false" },
-                            );
-                        }) as Box<dyn FnMut(_)>);
-
-                    let _ = button.add_event_listener_with_callback(
-                        "click",
-                        toggle_handler.as_ref().unchecked_ref(),
-                    );
-                    toggle_handler.forget();
-
-                    let _ = self.suggestions.append_child(&button);
+                    let node: Node = button.clone().into();
+                    let _ = self.suggestions.append_child(&node);
+                } else {
+                    extras_rendered = false;
                 }
             }
+        }
+
+        if extras_rendered {
+            let _ = self
+                .suggestions
+                .set_attribute("data-expanded", if expanded { "true" } else { "false" });
+            let _ = self.suggestions.set_attribute("data-collapsible", "true");
         } else {
             let _ = self.suggestions.remove_attribute("data-expanded");
             let _ = self.suggestions.remove_attribute("data-collapsible");
+        }
+    }
+
+    pub fn toggle_suggestions_expanded(&self) {
+        {
+            let toggle = self.suggestion_toggle.borrow();
+            let has_button = toggle
+                .as_ref()
+                .and_then(|button| button.parent_node())
+                .is_some();
+            if !has_button {
+                return;
+            }
+        }
+
+        let is_expanded = self
+            .suggestions
+            .get_attribute("data-expanded")
+            .map(|value| value == "true")
+            .unwrap_or(false);
+        let next_state = !is_expanded;
+        let _ = self
+            .suggestions
+            .set_attribute("data-expanded", if next_state { "true" } else { "false" });
+        let toggle = self.suggestion_toggle.borrow();
+        if let Some(button) = toggle.as_ref() {
+            button.set_text_content(Some(if next_state {
+                SUGGESTION_COLLAPSE_LABEL
+            } else {
+                SUGGESTION_EXPAND_LABEL
+            }));
+            let _ =
+                button.set_attribute("aria-expanded", if next_state { "true" } else { "false" });
         }
     }
 

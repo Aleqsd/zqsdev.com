@@ -321,6 +321,13 @@ fn handle_printable(terminal: &Terminal, event: &KeyboardEvent) {
 }
 
 fn handle_suggestion_click(terminal: &Terminal, event: MouseEvent) {
+    if wants_suggestions_toggle(event.target()) {
+        event.prevent_default();
+        event.stop_propagation();
+        terminal.toggle_suggestions_expanded();
+        return;
+    }
+
     if let Some(command) = lookup_suggestion_command(event.target()) {
         event.prevent_default();
         event.stop_propagation();
@@ -331,6 +338,17 @@ fn handle_suggestion_click(terminal: &Terminal, event: MouseEvent) {
             ));
         }
     }
+}
+
+fn wants_suggestions_toggle(target: Option<EventTarget>) -> bool {
+    let mut current = target.and_then(|value| value.dyn_into::<Element>().ok());
+    while let Some(element) = current {
+        if element.class_list().contains("suggestions__toggle") {
+            return true;
+        }
+        current = element.parent_element();
+    }
+    false
 }
 
 fn lookup_suggestion_command(target: Option<EventTarget>) -> Option<String> {

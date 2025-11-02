@@ -1268,6 +1268,10 @@ impl Terminal {
         render_current_suggestions(&self.state, &self.renderer);
     }
 
+    pub fn toggle_suggestions_expanded(&self) {
+        self.renderer.toggle_suggestions_expanded();
+    }
+
     fn handle_ai_mode_submission(&self, input: String) -> Result<(), JsValue> {
         let normalized = input.trim().to_ascii_lowercase();
         if normalized == "help" {

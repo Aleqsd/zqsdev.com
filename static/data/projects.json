@@ -29,14 +29,6 @@
         "link": "https://x.com/BeeToBee_Ynov"
     },
     {
-        "name": "📱 Cherry Sports",
-        "desc": "Built a motivational Android app that tracks workouts, visualizes progress, and rewards consistency using neuroscience-inspired mechanics.",
-        "tech": [
-            "Android"
-        ],
-        "link": null
-    },
-    {
         "name": "🎥 TheClair - End of Study Project",
         "desc": "Managed a four-person team to deliver Kinect-controlled theater projector software, developed in C++/Qt with a MySQL backend.",
         "tech": [
