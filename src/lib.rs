@@ -71,24 +71,13 @@ async fn fetch_all_data() -> Result<TerminalData, JsValue> {
 
     let profile_fut = utils::fetch_json::<Profile>(&profile_path);
     let skills_fut = utils::fetch_json::<BTreeMap<String, Vec<String>>>(&skills_path);
-    let experiences_fut =
-        utils::fetch_json::<Vec<Experience>>(&experiences_path);
-    let education_fut =
-        utils::fetch_json::<Vec<Education>>(&education_path);
+    let experiences_fut = utils::fetch_json::<Vec<Experience>>(&experiences_path);
+    let education_fut = utils::fetch_json::<Vec<Education>>(&education_path);
     let projects_fut = utils::fetch_json::<Vec<Project>>(&projects_path);
-    let testimonials_fut =
-        utils::fetch_json::<Vec<Testimonial>>(&testimonials_path);
+    let testimonials_fut = utils::fetch_json::<Vec<Testimonial>>(&testimonials_path);
     let faqs_fut = utils::fetch_json::<Vec<FaqEntry>>(&faqs_path);
 
-    let (
-        profile,
-        skills,
-        experiences,
-        education,
-        projects,
-        testimonials,
-        faqs,
-    ) = futures::try_join!(
+    let (profile, skills, experiences, education, projects, testimonials, faqs) = futures::try_join!(
         profile_fut,
         skills_fut,
         experiences_fut,

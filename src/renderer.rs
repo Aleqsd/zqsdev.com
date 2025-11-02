@@ -3,6 +3,7 @@ use crate::markdown;
 use crate::utils;
 use gloo_timers::future::TimeoutFuture;
 use js_sys::Math;
+use std::cell::RefCell;
 use wasm_bindgen::closure::Closure;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
@@ -74,6 +75,7 @@ pub struct Renderer {
     achievements_trigger: HtmlElement,
     achievements_overlay: HtmlElement,
     achievements_modal: HtmlElement,
+    last_command: RefCell<Option<HtmlElement>>,
 }
 
 impl Renderer {
@@ -127,6 +129,7 @@ impl Renderer {
             achievements_trigger,
             achievements_overlay,
             achievements_modal,
+            last_command: RefCell::new(None),
         })
     }
 
@@ -176,6 +179,10 @@ impl Renderer {
         line.append_child(&label_span)?;
         line.append_child(&command_span)?;
         self.output.append_child(&line)?;
+        {
+            let mut anchor = self.last_command.borrow_mut();
+            *anchor = Some(line.clone());
+        }
         let element: &HtmlElement = line.unchecked_ref();
         self.apply_scroll(element, behavior)?;
         Ok(())
@@ -624,6 +631,7 @@ impl Renderer {
 
     pub fn clear_output(&self) {
         self.output.set_inner_html("");
+        self.last_command.borrow_mut().take();
     }
 
     pub async fn type_output_text(&self, text: &str, delay_ms: u32) -> Result<(), JsValue> {
@@ -1128,8 +1136,12 @@ impl Renderer {
     }
 
     fn scroll_to_bottom(&self) {
-        let scroll_height = self.output.scroll_height();
-        self.output.set_scroll_top(scroll_height);
+        if let Some(command) = self.last_command.borrow().as_ref() {
+            let _ = self.scroll_to_child(command);
+        } else {
+            let scroll_height = self.output.scroll_height();
+            self.output.set_scroll_top(scroll_height);
+        }
     }
 
     fn scroll_to_child(&self, child: &HtmlElement) -> Result<(), JsValue> {

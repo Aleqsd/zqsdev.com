@@ -234,11 +234,7 @@ impl Terminal {
         self.refresh_suggestions();
 
         let ai_mode_active = self.ai_mode_active();
-        let command_scroll = if ai_mode_active {
-            ScrollBehavior::Bottom
-        } else {
-            ScrollBehavior::Anchor
-        };
+        let command_scroll = ScrollBehavior::Anchor;
         self.renderer.append_spacer_line(ScrollBehavior::None)?;
         self.renderer
             .append_command(&prompt_label, &display_line, command_scroll)?;
@@ -278,11 +274,7 @@ impl Terminal {
             commands::execute(command, &state, extra)
         };
 
-        let output_scroll = if ai_mode_active {
-            ScrollBehavior::Bottom
-        } else {
-            ScrollBehavior::None
-        };
+        let output_scroll = ScrollBehavior::Bottom;
 
         match action {
             Ok(CommandAction::Output(text)) => {
@@ -380,11 +372,7 @@ impl Terminal {
     fn handle_unknown_command(&self, command: &str) -> Result<(), JsValue> {
         let message =
             format!("Command not found: `{command}`\nType `help` to list available commands.");
-        let info_scroll = if self.ai_mode_active() {
-            ScrollBehavior::Bottom
-        } else {
-            ScrollBehavior::None
-        };
+        let info_scroll = ScrollBehavior::Bottom;
         self.renderer
             .append_output_text(&message, info_scroll.clone())?;
         let html = r#"Need a hand? <button type="button" class="ai-mode-cta" data-action="activate-ai-mode">Ask the AI assistant</button>"#;
@@ -1283,13 +1271,8 @@ impl Terminal {
     fn handle_ai_mode_submission(&self, input: String) -> Result<(), JsValue> {
         let normalized = input.trim().to_ascii_lowercase();
         if normalized == "help" {
-            let behavior = if self.ai_mode_active() {
-                ScrollBehavior::Bottom
-            } else {
-                ScrollBehavior::None
-            };
             self.renderer
-                .append_output_text(AI_HELP_MESSAGE, behavior)?;
+                .append_output_text(AI_HELP_MESSAGE, ScrollBehavior::Bottom)?;
             return Ok(());
         }
         if normalized == "quit" {
@@ -1301,12 +1284,8 @@ impl Terminal {
     fn queue_ai_answer(&self, question: String) -> Result<(), JsValue> {
         let data_ready = { self.state.borrow().data.is_some() };
         if !data_ready {
-            let behavior = if self.ai_mode_active() {
-                ScrollBehavior::Bottom
-            } else {
-                ScrollBehavior::None
-            };
-            self.renderer.append_info_line(AI_DATA_LOADING, behavior)?;
+            self.renderer
+                .append_info_line(AI_DATA_LOADING, ScrollBehavior::Bottom)?;
             return Ok(());
         }
 
@@ -1410,12 +1389,8 @@ impl Terminal {
             } else {
                 AI_DEACTIVATED_INFO
             };
-            let behavior = if active {
-                ScrollBehavior::Bottom
-            } else {
-                ScrollBehavior::None
-            };
-            self.renderer.append_info_line(message, behavior)?;
+            self.renderer
+                .append_info_line(message, ScrollBehavior::Bottom)?;
         }
 
         if previous != active {
