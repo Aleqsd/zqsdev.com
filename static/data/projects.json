@@ -1,74 +1,85 @@
-[
-    {
-        "name": "🎮 Micro Mages (NES to PS5 Port)",
-        "desc": "Combined faithful emulation with modern enhancements, building QA automation, CI/CD pipelines, and publishing workflows for the PS5 release with online multiplayer and PSN achievements.",
-        "tech": [
-            "Python",
-            "QA Automation",
-            "GitHub Actions",
-            "Lua"
-        ],
-        "link": "https://store.playstation.com/en-us/concept/10008684"
-    },
-    {
-        "name": "🕹️ Mistale Studio",
-        "desc": "Directed a 15-person startup team to ship a cross-platform Line Tower Wars title with PvP and community features for the Intel Game Developer Contest.",
-        "tech": [
-            "Leadership",
-            "Unity",
-            "Video Games"
-        ],
-        "link": "https://x.com/MistaleStudio"
-    },
-    {
-        "name": "🐝 BeeToBee",
-        "desc": "Delivered a campus web and mobile platform enabling Ynov students to offer peer-led trainings and manage professionalization certifications.",
-        "tech": [
-            "Android"
-        ],
-        "link": "https://x.com/BeeToBee_Ynov"
-    },
-    {
-        "name": "🎥 TheClair - End of Study Project",
-        "desc": "Managed a four-person team to deliver Kinect-controlled theater projector software, developed in C++/Qt with a MySQL backend.",
-        "tech": [
-            "C++",
-            "Qt",
-            "Microsoft Visual Studio",
-            "SVN",
-            "MySQL"
-        ],
-        "link": null
-    },
-    {
-        "name": "🎮 E-Sport player @ Millenium",
-        "desc": "I was part of the World of Warcraft roster of the multi-gaming structure Millenium, at the age of 17 (whose organizers later founded Webedia)",
-        "tech": [
-            "E-Sport",
-            "Video Games"
-        ],
-        "link": "https://x.com/BeeToBee_Ynov"
-    },
-    {
-        "name": "📄 Machine Learning and Cancer Prediction",
-        "desc": "Researched interpretable ML for oncology, interviewing field experts and building an XGBoost prototype on the Wisconsin Breast Cancer Dataset for early-detection support.",
-        "tech": [
-            "Machine Learning",
-            "XGBoost",
-            "Data Science"
-        ],
-        "link": "https://drive.google.com/file/d/1vSn7ih7-lTybVDkfm3Re2lNdA2dCDqO_/view"
-    },
-    {
-        "name": "🏆 First Place – Workshop Ynov National",
-        "desc": "Led the winning Atos France x Ynov team among 2600 students, delivering a full tender response with product, marketing, and engineering pitches to a 400-person jury.",
-        "tech": [],
-        "link": null
-    },
-    {
-        "name": "🏆 Winner – Student Battle Code",
-        "desc": "Captured national honors at Sopra Steria's programming challenge across French engineering schools through rapid problem-solving and team coordination.",
-        "tech": [],
-        "link": null
-    }
-]
+{
+    "projects": [
+        {
+            "title": "🎮 Micro Mages (NES to PS5 Port)",
+            "date": "2023 - 2024",
+            "description": "Port of the NES classic Micro Mages to PlayStation 5, combining faithful emulation with modern enhancements. Led QA strategy, built test automation tools, and developed CI/CD pipelines for emulator deployment and PlayStation compliance.",
+            "tech": [
+                "Python",
+                "QA Automation",
+                "GitHub Actions",
+                "Lua"
+            ],
+            "link": "https://store.playstation.com/en-us/concept/10008684"
+        },
+        {
+            "title": "🏰 Mistale Studio – Line Tower Wars",
+            "date": "2017 - 2020",
+            "description": "Directed a 15-member team for a startup project competing in the Intel Game Developer Contest. Oversaw game design, project management, and development of a cross-platform PvP title with community features.",
+            "tech": [
+                "Unity3D",
+                "Leadership",
+                "Video Games"
+            ],
+            "link": "https://x.com/MistaleStudio"
+        },
+        {
+            "title": "🐝 BeeToBee",
+            "date": "2016 - 2018",
+            "description": "Developed a web and mobile platform for Ynov students to share and attend peer-to-peer trainings. Implemented wiki-based documentation to manage professional certification processes.",
+            "tech": [
+                "Android",
+                "Web Development"
+            ],
+            "link": "https://x.com/BeeToBee_Ynov"
+        },
+        {
+            "title": "🎭 TheClair – End of Study Project",
+            "date": "2012 - 2013",
+            "description": "Led a 4-member team to build theater projector management software controlled by Kinect. Responsible for project management, C++/Qt development, and database integration.",
+            "tech": [
+                "C++",
+                "Qt",
+                "MySQL",
+                "SVN",
+                "Microsoft Visual Studio"
+            ]
+        },
+        {
+            "title": "🕹️ E-Sport Player @ Millenium",
+            "date": "2010",
+            "description": "Competed as part of the World of Warcraft roster for Millenium, one of France’s major multi-gaming organizations (later part of Webedia).",
+            "tech": [
+                "E-Sport",
+                "Gaming"
+            ]
+        }
+    ],
+    "publications": [
+        {
+            "title": "🧬 Machine Learning and Cancer Prediction",
+            "date": "2019",
+            "description": "Master thesis exploring the use of XGBoost and interpretable machine learning in cancer prediction. Includes interview with Dr. Moulin, oncologist in Marseille.",
+            "tech": [
+                "Python",
+                "Machine Learning",
+                "XGBoost"
+            ],
+            "link": "https://drive.google.com/file/d/1vSn7ih7-lTybVDkfm3Re2lNdA2dCDqO_/view"
+        }
+    ],
+    "awards": [
+        {
+            "title": "🥇 First place – Workshop Ynov National",
+            "issuer": "Atos France & Ynov National",
+            "date": "2019",
+            "description": "National competition among 2600 students presenting development, marketing, and design projects. Delivered oral presentation during finals before a professional jury."
+        },
+        {
+            "title": "🏆 Winner – Student Battle Code",
+            "issuer": "Sopra Steria",
+            "date": "2018",
+            "description": "National-level programming competition involving top engineering and IT schools across France."
+        }
+    ]
+}

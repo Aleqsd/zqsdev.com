@@ -170,6 +170,7 @@ impl Terminal {
             let mut state = self.state.borrow_mut();
             state.achievement_shaw_unlocked = false;
             state.achievement_pokemon_unlocked = false;
+            state.achievement_cookie_unlocked = false;
             state.achievement_konami_unlocked = false;
             state.achievement_shutdown_unlocked = false;
             state.achievements_spoilers_enabled = false;
@@ -1567,7 +1568,8 @@ struct StoredAchievements {
 mod tests {
     use super::*;
     use crate::state::{
-        Education, Experience, FaqEntry, Profile, ProfileLinks, Project, TerminalData, Testimonial,
+        Education, Experience, FaqEntry, Profile, ProfileLinks, ProjectsCollection, TerminalData,
+        Testimonial,
     };
     use wasm_bindgen_test::wasm_bindgen_test;
 
@@ -1596,7 +1598,7 @@ mod tests {
             BTreeMap::new(),
             Vec::<Experience>::new(),
             Vec::<Education>::new(),
-            Vec::<Project>::new(),
+            ProjectsCollection::default(),
             Vec::<Testimonial>::new(),
             Vec::<FaqEntry>::new(),
         );

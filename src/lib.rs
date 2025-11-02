@@ -59,7 +59,7 @@ async fn load_terminal_data(terminal: Rc<Terminal>, state: Rc<RefCell<AppState>>
 }
 
 async fn fetch_all_data() -> Result<TerminalData, JsValue> {
-    use state::{Education, Experience, FaqEntry, Project, Testimonial};
+    use state::{Education, Experience, FaqEntry, ProjectsCollection, Testimonial};
     use std::collections::BTreeMap;
 
     let base = "./data";
@@ -76,7 +76,7 @@ async fn fetch_all_data() -> Result<TerminalData, JsValue> {
     let skills_fut = utils::fetch_json::<BTreeMap<String, Vec<String>>>(&skills_path);
     let experiences_fut = utils::fetch_json::<Vec<Experience>>(&experiences_path);
     let education_fut = utils::fetch_json::<Vec<Education>>(&education_path);
-    let projects_fut = utils::fetch_json::<Vec<Project>>(&projects_path);
+    let projects_fut = utils::fetch_json::<ProjectsCollection>(&projects_path);
     let testimonials_fut = utils::fetch_json::<Vec<Testimonial>>(&testimonials_path);
     let faqs_fut = utils::fetch_json::<Vec<FaqEntry>>(&faqs_path);
 

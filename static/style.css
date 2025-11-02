@@ -840,14 +840,16 @@ body.theme-midnight {
 .achievement-card__icon {
     font-size: 1.6rem;
     line-height: 1;
-    color: rgba(173, 244, 255, 0.95);
-    filter: drop-shadow(0 0 8px rgba(92, 207, 230, 0.75));
     display: inline-flex;
+    transition: transform 0.25s ease, filter 0.25s ease, opacity 0.25s ease;
 }
 
-.achievement-card[data-state="locked"] .achievement-card__icon {
-    color: rgba(136, 164, 182, 0.7);
-    filter: grayscale(1) brightness(0.6);
+.achievement-card__icon[data-icon="trophy"] {
+    filter: drop-shadow(0 0 12px rgba(255, 196, 96, 0.75));
+}
+
+.achievement-card__icon[data-icon="egg"] {
+    filter: grayscale(1) brightness(0.55);
     opacity: 0.6;
 }
 

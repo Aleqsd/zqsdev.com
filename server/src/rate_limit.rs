@@ -76,6 +76,14 @@ impl RateLimiter {
         }
     }
 
+    fn prune_stale_ips(&mut self, now: Instant) {
+        self.per_ip
+            .retain(|_, windows| {
+                windows.prune(now);
+                !windows.is_idle()
+            });
+    }
+
     pub fn check_and_record(&mut self, ip: &str, cost: f64) -> Result<(), RateLimitError> {
         let now = Instant::now();
 
@@ -96,6 +104,7 @@ impl RateLimiter {
         self.hour_cost.prune(now);
         self.day_cost.prune(now);
         self.month_cost.prune(now);
+        self.prune_stale_ips(now);
 
         let ip_windows = self
             .per_ip
@@ -276,6 +285,20 @@ impl IpWindows {
             day: CountWindow::new(DAY, PER_IP_DAY_MAX),
         }
     }
+
+    fn prune(&mut self, now: Instant) {
+        self.burst.prune(now);
+        self.minute.prune(now);
+        self.hour.prune(now);
+        self.day.prune(now);
+    }
+
+    fn is_idle(&self) -> bool {
+        self.burst.is_empty()
+            && self.minute.is_empty()
+            && self.hour.is_empty()
+            && self.day.is_empty()
+    }
 }
 
 impl CountWindow {
@@ -297,6 +320,10 @@ impl CountWindow {
         }
     }
 
+    fn is_empty(&self) -> bool {
+        self.entries.is_empty()
+    }
+
     fn would_exceed(&mut self, now: Instant) -> bool {
         self.prune(now);
         self.entries.len() >= self.limit
@@ -304,6 +331,17 @@ impl CountWindow {
 
     fn record(&mut self, now: Instant) {
         self.entries.push_back(now);
+    }
+}
+
+#[cfg(test)]
+impl RateLimiter {
+    fn tracked_ip_count(&self) -> usize {
+        self.per_ip.len()
+    }
+
+    fn ip_windows_mut(&mut self, ip: &str) -> Option<&mut IpWindows> {
+        self.per_ip.get_mut(ip)
     }
 }
 
@@ -360,5 +398,28 @@ mod tests {
         assert!(snapshot.minute_spend >= 0.1 - f64::EPSILON);
         assert_eq!(snapshot.ip_burst, 1);
         assert_eq!(snapshot.ip_minute, 1);
+    }
+
+    #[test]
+    fn idle_ip_windows_are_pruned() {
+        let mut limiter = RateLimiter::new(0.5, 2.0, 5.0, 10.0);
+        let stale_ip = "198.51.100.7";
+        assert!(limiter.check_and_record(stale_ip, 0.1).is_ok());
+        assert_eq!(limiter.tracked_ip_count(), 1);
+
+        {
+            let windows = limiter.ip_windows_mut(stale_ip).unwrap();
+            windows.burst.entries.clear();
+            windows.minute.entries.clear();
+            windows.hour.entries.clear();
+            windows.day.entries.clear();
+        }
+
+        let active_ip = "203.0.113.1";
+        assert!(limiter.check_and_record(active_ip, 0.1).is_ok());
+
+        assert_eq!(limiter.tracked_ip_count(), 1);
+        assert!(limiter.ip_windows_mut(stale_ip).is_none());
+        assert!(limiter.ip_windows_mut(active_ip).is_some());
     }
 }

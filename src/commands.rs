@@ -1,4 +1,7 @@
-use crate::state::{AppState, Education, Experience, Profile, Project, TerminalData};
+use crate::state::{
+    AppState, Award, Education, Experience, Profile, Project, ProjectsCollection, Publication,
+    TerminalData,
+};
 use crate::utils;
 use js_sys::Math;
 use std::collections::BTreeMap;
@@ -530,7 +533,7 @@ mod tests {
             skills,
             Vec::<Experience>::new(),
             Vec::<Education>::new(),
-            Vec::<Project>::new(),
+            ProjectsCollection::default(),
             testimonials,
             faqs,
         );
@@ -747,17 +750,26 @@ mod tests {
 
     #[test]
     fn render_projects_html_omits_link_when_absent() {
-        let projects = vec![Project {
-            name: "Demo".to_string(),
-            desc: "No external link provided.".to_string(),
-            tech: vec!["Rust".to_string(), "Testing".to_string()],
-            link: None,
-        }];
+        let collection = ProjectsCollection {
+            projects: vec![Project {
+                title: "Demo".to_string(),
+                date: Some("2024".to_string()),
+                description: "No external link provided.".to_string(),
+                tech: vec!["Rust".to_string(), "Testing".to_string()],
+                link: None,
+            }],
+            publications: Vec::new(),
+            awards: Vec::new(),
+        };
 
-        let output = super::render_projects_html(&projects);
+        let output = super::render_projects_html(&collection);
         assert!(
             output.contains("Demo"),
             "Project name should be present:\n{output}"
+        );
+        assert!(
+            output.contains("<small>2024</small>"),
+            "Project year should render within a small tag:\n{output}"
         );
         assert!(
             output.contains("<strong>Tech:</strong> Rust, Testing"),
@@ -771,14 +783,19 @@ mod tests {
 
     #[test]
     fn render_projects_html_includes_clickable_link() {
-        let projects = vec![Project {
-            name: "Linked Project".to_string(),
-            desc: "Has a URL attached.".to_string(),
-            tech: vec!["Rust".to_string()],
-            link: Some("https://example.com/demo".to_string()),
-        }];
+        let collection = ProjectsCollection {
+            projects: vec![Project {
+                title: "Linked Project".to_string(),
+                date: None,
+                description: "Has a URL attached.".to_string(),
+                tech: vec!["Rust".to_string()],
+                link: Some("https://example.com/demo".to_string()),
+            }],
+            publications: Vec::new(),
+            awards: Vec::new(),
+        };
 
-        let output = super::render_projects_html(&projects);
+        let output = super::render_projects_html(&collection);
         assert!(
             output.contains(r#"href="https://example.com/demo""#),
             "Expected anchor href in HTML output:\n{output}"
@@ -795,14 +812,20 @@ mod tests {
 
     #[test]
     fn render_projects_html_omits_tech_when_empty() {
-        let projects = vec![Project {
-            name: "No Tech Listed".to_string(),
-            desc: "An entry focusing on achievements without a tech stack.".to_string(),
-            tech: Vec::new(),
-            link: Some("https://example.com".to_string()),
-        }];
+        let collection = ProjectsCollection {
+            projects: vec![Project {
+                title: "No Tech Listed".to_string(),
+                date: None,
+                description: "An entry focusing on achievements without a tech stack."
+                    .to_string(),
+                tech: Vec::new(),
+                link: Some("https://example.com".to_string()),
+            }],
+            publications: Vec::new(),
+            awards: Vec::new(),
+        };
 
-        let output = super::render_projects_html(&projects);
+        let output = super::render_projects_html(&collection);
         assert!(
             output.contains("No Tech Listed"),
             "Project name should appear:\n{output}"
@@ -814,6 +837,75 @@ mod tests {
         assert!(
             !output.contains("<strong>Tech:</strong>"),
             "Formatter should omit tech line when list is empty:\n{output}"
+        );
+    }
+
+    #[test]
+    fn render_projects_html_includes_publications_section() {
+        let collection = ProjectsCollection {
+            projects: Vec::new(),
+            publications: vec![Publication {
+                title: "Whitepaper".to_string(),
+                date: Some("2023".to_string()),
+                description: "Explores advanced rendering techniques.".to_string(),
+                tech: vec!["Rust".to_string(), "WebGPU".to_string()],
+                link: Some("https://example.com/whitepaper".to_string()),
+            }],
+            awards: Vec::new(),
+        };
+
+        let output = super::render_projects_html(&collection);
+        assert!(
+            output.contains("<h2>Publications</h2>"),
+            "Section heading should render for publications:\n{output}"
+        );
+        assert!(
+            output.contains("Whitepaper"),
+            "Publication title should be present:\n{output}"
+        );
+        assert!(
+            output.contains("<small>2023</small>"),
+            "Publication date should render within a small tag:\n{output}"
+        );
+        assert!(
+            output.contains("Rust, WebGPU"),
+            "Publication tech stack should appear:\n{output}"
+        );
+    }
+
+    #[test]
+    fn render_projects_html_displays_awards_metadata() {
+        let collection = ProjectsCollection {
+            projects: Vec::new(),
+            publications: Vec::new(),
+            awards: vec![Award {
+                title: "Top Innovator".to_string(),
+                issuer: Some("TechConf".to_string()),
+                date: Some("2022".to_string()),
+                description: Some("Recognised for breakthrough in AI tooling.".to_string()),
+            }],
+        };
+
+        let output = super::render_projects_html(&collection);
+        assert!(
+            output.contains("<h2>Awards</h2>"),
+            "Section heading should render for awards:\n{output}"
+        );
+        assert!(
+            output.contains("Top Innovator"),
+            "Award title should be listed:\n{output}"
+        );
+        assert!(
+            output.contains("<strong>Issuer:</strong> TechConf"),
+            "Issuer metadata should be highlighted:\n{output}"
+        );
+        assert!(
+            output.contains("<small>2022</small>"),
+            "Award date should render within a small tag:\n{output}"
+        );
+        assert!(
+            output.contains("breakthrough in AI tooling"),
+            "Award description should appear when provided:\n{output}"
         );
     }
 
@@ -883,46 +975,144 @@ mod tests {
     }
 }
 
-fn render_projects_html(projects: &[Project]) -> String {
-    if projects.is_empty() {
+fn render_projects_html(collection: &ProjectsCollection) -> String {
+    let has_projects = !collection.projects.is_empty();
+    let has_publications = !collection.publications.is_empty();
+    let has_awards = !collection.awards.is_empty();
+
+    if !has_projects && !has_publications && !has_awards {
         return String::new();
     }
 
     let mut html = String::from("<div class=\"projects\">");
-    for project in projects {
-        html.push_str("<article class=\"project\">");
-        html.push_str("<h3>");
-        html.push_str(&utils::escape_html(&project.name));
-        html.push_str("</h3>");
-        html.push_str("<p>");
-        html.push_str(&utils::escape_html(&project.desc));
-        html.push_str("</p>");
-
-        let tech = project
-            .tech
-            .iter()
-            .filter(|item| !item.trim().is_empty())
-            .map(|item| utils::escape_html(item))
-            .collect::<Vec<_>>();
-        if !tech.is_empty() {
-            html.push_str("<p><strong>Tech:</strong> ");
-            html.push_str(&tech.join(", "));
-            html.push_str("</p>");
+    if has_projects {
+        html.push_str("<section class=\"projects-group\">");
+        html.push_str("<h2>Projects</h2>");
+        for project in &collection.projects {
+            push_project_like(
+                &mut html,
+                "project",
+                &project.title,
+                project.date.as_deref(),
+                &project.description,
+                &project.tech,
+                project.link.as_deref(),
+            );
         }
+        html.push_str("</section>");
+    }
 
-        if let Some(link) = project.link.as_ref().filter(|link| !link.trim().is_empty()) {
-            let safe_link = utils::escape_html(link);
-            html.push_str("<p><a href=\"");
-            html.push_str(&safe_link);
-            html.push_str("\" target=\"_blank\" rel=\"noopener noreferrer\">");
-            html.push_str(&safe_link);
-            html.push_str("</a></p>");
+    if has_publications {
+        html.push_str("<section class=\"projects-group\">");
+        html.push_str("<h2>Publications</h2>");
+        for publication in &collection.publications {
+            push_project_like(
+                &mut html,
+                "publication",
+                &publication.title,
+                publication.date.as_deref(),
+                &publication.description,
+                &publication.tech,
+                publication.link.as_deref(),
+            );
         }
+        html.push_str("</section>");
+    }
 
-        html.push_str("</article>");
+    if has_awards {
+        html.push_str("<section class=\"projects-group\">");
+        html.push_str("<h2>Awards</h2>");
+        for award in &collection.awards {
+            push_award(&mut html, award);
+        }
+        html.push_str("</section>");
     }
     html.push_str("</div>");
     html
+}
+
+fn push_project_like(
+    html: &mut String,
+    class_name: &str,
+    title: &str,
+    date: Option<&str>,
+    description: &str,
+    tech: &[String],
+    link: Option<&str>,
+) {
+    html.push_str("<article class=\"");
+    html.push_str(class_name);
+    html.push_str("\">");
+    html.push_str("<h3>");
+    html.push_str(&utils::escape_html(title));
+    if let Some(date) = date.filter(|value| !value.trim().is_empty()) {
+        html.push_str(" <small>");
+        html.push_str(&utils::escape_html(date));
+        html.push_str("</small>");
+    }
+    html.push_str("</h3>");
+
+    html.push_str("<p>");
+    html.push_str(&utils::escape_html(description));
+    html.push_str("</p>");
+
+    let tech = tech
+        .iter()
+        .filter_map(|item| {
+            let trimmed = item.trim();
+            if trimmed.is_empty() {
+                None
+            } else {
+                Some(utils::escape_html(trimmed))
+            }
+        })
+        .collect::<Vec<_>>();
+    if !tech.is_empty() {
+        html.push_str("<p><strong>Tech:</strong> ");
+        html.push_str(&tech.join(", "));
+        html.push_str("</p>");
+    }
+
+    if let Some(link) = link.filter(|value| !value.trim().is_empty()) {
+        let safe_link = utils::escape_html(link);
+        html.push_str("<p><a href=\"");
+        html.push_str(&safe_link);
+        html.push_str("\" target=\"_blank\" rel=\"noopener noreferrer\">");
+        html.push_str(&safe_link);
+        html.push_str("</a></p>");
+    }
+
+    html.push_str("</article>");
+}
+
+fn push_award(html: &mut String, award: &Award) {
+    html.push_str("<article class=\"award\">");
+    html.push_str("<h3>");
+    html.push_str(&utils::escape_html(&award.title));
+    if let Some(date) = award.date.as_deref().filter(|value| !value.trim().is_empty()) {
+        html.push_str(" <small>");
+        html.push_str(&utils::escape_html(date));
+        html.push_str("</small>");
+    }
+    html.push_str("</h3>");
+
+    if let Some(issuer) = award.issuer.as_deref().filter(|value| !value.trim().is_empty()) {
+        html.push_str("<p><strong>Issuer:</strong> ");
+        html.push_str(&utils::escape_html(issuer));
+        html.push_str("</p>");
+    }
+
+    if let Some(description) = award
+        .description
+        .as_deref()
+        .filter(|value| !value.trim().is_empty())
+    {
+        html.push_str("<p>");
+        html.push_str(&utils::escape_html(description));
+        html.push_str("</p>");
+    }
+
+    html.push_str("</article>");
 }
 
 fn render_contact_html(profile: &Profile) -> String {

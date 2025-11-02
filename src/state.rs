@@ -41,10 +41,47 @@ pub struct Education {
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Project {
-    pub name: String,
-    pub desc: String,
+    pub title: String,
+    #[serde(default)]
+    pub date: Option<String>,
+    pub description: String,
+    #[serde(default)]
     pub tech: Vec<String>,
+    #[serde(default)]
     pub link: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct Publication {
+    pub title: String,
+    #[serde(default)]
+    pub date: Option<String>,
+    pub description: String,
+    #[serde(default)]
+    pub tech: Vec<String>,
+    #[serde(default)]
+    pub link: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct Award {
+    pub title: String,
+    #[serde(default)]
+    pub issuer: Option<String>,
+    #[serde(default)]
+    pub date: Option<String>,
+    #[serde(default)]
+    pub description: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, Default)]
+pub struct ProjectsCollection {
+    #[serde(default)]
+    pub projects: Vec<Project>,
+    #[serde(default)]
+    pub publications: Vec<Publication>,
+    #[serde(default)]
+    pub awards: Vec<Award>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -67,7 +104,7 @@ pub struct TerminalData {
     pub skills: BTreeMap<String, Vec<String>>,
     pub experiences: Vec<Experience>,
     pub education: Vec<Education>,
-    pub projects: Vec<Project>,
+    pub projects: ProjectsCollection,
     pub testimonials: Vec<Testimonial>,
     pub faqs: Vec<FaqEntry>,
 }
@@ -78,7 +115,7 @@ impl TerminalData {
         skills: BTreeMap<String, Vec<String>>,
         experiences: Vec<Experience>,
         education: Vec<Education>,
-        projects: Vec<Project>,
+        projects: ProjectsCollection,
         testimonials: Vec<Testimonial>,
         faqs: Vec<FaqEntry>,
     ) -> Self {

@@ -376,7 +376,13 @@ impl Renderer {
                 .create_element("span")?
                 .dyn_into::<HtmlElement>()?;
             icon.set_class_name("achievement-card__icon");
-            icon.set_text_content(Some("🥚"));
+            let (icon_symbol, icon_kind) = if achievement.unlocked {
+                ("🏆", "trophy")
+            } else {
+                ("🥚", "egg")
+            };
+            icon.set_text_content(Some(icon_symbol));
+            icon.set_attribute("data-icon", icon_kind)?;
 
             let meta = self
                 .document
