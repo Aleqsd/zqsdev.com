@@ -25,13 +25,6 @@
     <link rel="stylesheet" href="./style.min.css">
     <link
         rel="preload"
-        href="./pkg/zqs_terminal_bg.wasm"
-        as="fetch"
-        type="application/wasm"
-        crossorigin
-    >
-    <link
-        rel="preload"
         href="./images/zqsdev_gradient_logo.webp"
         as="image"
         fetchpriority="high"
@@ -115,6 +108,7 @@
         🦀 Developed in Rust by Alexandre DO-O ALMEIDA — Open source on <a href="https://github.com/Aleqsd/zqsdev.com" target="_blank" rel="noopener noreferrer">GitHub</a>.
     </footer>
     <script src="./build_id.js"></script>
+    <script>window.__BUILD_ID__ = window.__BUILD_ID__ || "dev";</script>
     <script type="module">
         const BUILD_ID = window.__BUILD_ID__ || "dev";
         const moduleUrl = `./pkg/zqs_terminal.js?build=${BUILD_ID}`;
@@ -123,7 +117,7 @@
         async function boot() {
             try {
                 const module = await import(moduleUrl);
-                await module.default(wasmUrl);
+                await module.default({ module_or_path: wasmUrl });
             } catch (err) {
                 console.error("Failed to bootstrap WebAssembly terminal:", err);
                 const fallback = document.getElementById("output");
