@@ -17,7 +17,7 @@ NETLIFY_MESSAGE ?= Deploy $(PROJECT_VERSION)
 AUTOTEST_FLAGS ?=
 VERSION_URL ?= https://www.zqsdev.com/api/version
 
-.PHONY: build clean check fmt serve serve-static test autotest deploy-preview deploy-prod deploy update backend-log rag version-check bump-version ensure-version-bumped
+.PHONY: build build-frontend clean check fmt serve serve-static test autotest deploy-preview deploy-prod deploy update backend-log rag version-check bump-version ensure-version-bumped
 
 build:
 	@command -v wasm-pack >/dev/null 2>&1 || { echo "wasm-pack not found. Install with 'cargo install wasm-pack'."; exit 1; }
@@ -37,6 +37,9 @@ build:
 	else \
 		$(MAKE) rag; \
 	fi
+
+build-frontend:
+	@SKIP_RAG=1 $(MAKE) build
 
 rag:
 	@command -v python3 >/dev/null 2>&1 || { echo "python3 not found. Install Python 3 to continue."; exit 1; }

@@ -1,6 +1,6 @@
 [build]
 publish = "static"
-command = ""
+command = "make build-frontend"
 
 # Serve the résumé viewer directly when the cv subdomain is hit
 [[redirects]]
