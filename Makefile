@@ -11,10 +11,12 @@ SERVER_MANIFEST = server/Cargo.toml
 NETLIFY_BIN ?= netlify
 NETLIFY_FLAGS ?=
 PROJECT_VERSION := $(shell cat VERSION 2>/dev/null)
+LOCAL_COMMIT := $(shell git rev-parse --short HEAD 2>/dev/null)
 NETLIFY_MESSAGE ?= Deploy $(PROJECT_VERSION)
 AUTOTEST_FLAGS ?=
+VERSION_URL ?= https://www.zqsdev.com/api/version
 
-.PHONY: build clean check fmt serve serve-static test autotest deploy-preview deploy-prod deploy update backend-log rag
+.PHONY: build clean check fmt serve serve-static test autotest deploy-preview deploy-prod deploy update backend-log rag version-check
 
 build:
 	@command -v wasm-pack >/dev/null 2>&1 || { echo "wasm-pack not found. Install with 'cargo install wasm-pack'."; exit 1; }
@@ -82,6 +84,11 @@ update:
 
 backend-log:
 	@sudo tail -f backend.log
+
+version-check:
+	@echo "Local frontend version: $(PROJECT_VERSION)"
+	@echo "Local commit: $(LOCAL_COMMIT)"
+	@VERSION_URL="$(VERSION_URL)" python3 scripts/version_check.py
 
 clean:
 	cargo clean
