@@ -15,7 +15,7 @@
         {
             "title": "🧠 ZQSDev Terminal – AI Résumé Concierge",
             "date": "2023 - Present",
-            "description": "Built this interactive portfolio terminal that combines a Rust/Axum backend, multi-provider LLM APIs (Gemini, Groq, OpenAI), and a retrieval-augmented knowledge base so recruiters can ask natural-language questions against my résumé.",
+            "description": "Built this interactive portfolio terminal that combines a Rust/Axum backend, multi-provider LLM APIs (Gemini, Groq, OpenAI), and a retrieval-augmented generation (RAG) knowledge base so recruiters can ask natural-language questions against my résumé.",
             "tech": [
                 "Rust",
                 "RAG",
