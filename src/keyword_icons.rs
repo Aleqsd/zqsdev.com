@@ -803,6 +803,27 @@ mod tests {
     }
 
     #[test]
+    fn tokenize_detects_webassembly_in_comma_list() {
+        let segments = tokenize("Tech: Rust, WebAssembly, Netlify.");
+        assert_eq!(
+            segments,
+            vec![
+                Segment::Text("Tech: ".to_string()),
+                Segment::Icon(IconMatch {
+                    token: "Rust".to_string(),
+                    icon_path: "/icons/rust-original.svg"
+                }),
+                Segment::Text(", ".to_string()),
+                Segment::Icon(IconMatch {
+                    token: "WebAssembly".to_string(),
+                    icon_path: "/icons/wasm-original.svg"
+                }),
+                Segment::Text(", Netlify.".to_string()),
+            ]
+        );
+    }
+
+    #[test]
     fn tokenize_detects_sql_and_gcp() {
         let segments = tokenize("Data layer runs on SQL with GCP services.");
         assert_eq!(
