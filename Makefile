@@ -9,7 +9,6 @@ SERVER_PORT ?= 3000
 STATIC_PORT ?= 8765
 SERVER_MANIFEST = server/Cargo.toml
 NETLIFY_BIN ?= netlify
-NETLIFY_CONFIG ?= netlify.toml
 NETLIFY_FLAGS ?=
 PROJECT_VERSION := $(shell cat VERSION 2>/dev/null)
 NETLIFY_MESSAGE ?= Deploy $(PROJECT_VERSION)
@@ -68,11 +67,11 @@ serve-static: build
 
 deploy-preview: build
 	@command -v $(NETLIFY_BIN) >/dev/null 2>&1 || { echo "netlify CLI not found. Install with 'npm install -g netlify-cli'."; exit 1; }
-	$(NETLIFY_BIN) deploy --dir $(STATIC_DIR) --config $(NETLIFY_CONFIG) --message "$(NETLIFY_MESSAGE)" $(NETLIFY_FLAGS)
+	$(NETLIFY_BIN) deploy --dir $(STATIC_DIR) --message "$(NETLIFY_MESSAGE)" $(NETLIFY_FLAGS)
 
 deploy-prod: build
 	@command -v $(NETLIFY_BIN) >/dev/null 2>&1 || { echo "netlify CLI not found. Install with 'npm install -g netlify-cli'."; exit 1; }
-	$(NETLIFY_BIN) deploy --dir $(STATIC_DIR) --prod --config $(NETLIFY_CONFIG) --message "$(NETLIFY_MESSAGE)" $(NETLIFY_FLAGS)
+	$(NETLIFY_BIN) deploy --dir $(STATIC_DIR) --prod --message "$(NETLIFY_MESSAGE)" $(NETLIFY_FLAGS)
 
 deploy: deploy-prod
 
