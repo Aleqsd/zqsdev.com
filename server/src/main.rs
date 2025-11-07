@@ -1190,12 +1190,14 @@ fn tokens_to_cost(input_tokens: usize, output_tokens: usize) -> f64 {
 fn build_user_prompt(question: &str, context: Option<&[ContextChunk]>) -> String {
     if let Some(chunks) = context {
         let mut buffer = String::new();
-        buffer.push_str("Use the referenced context chunks to answer the question. Cite chunks like [chunk-1].\n");
-        for (idx, chunk) in chunks.iter().enumerate() {
+        buffer.push_str(
+            "Use the referenced context chunks to answer the question. Cite chunks like [chunk:static-profile].\n",
+        );
+        for chunk in chunks {
+            let label = sanitize_chunk_label(&chunk.id);
             let _ = writeln!(
                 buffer,
-                "[chunk-{}] source: {} | topic: {}\n{}\n",
-                idx + 1,
+                "[chunk:{label}] source: {} | topic: {}\n{}\n",
                 chunk.source,
                 chunk.topic,
                 chunk.body.trim()
@@ -1219,6 +1221,12 @@ fn fallback_context_chunks(payload: &TerminalDataPayload) -> Vec<ContextChunk> {
     }
     if let Some(project_chunk) = build_projects_chunk(payload) {
         chunks.push(project_chunk);
+    }
+    if let Some(skills_chunk) = build_skills_chunk(payload) {
+        chunks.push(skills_chunk);
+    }
+    if let Some(faq_chunk) = build_faq_chunk(payload) {
+        chunks.push(faq_chunk);
     }
     if chunks.is_empty() {
         if let Ok(snapshot) = serde_json::to_string(&payload.knowledge_json()) {
@@ -1282,15 +1290,25 @@ fn build_experience_chunk(payload: &TerminalDataPayload) -> Option<ContextChunk>
             .get("title")
             .and_then(Value::as_str)
             .unwrap_or("Role");
-        let start = experience.get("start").and_then(Value::as_str).unwrap_or("");
-        let end = experience.get("end").and_then(Value::as_str).unwrap_or("Present");
+        let start = experience
+            .get("start")
+            .and_then(Value::as_str)
+            .unwrap_or("");
+        let end = experience
+            .get("end")
+            .and_then(Value::as_str)
+            .unwrap_or("Present");
         let location = experience
             .get("location")
             .and_then(Value::as_str)
             .unwrap_or("");
         sections.push(format!("{company} — {title} ({start} - {end}) {location}"));
         if let Some(highlights) = experience.get("highlights").and_then(Value::as_array) {
-            let details: Vec<&str> = highlights.iter().filter_map(Value::as_str).take(2).collect();
+            let details: Vec<&str> = highlights
+                .iter()
+                .filter_map(Value::as_str)
+                .take(2)
+                .collect();
             if !details.is_empty() {
                 sections.push(format!("Highlights: {}", details.join(" | ")));
             }
@@ -1343,9 +1361,105 @@ fn build_projects_chunk(payload: &TerminalDataPayload) -> Option<ContextChunk> {
     })
 }
 
+fn build_skills_chunk(payload: &TerminalDataPayload) -> Option<ContextChunk> {
+    let skills = payload.skills.as_object()?;
+    if skills.is_empty() {
+        return None;
+    }
+    let mut sections = Vec::new();
+    for (category, entries_value) in skills.iter() {
+        if let Some(entries) = entries_value.as_array() {
+            let highlights: Vec<&str> = entries.iter().filter_map(Value::as_str).take(3).collect();
+            if !highlights.is_empty() {
+                sections.push(format!("{category}: {}", highlights.join(", ")));
+            }
+        }
+        if sections.len() >= 4 {
+            break;
+        }
+    }
+    if sections.is_empty() {
+        return None;
+    }
+    Some(ContextChunk {
+        id: "static-skills".to_string(),
+        source: "skills.json".to_string(),
+        topic: "Core skills".to_string(),
+        body: sections.join("\n"),
+        score: 0.0,
+    })
+}
+
+fn build_faq_chunk(payload: &TerminalDataPayload) -> Option<ContextChunk> {
+    let faqs = payload.faqs.as_array()?;
+    if faqs.is_empty() {
+        return None;
+    }
+    let mut selections = Vec::new();
+    if let Some(idx) = faqs.iter().position(|entry| {
+        entry
+            .get("answer")
+            .and_then(Value::as_str)
+            .map(|answer| answer.to_lowercase().contains("codex"))
+            .unwrap_or(false)
+    }) {
+        selections.push(idx);
+    }
+    for idx in 0..faqs.len() {
+        if selections.contains(&idx) {
+            continue;
+        }
+        selections.push(idx);
+        if selections.len() >= 3 {
+            break;
+        }
+    }
+    let mut sections = Vec::new();
+    for idx in selections {
+        if let Some(entry) = faqs.get(idx) {
+            let question = entry
+                .get("question")
+                .and_then(Value::as_str)
+                .unwrap_or("Question");
+            let answer = entry
+                .get("answer")
+                .and_then(Value::as_str)
+                .unwrap_or("Answer unavailable.");
+            sections.push(format!("{question}: {answer}"));
+        }
+    }
+    if sections.is_empty() {
+        return None;
+    }
+    Some(ContextChunk {
+        id: "static-faq".to_string(),
+        source: "faq.json".to_string(),
+        topic: "Frequently asked questions".to_string(),
+        body: sections.join("\n\n"),
+        score: 0.0,
+    })
+}
+
+fn sanitize_chunk_label(id: &str) -> String {
+    let mut label = String::with_capacity(id.len());
+    for ch in id.chars() {
+        if ch.is_whitespace() {
+            label.push('-');
+        } else if matches!(ch, '[' | ']' | '\n' | '\r') {
+            continue;
+        } else {
+            label.push(ch);
+        }
+    }
+    if label.is_empty() {
+        "context".to_string()
+    } else {
+        label
+    }
+}
+
 fn terminal_payload_with_alias(payload: &TerminalDataPayload) -> serde_json::Value {
-    let mut value =
-        serde_json::to_value(payload).expect("terminal data payload should serialize");
+    let mut value = serde_json::to_value(payload).expect("terminal data payload should serialize");
     if let Some(map) = value.as_object_mut() {
         if let Some(faqs) = map.get("faqs").cloned() {
             map.entry("faq".to_string()).or_insert(faqs);
@@ -1366,8 +1480,7 @@ mod tests {
     }
 
     fn load_terminal_payload(data_dir: &Path) -> TerminalDataPayload {
-        TerminalDataPayload::load(data_dir)
-            .expect("should load knowledge base from static data")
+        TerminalDataPayload::load(data_dir).expect("should load knowledge base from static data")
     }
 
     fn empty_terminal_data() -> std::sync::Arc<TerminalDataPayload> {
@@ -1539,8 +1652,8 @@ mod tests {
         ];
         let prompt = build_user_prompt("What is Alexandre working on?", Some(&chunks));
         assert!(
-            prompt.contains("[chunk-1] source: profile.json"),
-            "prompt should list chunk sources: {prompt}"
+            prompt.contains("[chunk:chunk-1] source: profile.json"),
+            "prompt should list chunk sources with descriptive labels: {prompt}"
         );
         assert!(
             prompt.contains("Highlights about CI/CD"),
@@ -1566,10 +1679,16 @@ mod tests {
             "profile chunk missing from fallback context: {chunks:?}"
         );
         assert!(
-            chunks
-                .iter()
-                .any(|chunk| chunk.source == "experience.json"),
+            chunks.iter().any(|chunk| chunk.source == "experience.json"),
             "experience chunk missing from fallback context: {chunks:?}"
+        );
+        assert!(
+            chunks.iter().any(|chunk| chunk.source == "skills.json"),
+            "skills chunk missing from fallback context: {chunks:?}"
+        );
+        assert!(
+            chunks.iter().any(|chunk| chunk.source == "faq.json"),
+            "faq chunk missing from fallback context: {chunks:?}"
         );
     }
 
