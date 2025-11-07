@@ -32,4 +32,4 @@ Run `make update` from the repo root to:
 
 ## Versioning
 - The project version lives in `VERSION`, `Cargo.toml`, and `server/Cargo.toml`.
-- **Always bump the version number _before every commit_** with `python3 scripts/bump_version.py` or `make bump-version`. Do this prior to edits so both frontend and backend artifacts report the new release identifier and the `version` command stays trustworthy.
+- **Always bump the version number _before every commit_** with `python3 scripts/bump_version.py` or `make bump-version`. Do this prior to edits so both frontend and backend artifacts report the new release identifier and the `version` command stays trustworthy. Immediately stage the updated `VERSION` file (`git add VERSION`) and run `make ensure-version-bumped` to verify the bump is present in your staged changes before committing.

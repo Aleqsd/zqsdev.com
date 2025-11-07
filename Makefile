@@ -17,7 +17,7 @@ NETLIFY_MESSAGE ?= Deploy $(PROJECT_VERSION)
 AUTOTEST_FLAGS ?=
 VERSION_URL ?= https://www.zqsdev.com/api/version
 
-.PHONY: build clean check fmt serve serve-static test autotest deploy-preview deploy-prod deploy update backend-log rag version-check bump-version
+.PHONY: build clean check fmt serve serve-static test autotest deploy-preview deploy-prod deploy update backend-log rag version-check bump-version ensure-version-bumped
 
 build:
 	@command -v wasm-pack >/dev/null 2>&1 || { echo "wasm-pack not found. Install with 'cargo install wasm-pack'."; exit 1; }
@@ -94,6 +94,9 @@ version-check:
 
 bump-version:
 	@python3 scripts/bump_version.py $(BUMP_ARGS)
+
+ensure-version-bumped:
+	@git diff --cached --quiet VERSION && { echo "\n[ensure-version-bumped] VERSION is not staged. Run 'git add VERSION' after bumping."; exit 1; } || echo "[ensure-version-bumped] VERSION bump detected in staged changes."
 
 clean:
 	cargo clean
