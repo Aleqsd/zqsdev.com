@@ -9,6 +9,7 @@
         "Rust",
         "Bash",
         "SQL",
+        "Android",
         "Lua"
     ],
     "☁️ Cloud & DevOps": [
@@ -20,7 +21,8 @@
         "Kubernetes"
     ],
     "🧰 Tools & Engines": [
-        "LLM / AI Tools (Codex, Gemini)",
+        "LLM & Coding Assistant (OpenAI / Claude)",
+        "RAG (Pinecone)",
         "Unity",
         "Unreal Engine 5",
         "Figma",
@@ -33,6 +35,7 @@
     "🧠 Practices": [
         "CI/CD",
         "QA Automation",
+        "Prompt Engineering",
         "Product Management",
         "Team Leadership",
         "Agile / Scrum"
