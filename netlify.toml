@@ -67,6 +67,11 @@ for = "/*.css"
   Cache-Control = "no-store"
 
 [[headers]]
+for = "/pkg/*.js"
+  [headers.values]
+  Cache-Control = "no-store"
+
+[[headers]]
 for = "/data/*.json"
   [headers.values]
   Cache-Control = "no-store"
