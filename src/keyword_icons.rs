@@ -106,6 +106,16 @@ const KEYWORD_PATTERNS: &[KeywordPattern] = &[
         icon_path: "/icons/javascript-original.svg",
     },
     KeywordPattern {
+        pattern: "WebAssembly",
+        pattern_lower: "webassembly",
+        icon_path: "/icons/wasm-original.svg",
+    },
+    KeywordPattern {
+        pattern: "Wasm",
+        pattern_lower: "wasm",
+        icon_path: "/icons/wasm-original.svg",
+    },
+    KeywordPattern {
         pattern: "Kubernetes",
         pattern_lower: "kubernetes",
         icon_path: "/icons/kubernetes-original.svg",
