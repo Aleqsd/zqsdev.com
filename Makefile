@@ -12,6 +12,7 @@ NETLIFY_BIN ?= netlify
 NETLIFY_FLAGS ?=
 PROJECT_VERSION := $(shell cat VERSION 2>/dev/null)
 LOCAL_COMMIT := $(shell git rev-parse --short HEAD 2>/dev/null)
+BUILD_ID := $(or $(LOCAL_COMMIT),$(PROJECT_VERSION),dev)
 NETLIFY_MESSAGE ?= Deploy $(PROJECT_VERSION)
 AUTOTEST_FLAGS ?=
 VERSION_URL ?= https://www.zqsdev.com/api/version
@@ -30,6 +31,7 @@ build:
 	mkdir -p $(STATIC_PKG)
 	cp -r $(PKG_DIR)/* $(STATIC_PKG)/
 	python3 scripts/minify_css.py $(STATIC_DIR)/style.css -o $(STATIC_DIR)/style.min.css
+	@echo "window.__BUILD_ID__ = \"$(BUILD_ID)\";" > $(STATIC_DIR)/build_id.js
 	@if [ "$(SKIP_RAG)" = "1" ]; then \
 		echo "Skipping RAG bundle rebuild because SKIP_RAG=1"; \
 	else \

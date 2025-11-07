@@ -23,7 +23,6 @@
     <meta name="twitter:image:alt" content="ZQSDev gradient logo">
     <link rel="preload" href="./style.min.css" as="style">
     <link rel="stylesheet" href="./style.min.css">
-    <link rel="modulepreload" href="./pkg/zqs_terminal.js">
     <link
         rel="preload"
         href="./pkg/zqs_terminal_bg.wasm"
@@ -115,12 +114,16 @@
     <footer class="page-footnote">
         🦀 Developed in Rust by Alexandre DO-O ALMEIDA — Open source on <a href="https://github.com/Aleqsd/zqsdev.com" target="_blank" rel="noopener noreferrer">GitHub</a>.
     </footer>
+    <script src="./build_id.js"></script>
     <script type="module">
-        import init from "./pkg/zqs_terminal.js";
+        const BUILD_ID = window.__BUILD_ID__ || "dev";
+        const moduleUrl = `./pkg/zqs_terminal.js?build=${BUILD_ID}`;
+        const wasmUrl = `./pkg/zqs_terminal_bg.wasm?build=${BUILD_ID}`;
 
         async function boot() {
             try {
-                await init();
+                const module = await import(moduleUrl);
+                await module.default(wasmUrl);
             } catch (err) {
                 console.error("Failed to bootstrap WebAssembly terminal:", err);
                 const fallback = document.getElementById("output");
