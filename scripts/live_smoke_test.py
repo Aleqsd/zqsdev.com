@@ -180,7 +180,17 @@ class LiveSmokeTester:
         assert match, "could not locate build id assignment"
         build_id = match.group("build").strip()
         assert build_id and build_id != "dev", f"unsafe build id detected: {build_id}"
-        return f"build_id={build_id}"
+        wasm_response = self._head_or_get(
+            f"pkg/zqs_terminal_bg.wasm?build={build_id}"
+        )
+        assert (
+            wasm_response.status_code == 200
+        ), f"wasm request with build id failed: {wasm_response.status_code}"
+        content_type = wasm_response.headers.get("Content-Type", "")
+        assert content_type.startswith(
+            "application/"
+        ), f"unexpected wasm content-type: {content_type}"
+        return f"build_id={build_id} wasm={wasm_response.status_code}"
 
     def test_static_assets(self) -> str:
         assets: Sequence[Tuple[str, Tuple[str, ...]]] = (
