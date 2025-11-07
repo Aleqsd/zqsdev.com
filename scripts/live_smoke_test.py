@@ -74,6 +74,7 @@ class LiveSmokeTester:
             ("Skills dataset", self.test_skills_dataset),
             ("Experience dataset", self.test_experience_dataset),
             ("Projects dataset", self.test_projects_dataset),
+            ("Projects command icons", self.test_projects_command_icons),
             ("FAQ dataset", self.test_faq_dataset),
             ("Testimonials dataset", self.test_testimonials_dataset),
             ("AI concierge", self.test_ai_endpoint),
@@ -306,6 +307,34 @@ class LiveSmokeTester:
         assert isinstance(awards, list) and awards, "awards list missing"
         linked = sum(1 for project in main_projects if project.get("link"))
         return f"projects={len(main_projects)} awards={len(awards)} linked={linked}"
+
+    def test_projects_command_icons(self) -> str:
+        data = self._require_terminal_data()
+        projects = data["projects"].get("projects", [])
+        assert projects, "projects dataset missing"
+        webassembly_projects = [
+            project
+            for project in projects
+            if any(
+                isinstance(tech, str) and tech.strip().lower() == "webassembly"
+                for tech in project.get("tech", [])
+            )
+        ]
+        assert webassembly_projects, "no project lists WebAssembly in tech stack"
+
+        icon_response = self.session.get(
+            self._url("/icons/wasm-original.svg"), timeout=self.timeout
+        )
+        assert icon_response.status_code == 200, "wasm icon missing from static/icons"
+        content_type = icon_response.headers.get("Content-Type", "").lower()
+        assert content_type.startswith(
+            "image/svg+xml"
+        ), f"wasm icon is not an SVG asset (got {content_type})"
+        assert (
+            "<svg" in icon_response.text.lower()
+        ), "wasm icon payload does not contain an SVG tag"
+
+        return f"webassembly_projects={len(webassembly_projects)} icon=wasm-original.svg"
 
     def test_faq_dataset(self) -> str:
         data = self._require_terminal_data()
