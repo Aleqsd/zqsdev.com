@@ -106,6 +106,16 @@ const KEYWORD_PATTERNS: &[KeywordPattern] = &[
         icon_path: "/icons/javascript-original.svg",
     },
     KeywordPattern {
+        pattern: "WebAssembly",
+        pattern_lower: "webassembly",
+        icon_path: "/icons/wasm-original.svg",
+    },
+    KeywordPattern {
+        pattern: "Wasm",
+        pattern_lower: "wasm",
+        icon_path: "/icons/wasm-original.svg",
+    },
+    KeywordPattern {
         pattern: "Kubernetes",
         pattern_lower: "kubernetes",
         icon_path: "/icons/kubernetes-original.svg",
@@ -772,6 +782,43 @@ mod tests {
                     icon_path: "/icons/jira-original.svg"
                 }),
                 Segment::Text(".".to_string()),
+            ]
+        );
+    }
+
+    #[test]
+    fn tokenize_detects_webassembly_keyword() {
+        let segments = tokenize("Deploying a WebAssembly UI.");
+        assert_eq!(
+            segments,
+            vec![
+                Segment::Text("Deploying a ".to_string()),
+                Segment::Icon(IconMatch {
+                    token: "WebAssembly".to_string(),
+                    icon_path: "/icons/wasm-original.svg"
+                }),
+                Segment::Text(" UI.".to_string()),
+            ]
+        );
+    }
+
+    #[test]
+    fn tokenize_detects_webassembly_in_comma_list() {
+        let segments = tokenize("Tech: Rust, WebAssembly, Netlify.");
+        assert_eq!(
+            segments,
+            vec![
+                Segment::Text("Tech: ".to_string()),
+                Segment::Icon(IconMatch {
+                    token: "Rust".to_string(),
+                    icon_path: "/icons/rust-original.svg"
+                }),
+                Segment::Text(", ".to_string()),
+                Segment::Icon(IconMatch {
+                    token: "WebAssembly".to_string(),
+                    icon_path: "/icons/wasm-original.svg"
+                }),
+                Segment::Text(", Netlify.".to_string()),
             ]
         );
     }

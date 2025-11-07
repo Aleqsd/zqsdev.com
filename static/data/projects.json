@@ -13,6 +13,19 @@
             "link": "https://store.playstation.com/en-us/concept/10008684"
         },
         {
+            "title": "🧠 ZQSDev Terminal – AI Résumé Concierge",
+            "date": "2023 - Present",
+            "description": "Built this interactive portfolio terminal that combines a Rust/Axum backend, multi-provider LLM APIs (Gemini, Groq, OpenAI), and a retrieval-augmented knowledge base so recruiters can ask natural-language questions against my résumé.",
+            "tech": [
+                "Rust",
+                "RAG",
+                "LLM APIs",
+                "WebAssembly",
+                "Netlify"
+            ],
+            "link": "https://www.zqsdev.com"
+        },
+        {
             "title": "🏰 Mistale Studio – Line Tower Wars",
             "date": "2017 - 2020",
             "description": "Directed a 15-member team for a startup project competing in the Intel Game Developer Contest. Oversaw game design, project management, and development of a cross-platform PvP title with community features.",
