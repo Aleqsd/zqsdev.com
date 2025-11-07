@@ -8,8 +8,13 @@ An immersive single-page web terminal that reveals Alexandre DO-O ALMEIDA’s r�
 ## ✨ Features
 - 🎛️ Web-only terminal UI with history, autocomplete, theming, achievements, and an **AI Mode** toggle.
 - 📦 Static résumé data sourced from JSON so updates never require a recompile.
-- 🤖 Optional AI concierge proxied through an Axum service that tracks spend limits (≤ €0.50/min, €2/hour & day, €10/month).
+- 🤖 Optional AI concierge proxied through an Axum service that tracks spend limits (≤ €0.50/min, €2/hour & day, €10/month) and now uses Retrieval-Augmented Generation (OpenAI embeddings + Pinecone + SQLite) to cite résumé snippets.
 - 🚀 Build pipeline ships optimized WebAssembly + minified CSS in `static/`, ready for any CDN with an optional Axum proxy.
+
+## 🤖 AI Concierge Stack
+- Retrieval: `python3 scripts/build_rag.py` chunks every résumé JSON file, stores the canonical text in `static/data/rag_chunks.db`, and mirrors the embeddings in Pinecone (1,536‑dim `text-embedding-3-small` vectors).
+- Generation: `/api/ai` embeds each user question, fetches `topK=4` matches from Pinecone, rebuilds the prompt from SQLite, and sends it to `gpt-4o-mini` (with Groq/Gemini fallbacks) while logging the chunk ids + similarity scores.
+- Transparency: every response returns a `context_chunks` array (id, source, topic, score) so tests and the UI can prove the answer was grounded instead of hallucinated.
 
 ## 🗂️ Repository Layout
 ```
@@ -86,6 +91,19 @@ make serve-static STATIC_PORT=9000
 ```
 
 `make build` always refreshes `static/pkg/` and `static/style.min.css`, both of which must ship alongside the rest of `static/` for deployment.
+
+## 📚 Retrieval-Augmented Answers
+The AI concierge now pulls its context from a lightweight hybrid store:
+
+1. `python3 scripts/build_rag.py` (or `make rag`) parses every JSON file under `static/data/`, chunks it, writes `static/data/rag_chunks.db`, and (optionally) upserts fresh embeddings into Pinecone. Add `--skip-pinecone` if you only want to refresh SQLite during local work.
+2. Set `OPENAI_API_KEY`, `PINECONE_API_KEY`, and `PINECONE_HOST=https://<index>-<project>.svc.<region>.pinecone.io` before running the proxy. Optional knobs: `PINECONE_NAMESPACE`, `RAG_DB_PATH` (defaults to `static/data/rag_chunks.db`), `RAG_TOP_K`, `RAG_MIN_SCORE`, and `OPENAI_EMBEDDING_MODEL` (default `text-embedding-3-small`).
+3. On each AI request, the server embeds the question via OpenAI, queries Pinecone for the top chunks, hydrates the canonical text from SQLite, and injects those snippets (tagged `[chunk-n]`) into the LLM prompt so answers stay grounded and cite their sources.
+
+The builder only depends on `python3` and `requests`. Install the extra packages once with `pip install requests` if they are missing. `make build` automatically runs `make rag` at the end so your WASM artifacts and RAG bundle stay in sync. Set `SKIP_RAG=1 make build` if you need to bypass that step locally (e.g. when offline).
+
+Inspect the bundled context with `make rag-inspect`, which prints per-source counts and a few sample chunk IDs.
+
+After every deploy, run `make autotest --base-url https://www.zqsdev.com` (or your preview URL) to ensure the AI response includes `context_chunks` metadata, proving the RAG layer is active.
 
 ## ✅ Tests & Quality Gates
 

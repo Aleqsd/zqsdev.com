@@ -1,6 +1,8 @@
+mod rag;
 mod rate_limit;
 mod static_data;
 
+use crate::rag::{ContextChunk, RagRetriever};
 use crate::rate_limit::RateLimiter;
 use crate::static_data::TerminalDataPayload;
 use anyhow::{anyhow, Context};
@@ -13,6 +15,7 @@ use dotenvy::Error as DotenvError;
 use serde::{Deserialize, Serialize};
 use std::convert::Infallible;
 use std::env::VarError;
+use std::fmt::Write;
 use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -31,6 +34,7 @@ const GROQ_MODEL_NAME: &str = "llama-3.1-8b-instant";
 const GROQ_ENDPOINT: &str = "https://api.groq.com/openai/v1/chat/completions";
 const OPENAI_MODEL_NAME: &str = "gpt-4o-mini";
 const OPENAI_ENDPOINT: &str = "https://api.openai.com/v1/chat/completions";
+const OPENAI_EMBEDDING_MODEL: &str = "text-embedding-3-small";
 const MAX_COMPLETION_TOKENS: usize = 384;
 const USER_OVERHEAD_TOKENS: usize = 32;
 const INPUT_COST_EUR_PER_1K: f64 = 0.000552; // Converted from $0.0006 ≈ €0.000552 (fx ~0.92)
@@ -45,6 +49,7 @@ struct AppState {
     limiter: Arc<Mutex<RateLimiter>>,
     knowledge: KnowledgeBase,
     client: AiClient,
+    retriever: Option<RagRetriever>,
     terminal_data: Arc<TerminalDataPayload>,
 }
 
@@ -82,6 +87,25 @@ struct AiAnswer {
     cost_eur: f64,
 }
 
+#[derive(Debug, Serialize, Clone)]
+struct ContextChunkMeta {
+    id: String,
+    source: String,
+    topic: String,
+    score: f32,
+}
+
+impl ContextChunkMeta {
+    fn from_chunk(chunk: &ContextChunk) -> Self {
+        Self {
+            id: chunk.id.clone(),
+            source: chunk.source.clone(),
+            topic: chunk.topic.clone(),
+            score: chunk.score,
+        }
+    }
+}
+
 #[derive(Debug, Deserialize)]
 struct AiRequest {
     question: String,
@@ -93,6 +117,8 @@ struct AiResponse {
     ai_enabled: bool,
     reason: Option<String>,
     model: Option<&'static str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    context_chunks: Option<Vec<ContextChunkMeta>>,
 }
 
 #[tokio::main]
@@ -133,6 +159,13 @@ async fn main() -> anyhow::Result<()> {
     let data_dir = static_dir.join("data");
     let terminal_data = Arc::new(TerminalDataPayload::load(&data_dir)?);
     let knowledge = KnowledgeBase::from_payload(terminal_data.as_ref())?;
+    let retriever = match build_retriever(&static_dir, &openai_key).await {
+        Ok(value) => value,
+        Err(err) => {
+            warn!(target: "rag", error = %err, "RAG retrieval disabled due to init failure");
+            None
+        }
+    };
 
     let client = AiClient::new(google_key, groq_key, Some(openai_key))?;
     if client.has_groq() {
@@ -170,6 +203,7 @@ async fn main() -> anyhow::Result<()> {
         ))),
         knowledge,
         client,
+        retriever,
         terminal_data,
     });
 
@@ -229,6 +263,63 @@ async fn main() -> anyhow::Result<()> {
     .await?;
 
     Ok(())
+}
+
+async fn build_retriever(
+    static_dir: &Path,
+    openai_key: &str,
+) -> anyhow::Result<Option<RagRetriever>> {
+    let pinecone_key = match std::env::var("PINECONE_API_KEY") {
+        Ok(value) => value,
+        Err(_) => return Ok(None),
+    };
+    let pinecone_host = match std::env::var("PINECONE_HOST") {
+        Ok(value) => value,
+        Err(_) => {
+            warn!(target: "rag", "PINECONE_HOST not set; skipping retriever initialization");
+            return Ok(None);
+        }
+    };
+    let pinecone_namespace = std::env::var("PINECONE_NAMESPACE").ok();
+    let rag_path = std::env::var("RAG_DB_PATH")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| static_dir.join("data/rag_chunks.db"));
+    if !rag_path.exists() {
+        warn!(
+            target: "rag",
+            path = %rag_path.display(),
+            "RAG SQLite bundle missing; skipping retriever"
+        );
+        return Ok(None);
+    }
+    let embedding_model = std::env::var("OPENAI_EMBEDDING_MODEL")
+        .unwrap_or_else(|_| OPENAI_EMBEDDING_MODEL.to_string());
+    let top_k = std::env::var("RAG_TOP_K")
+        .ok()
+        .and_then(|value| value.parse::<usize>().ok())
+        .unwrap_or(4);
+    let min_score = std::env::var("RAG_MIN_SCORE")
+        .ok()
+        .and_then(|value| value.parse::<f32>().ok())
+        .unwrap_or(0.45);
+    let retriever = RagRetriever::new(
+        rag_path,
+        pinecone_host,
+        pinecone_key,
+        pinecone_namespace,
+        openai_key.to_string(),
+        embedding_model,
+        top_k,
+        min_score,
+    )
+    .await?;
+    info!(
+        target: "rag",
+        top_k,
+        min_score = min_score,
+        "Pinecone-backed retriever ready"
+    );
+    Ok(Some(retriever))
 }
 
 async fn shutdown_signal() {
@@ -319,6 +410,7 @@ async fn handle_ai(
             ai_enabled: true,
             reason: Some("empty_question".to_string()),
             model: primary_model,
+            context_chunks: None,
         };
         return (StatusCode::BAD_REQUEST, Json(response));
     }
@@ -330,12 +422,49 @@ async fn handle_ai(
             ai_enabled: true,
             reason: Some("question_too_long".to_string()),
             model: primary_model,
+            context_chunks: None,
         };
         return (StatusCode::BAD_REQUEST, Json(response));
     }
 
-    let openai_cost_estimate = state.estimate_openai_cost(question);
-    let request_cost_estimate = state.estimate_cost(question);
+    let mut rag_chunks = Vec::new();
+    if let Some(retriever) = state.retriever.as_ref() {
+        match retriever.retrieve(question).await {
+            Ok(chunks) => {
+                if !chunks.is_empty() {
+                    let ids: Vec<&str> = chunks.iter().map(|chunk| chunk.id.as_str()).collect();
+                    info!(
+                        target: "rag",
+                        hit_count = chunks.len(),
+                        chunk_ids = ?ids,
+                        "RAG context attached to question"
+                    );
+                }
+                rag_chunks = chunks;
+            }
+            Err(err) => {
+                warn!(target: "rag", error = %err, "RAG retrieval failed for question");
+            }
+        }
+    }
+    let context_meta = if rag_chunks.is_empty() {
+        None
+    } else {
+        Some(
+            rag_chunks
+                .iter()
+                .map(ContextChunkMeta::from_chunk)
+                .collect::<Vec<_>>(),
+        )
+    };
+    let rag_context = if rag_chunks.is_empty() {
+        None
+    } else {
+        Some(rag_chunks.as_slice())
+    };
+
+    let openai_cost_estimate = state.estimate_openai_cost(question, &rag_chunks);
+    let request_cost_estimate = state.estimate_cost(question, &rag_chunks);
 
     let ip = remote.ip().to_string();
     let mut limiter = state.limiter.lock().await;
@@ -365,6 +494,7 @@ async fn handle_ai(
             ai_enabled: false,
             reason: Some(reason.to_string()),
             model: primary_model,
+            context_chunks: context_meta.clone(),
         };
         return (status, Json(response));
     }
@@ -373,7 +503,12 @@ async fn handle_ai(
 
     match state
         .client
-        .ask(&state.knowledge, question, openai_cost_estimate)
+        .ask(
+            &state.knowledge,
+            question,
+            rag_context,
+            openai_cost_estimate,
+        )
         .await
     {
         Ok(ai_answer) => {
@@ -410,6 +545,7 @@ async fn handle_ai(
                         ai_enabled: false,
                         reason: Some(reason.to_string()),
                         model: Some(model),
+                        context_chunks: context_meta.clone(),
                     };
                     return (status, Json(response));
                 }
@@ -448,6 +584,7 @@ async fn handle_ai(
                 ai_enabled: true,
                 reason: None,
                 model: Some(model),
+                context_chunks: context_meta.clone(),
             };
             (StatusCode::OK, Json(response))
         }
@@ -474,6 +611,7 @@ async fn handle_ai(
                 ai_enabled: true,
                 reason: Some("backend_error".to_string()),
                 model: primary_model,
+                context_chunks: context_meta,
             };
             (StatusCode::SERVICE_UNAVAILABLE, Json(response))
         }
@@ -481,40 +619,61 @@ async fn handle_ai(
 }
 
 impl AppState {
-    fn estimate_cost(&self, question: &str) -> f64 {
+    fn estimate_cost(&self, question: &str, contexts: &[ContextChunk]) -> f64 {
         if self.client.has_free_backend() {
             0.0
         } else {
-            self.estimate_openai_cost(question)
+            self.estimate_openai_cost(question, contexts)
         }
     }
 
-    fn estimate_openai_cost(&self, question: &str) -> f64 {
+    fn estimate_openai_cost(&self, question: &str, contexts: &[ContextChunk]) -> f64 {
         let question_tokens = estimate_tokens(question);
-        let input_tokens = self.knowledge.system_tokens + question_tokens + USER_OVERHEAD_TOKENS;
+        let context_tokens: usize = contexts
+            .iter()
+            .map(|chunk| estimate_tokens(&chunk.body))
+            .sum();
+        let input_tokens =
+            self.knowledge.system_tokens + question_tokens + context_tokens + USER_OVERHEAD_TOKENS;
         let output_tokens = MAX_COMPLETION_TOKENS;
         tokens_to_cost(input_tokens, output_tokens)
     }
 }
 
 impl KnowledgeBase {
-    fn load(dir: &Path) -> anyhow::Result<Self> {
-        let payload = TerminalDataPayload::load(dir)?;
-        Self::from_payload(&payload)
-    }
-
     fn from_payload(payload: &TerminalDataPayload) -> anyhow::Result<Self> {
-        let combined = payload.knowledge_json();
-        let pretty = serde_json::to_string_pretty(&combined)?;
+        let profile_name = payload
+            .profile
+            .get("name")
+            .and_then(|value| value.as_str())
+            .unwrap_or("Alexandre DO-O ALMEIDA");
+        let headline = payload
+            .profile
+            .get("headline")
+            .and_then(|value| value.as_str())
+            .unwrap_or("Senior DevOps & product engineer");
+        let location = payload
+            .profile
+            .get("location")
+            .and_then(|value| value.as_str())
+            .unwrap_or("Remote");
+        let summary = payload
+            .profile
+            .get("summary_en")
+            .and_then(|value| value.as_str())
+            .unwrap_or("Use the supplied résumé context to answer questions about Alexandre.");
         let system_prompt = format!(
             concat!(
-                "You are an assistant for Alexandre DO-O ALMEIDA. ",
-                "Only answer using the facts provided in the JSON knowledge base and keep responses detailed and structured. ",
-                "If requested details are missing, share the closest matching facts and clearly label any inference as an \"educated guess\" without presenting it as certain. ",
-                "Never invent information that contradicts the knowledge base.\n\n",
-                "Knowledge base (JSON):\n{}"
+                "You are the AI concierge for {name} ({headline}) based in {location}. ",
+                "Answer using only the provided context chunks (tagged as [chunk-n]) that accompany each user question. ",
+                "Cite the chunk ids you reference, keep responses structured, and never invent employers, dates, metrics, or locations that are not in context. ",
+                "If context is missing, clearly say so and outline what can be shared from the résumé at a high level.\n",
+                "Profile summary: {summary}\n"
             ),
-            pretty
+            name = profile_name,
+            headline = headline,
+            location = location,
+            summary = summary
         );
         let system_tokens = estimate_tokens(&system_prompt);
 
@@ -595,12 +754,24 @@ impl AiClient {
         &self,
         knowledge: &KnowledgeBase,
         question: &str,
+        context: Option<&[ContextChunk]>,
         openai_cost: f64,
     ) -> Result<AiAnswer, AiClientError> {
         let mut failures = Vec::new();
+        let user_prompt = build_user_prompt(question, context);
+        let question_chars = question.len();
 
         if let Some(groq) = &self.groq {
-            match self.ask_backend(groq, knowledge, question, 0.0).await {
+            match self
+                .ask_backend(
+                    groq,
+                    &knowledge.system_prompt,
+                    &user_prompt,
+                    question_chars,
+                    0.0,
+                )
+                .await
+            {
                 Ok(answer) => {
                     return Ok(AiAnswer {
                         text: answer,
@@ -627,7 +798,15 @@ impl AiClient {
         }
 
         if let Some(google) = &self.google {
-            match self.ask_google(google, knowledge, question).await {
+            match self
+                .ask_google(
+                    google,
+                    &knowledge.system_prompt,
+                    &user_prompt,
+                    question_chars,
+                )
+                .await
+            {
                 Ok(answer) => {
                     return Ok(AiAnswer {
                         text: answer,
@@ -655,7 +834,13 @@ impl AiClient {
 
         if let Some(openai) = &self.openai {
             match self
-                .ask_backend(openai, knowledge, question, openai_cost)
+                .ask_backend(
+                    openai,
+                    &knowledge.system_prompt,
+                    &user_prompt,
+                    question_chars,
+                    openai_cost,
+                )
                 .await
             {
                 Ok(answer) => {
@@ -688,10 +873,11 @@ impl AiClient {
     async fn ask_google(
         &self,
         backend: &GoogleBackend,
-        knowledge: &KnowledgeBase,
-        question: &str,
+        system_prompt: &str,
+        user_prompt: &str,
+        question_chars: usize,
     ) -> Result<String, BackendError> {
-        let payload = GoogleGenerateRequest::new(&knowledge.system_prompt, question);
+        let payload = GoogleGenerateRequest::new(system_prompt, user_prompt);
         let response = self
             .http
             .post(backend.endpoint)
@@ -718,7 +904,7 @@ impl AiClient {
         info!(
             target: "ai",
             cost_eur = 0.0,
-            chars = question.len(),
+            chars = question_chars,
             model = backend.model,
             msg = "AI response generated by backend"
         );
@@ -728,11 +914,12 @@ impl AiClient {
     async fn ask_backend(
         &self,
         backend: &ApiBackend,
-        knowledge: &KnowledgeBase,
-        question: &str,
+        system_prompt: &str,
+        user_prompt: &str,
+        question_chars: usize,
         cost_eur: f64,
     ) -> Result<String, BackendError> {
-        let payload = ChatRequest::new(backend.model, knowledge, question);
+        let payload = ChatRequest::new(backend.model, system_prompt, user_prompt);
         let response = self
             .http
             .post(backend.endpoint)
@@ -758,7 +945,7 @@ impl AiClient {
         info!(
             target: "ai",
             cost_eur,
-            chars = question.len(),
+            chars = question_chars,
             model = backend.model,
             msg = "AI response generated by backend"
         );
@@ -858,9 +1045,9 @@ struct GoogleGenerationConfig {
 }
 
 impl<'a> GoogleGenerateRequest<'a> {
-    fn new(system_prompt: &'a str, question: &'a str) -> Self {
+    fn new(system_prompt: &'a str, user_prompt: &'a str) -> Self {
         Self {
-            contents: [GoogleContent::user(question)],
+            contents: [GoogleContent::user(user_prompt)],
             system_instruction: GoogleContent::instruction(system_prompt),
             generation_config: GoogleGenerationConfig::new(0.3, MAX_COMPLETION_TOKENS as u32),
         }
@@ -907,7 +1094,7 @@ struct ChatMessage<'a> {
 }
 
 impl<'a> ChatRequest<'a> {
-    fn new(model: &'a str, knowledge: &'a KnowledgeBase, question: &'a str) -> Self {
+    fn new(model: &'a str, system_prompt: &'a str, user_prompt: &'a str) -> Self {
         Self {
             model,
             temperature: 0.3,
@@ -915,11 +1102,11 @@ impl<'a> ChatRequest<'a> {
             messages: [
                 ChatMessage {
                     role: "system",
-                    content: &knowledge.system_prompt,
+                    content: system_prompt,
                 },
                 ChatMessage {
                     role: "user",
-                    content: question,
+                    content: user_prompt,
                 },
             ],
         }
@@ -988,20 +1175,39 @@ fn tokens_to_cost(input_tokens: usize, output_tokens: usize) -> f64 {
     (input_cost + output_cost).max(0.0)
 }
 
+fn build_user_prompt(question: &str, context: Option<&[ContextChunk]>) -> String {
+    if let Some(chunks) = context {
+        let mut buffer = String::new();
+        buffer.push_str("Use the referenced context chunks to answer the question. Cite chunks like [chunk-1].\n");
+        for (idx, chunk) in chunks.iter().enumerate() {
+            let _ = writeln!(
+                buffer,
+                "[chunk-{}] source: {} | topic: {}\n{}\n",
+                idx + 1,
+                chunk.source,
+                chunk.topic,
+                chunk.body.trim()
+            );
+        }
+        buffer.push_str("Question:\n");
+        buffer.push_str(question);
+        buffer
+    } else {
+        question.to_string()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::rag::ContextChunk;
     use serde_json::json;
 
     fn load_embedded_knowledge() -> serde_json::Value {
         let data_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../static/data");
-        let knowledge =
-            KnowledgeBase::load(&data_dir).expect("should load knowledge base from static data");
-        let (_, json_text) = knowledge
-            .system_prompt
-            .split_once("Knowledge base (JSON):\n")
-            .expect("system prompt should embed knowledge JSON");
-        serde_json::from_str(json_text).expect("embedded knowledge should be valid JSON")
+        TerminalDataPayload::load(&data_dir)
+            .expect("should load knowledge base from static data")
+            .knowledge_json()
     }
 
     fn empty_terminal_data() -> std::sync::Arc<TerminalDataPayload> {
@@ -1087,12 +1293,27 @@ mod tests {
             ai_enabled: true,
             reason: None,
             model: Some(GROQ_MODEL_NAME),
+            context_chunks: Some(vec![ContextChunkMeta {
+                id: "chunk-1".to_string(),
+                source: "profile.json".to_string(),
+                topic: "Profile".to_string(),
+                score: 0.9,
+            }]),
         };
         let value = serde_json::to_value(&response).expect("serialize response");
         assert_eq!(
             value.get("model").and_then(|entry| entry.as_str()),
             Some(GROQ_MODEL_NAME),
             "Serialized AI response should expose the backend model"
+        );
+        let contexts = value
+            .get("context_chunks")
+            .and_then(|entry| entry.as_array())
+            .expect("context chunks should serialize");
+        assert_eq!(contexts.len(), 1);
+        assert_eq!(
+            contexts[0].get("id").and_then(|entry| entry.as_str()),
+            Some("chunk-1")
         );
     }
 
@@ -1103,7 +1324,7 @@ mod tests {
             system_tokens: 4,
         };
         let question = "What is the latest project?";
-        let request = ChatRequest::new(GROQ_MODEL_NAME, &knowledge, question);
+        let request = ChatRequest::new(GROQ_MODEL_NAME, &knowledge.system_prompt, question);
         assert_eq!(request.model, GROQ_MODEL_NAME);
         assert_eq!(request.messages[0].content, "prompt");
         assert_eq!(request.messages[1].content, question);
@@ -1139,6 +1360,39 @@ mod tests {
     }
 
     #[test]
+    fn user_prompt_includes_context_chunks() {
+        let chunks = vec![
+            ContextChunk {
+                id: "chunk-1".to_string(),
+                source: "profile.json".to_string(),
+                topic: "Profile".to_string(),
+                body: "Name: Alexandre".to_string(),
+                score: 0.92,
+            },
+            ContextChunk {
+                id: "chunk-2".to_string(),
+                source: "experience.json".to_string(),
+                topic: "PlayStation".to_string(),
+                body: "Highlights about CI/CD".to_string(),
+                score: 0.88,
+            },
+        ];
+        let prompt = build_user_prompt("What is Alexandre working on?", Some(&chunks));
+        assert!(
+            prompt.contains("[chunk-1] source: profile.json"),
+            "prompt should list chunk sources: {prompt}"
+        );
+        assert!(
+            prompt.contains("Highlights about CI/CD"),
+            "prompt should inline chunk bodies: {prompt}"
+        );
+        assert!(
+            prompt.ends_with("What is Alexandre working on?"),
+            "prompt should include the user question at the end: {prompt}"
+        );
+    }
+
+    #[test]
     fn estimate_cost_zero_when_free_backend_available() {
         let client = AiClient::new(
             Some("google_key".to_string()),
@@ -1159,9 +1413,10 @@ mod tests {
             ))),
             knowledge,
             client,
+            retriever: None,
             terminal_data: empty_terminal_data(),
         };
-        assert_eq!(app_state.estimate_cost("Hello AI?"), 0.0);
+        assert_eq!(app_state.estimate_cost("Hello AI?", &[]), 0.0);
     }
 
     #[test]

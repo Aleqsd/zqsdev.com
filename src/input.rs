@@ -123,7 +123,10 @@ pub fn install_listeners(terminal: Rc<Terminal>) -> Result<(), JsValue> {
             event.prevent_default();
             event.stop_propagation();
             if let Err(err) = helper_click_terminal.execute_suggestion(&command) {
-                utils::log(&format!("Failed to trigger helper command `{command}`: {:?}", err));
+                utils::log(&format!(
+                    "Failed to trigger helper command `{command}`: {:?}",
+                    err
+                ));
             }
         }
     }) as Box<dyn FnMut(_)>);

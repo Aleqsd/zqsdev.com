@@ -19,11 +19,14 @@ This file captures the details an operator or automation agent needs to keep the
 Run `make update` from the repo root to:
 1. `git pull --rebase` the repository.
 2. Rebuild the WebAssembly bundle and proxy binaries (`make build`).
+   - `make build` now chains into `make rag`, so ensure `OPENAI_API_KEY`/`PINECONE_API_KEY`/`PINECONE_HOST` are exported beforehand. Set `SKIP_RAG=1 make build` if you intentionally want to skip the RAG refresh.
 3. Restart the systemd unit (`sudo systemctl restart zqs-terminal.service`).
 
 ## Workflow notes
 - Before handoff, run `make build` and `make test` so the maintainer can refresh the live site with confidence.
 - Extend the automated test suite for every new feature or bugfix fix to keep coverage trending upward.
+- Run `make rag` (or `python3 scripts/build_rag.py --skip-pinecone`) after editing any `static/data/*.json` so the SQLite cache mirrors the résumé data even if Pinecone is updated later; `make rag-inspect` dumps per-source stats if you want to verify the on-disk contents.
+- After deploying, run `make autotest BASE_URL=https://www.zqsdev.com` (or your target) to ensure `/api/ai` returns grounded answers with `context_chunks` metadata.
 
 ## Versioning
 - The project version lives in `VERSION`, `Cargo.toml`, and `server/Cargo.toml`.

@@ -15,7 +15,7 @@ PROJECT_VERSION := $(shell cat VERSION 2>/dev/null)
 NETLIFY_MESSAGE ?= Deploy $(PROJECT_VERSION)
 AUTOTEST_FLAGS ?=
 
-.PHONY: build clean check fmt serve serve-static test autotest deploy-preview deploy-prod deploy update backend-log
+.PHONY: build clean check fmt serve serve-static test autotest deploy-preview deploy-prod deploy update backend-log rag
 
 build:
 	@command -v wasm-pack >/dev/null 2>&1 || { echo "wasm-pack not found. Install with 'cargo install wasm-pack'."; exit 1; }
@@ -29,6 +29,18 @@ build:
 	mkdir -p $(STATIC_PKG)
 	cp -r $(PKG_DIR)/* $(STATIC_PKG)/
 	python3 scripts/minify_css.py $(STATIC_DIR)/style.css -o $(STATIC_DIR)/style.min.css
+	@if [ "$(SKIP_RAG)" = "1" ]; then \
+		echo "Skipping RAG bundle rebuild because SKIP_RAG=1"; \
+	else \
+		$(MAKE) rag; \
+	fi
+
+rag:
+	@command -v python3 >/dev/null 2>&1 || { echo "python3 not found. Install Python 3 to continue."; exit 1; }
+	python3 scripts/build_rag.py $(RAG_FLAGS)
+
+rag-inspect:
+	@python3 scripts/inspect_rag.py $(RAG_INSPECT_FLAGS)
 
 test:
 	@command -v wasm-pack >/dev/null 2>&1 || { echo "wasm-pack not found. Install with 'cargo install wasm-pack'."; exit 1; }

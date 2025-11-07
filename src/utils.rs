@@ -92,8 +92,7 @@ pub fn tag_resume_source(url: &str) -> String {
         None => (without_fragment, None),
     };
 
-    let mut result =
-        String::with_capacity(url.len() + PARAM_KEY.len() + PARAM_VALUE.len() + 4);
+    let mut result = String::with_capacity(url.len() + PARAM_KEY.len() + PARAM_VALUE.len() + 4);
     result.push_str(prefix);
     result.push('?');
 

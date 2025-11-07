@@ -336,8 +336,16 @@ class LiveSmokeTester:
         assert data.get("ai_enabled") is True, f"ai disabled: {data.get('reason')}"
         answer = data.get("answer", "")
         assert len(answer.strip()) >= 32, "answer too short"
+        contexts = data.get("context_chunks") or []
+        assert contexts, "context_chunks missing or empty"
+        first = contexts[0]
+        for key in ("id", "source", "topic"):
+            assert key in first, f"context chunk missing {key}"
         model = data.get("model") or "unknown"
-        return f"model={model} answer_len={len(answer.strip())}"
+        return (
+            f"model={model} answer_len={len(answer.strip())} "
+            f"contexts={len(contexts)} first_chunk={first['id']}"
+        )
 
 
 def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:

@@ -55,7 +55,7 @@ const KEYWORD_PATTERNS: &[KeywordPattern] = &[
         pattern_lower: "google cloud",
         icon_path: "/icons/googlecloud-original.svg",
     },
-        KeywordPattern {
+    KeywordPattern {
         pattern: "Google",
         pattern_lower: "google",
         icon_path: "/icons/google-original.svg",
@@ -732,8 +732,7 @@ mod tests {
                 Segment::Text("; ".to_string()),
                 Segment::Icon(IconMatch {
                     token: "AWS".to_string(),
-                    icon_path:
-                        "/icons/amazonwebservices-original-wordmark.svg"
+                    icon_path: "/icons/amazonwebservices-original-wordmark.svg"
                 }),
                 Segment::Text(".".to_string())
             ]
