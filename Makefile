@@ -17,7 +17,7 @@ NETLIFY_MESSAGE ?= Deploy $(PROJECT_VERSION)
 AUTOTEST_FLAGS ?=
 VERSION_URL ?= https://www.zqsdev.com/api/version
 
-.PHONY: build clean check fmt serve serve-static test autotest deploy-preview deploy-prod deploy update backend-log rag version-check
+.PHONY: build clean check fmt serve serve-static test autotest deploy-preview deploy-prod deploy update backend-log rag version-check bump-version
 
 build:
 	@command -v wasm-pack >/dev/null 2>&1 || { echo "wasm-pack not found. Install with 'cargo install wasm-pack'."; exit 1; }
@@ -91,6 +91,9 @@ version-check:
 	@echo "Local frontend version: $(PROJECT_VERSION)"
 	@echo "Local commit: $(LOCAL_COMMIT)"
 	@VERSION_URL="$(VERSION_URL)" python3 scripts/version_check.py
+
+bump-version:
+	@python3 scripts/bump_version.py $(BUMP_ARGS)
 
 clean:
 	cargo clean

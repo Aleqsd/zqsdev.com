@@ -24,10 +24,12 @@ Run `make update` from the repo root to:
 
 ## Workflow notes
 - Before handoff, run `make build` and `make test` so the maintainer can refresh the live site with confidence.
+- Typical deploy loop: `make build && make test`, `git push` (Netlify redeploys the frontend automatically), `sudo systemctl restart zqs-terminal.service` to roll the backend, then run `make autotest BASE_URL=https://www.zqsdev.com` to smoke-test production.
 - Extend the automated test suite for every new feature or bugfix fix to keep coverage trending upward.
 - Run `make rag` (or `python3 scripts/build_rag.py --skip-pinecone`) after editing any `static/data/*.json` so the SQLite cache mirrors the résumé data even if Pinecone is updated later; `make rag-inspect` dumps per-source stats if you want to verify the on-disk contents.
 - After deploying, run `make autotest BASE_URL=https://www.zqsdev.com` (or your target) to ensure `/api/ai` returns grounded answers with `context_chunks` metadata.
+- Use the hidden `version` terminal command (or `make version-check`) to verify the frontend and backend are running the same release and to grab the GitHub commit links directly from production.
 
 ## Versioning
 - The project version lives in `VERSION`, `Cargo.toml`, and `server/Cargo.toml`.
-- Bump versions with `python3 scripts/bump_version.py` (defaults to patch) once per handoff, before the first `make build`/`make test`, and reuse that version for any reruns.
+- Bump the version **before every change** with `python3 scripts/bump_version.py` (or `make bump-version`) so both the frontend bundle and backend binary can advertise the accurate release number.

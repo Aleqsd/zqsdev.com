@@ -13,6 +13,7 @@ pub struct CommandDefinition {
 }
 
 const AI_MODEL_NAME: &str = "llama-3.1-8b-instant";
+const REPO_URL: &str = "https://github.com/Aleqsd/zqsdev.com";
 
 pub const COMMAND_DEFINITIONS: &[CommandDefinition] = &[
     CommandDefinition {
@@ -371,10 +372,11 @@ fn execute_ai(state: &AppState) -> Result<CommandAction, String> {
 fn execute_version(state: &AppState) -> Result<CommandAction, String> {
     let mut lines = Vec::new();
     lines.push("Deployment versions:".to_string());
-    lines.push(format!(
-        "  Frontend: v{} (commit {})",
+    lines.push(format_version_line(
+        "Frontend",
         build_info::FRONTEND_VERSION,
-        build_info::frontend_commit()
+        build_info::frontend_commit(),
+        None,
     ));
 
     if let Some(info) = state.backend_version() {
@@ -383,9 +385,11 @@ fn execute_version(state: &AppState) -> Result<CommandAction, String> {
         } else {
             "version mismatch"
         };
-        lines.push(format!(
-            "  Backend: v{} (commit {}) [{parity}]",
-            info.version, info.commit
+        lines.push(format_version_line(
+            "Backend",
+            &info.version,
+            &info.commit,
+            Some(parity),
         ));
     } else {
         lines.push("  Backend: unavailable (version endpoint unreachable)".to_string());
@@ -446,6 +450,29 @@ fn execute_pokemon(state: &AppState) -> Result<CommandAction, String> {
 
 fn execute_cookie() -> Result<CommandAction, String> {
     Ok(CommandAction::CookieClicker)
+}
+
+fn format_version_line(label: &str, version: &str, commit: &str, parity: Option<&str>) -> String {
+    let mut line = match commit_link(commit) {
+        Some(link) => format!(
+            "  {label}: v{version} (commit {commit}) – {link}",
+            link = link
+        ),
+        None => format!("  {label}: v{version} (commit unknown)"),
+    };
+    if let Some(note) = parity {
+        line.push_str(&format!(" ({note})"));
+    }
+    line
+}
+
+fn commit_link(commit: &str) -> Option<String> {
+    let trimmed = commit.trim();
+    if trimmed.is_empty() || trimmed.eq_ignore_ascii_case("unknown") {
+        None
+    } else {
+        Some(format!("{REPO_URL}/commit/{trimmed}"))
+    }
 }
 
 fn format_skills(skills: &BTreeMap<String, Vec<String>>) -> String {
