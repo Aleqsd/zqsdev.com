@@ -2,6 +2,7 @@ use crate::ai;
 use crate::commands::{self, CommandAction, CommandError, PokemonAttemptOutcome};
 use crate::renderer::{AchievementView, Renderer, ScrollBehavior};
 use crate::state::AppState;
+use crate::telemetry::{self, CommandLogMode};
 use crate::utils;
 use gloo_timers::future::TimeoutFuture;
 use serde::{Deserialize, Serialize};
@@ -242,6 +243,10 @@ impl Terminal {
 
         if trimmed.is_empty() {
             return Ok(());
+        }
+
+        if !ai_mode_active {
+            telemetry::log_command_submission(&trimmed, CommandLogMode::Classic);
         }
 
         if Self::is_shutdown_command(&trimmed) {
@@ -1261,11 +1266,13 @@ impl Terminal {
     fn handle_ai_mode_submission(&self, input: String) -> Result<(), JsValue> {
         let normalized = input.trim().to_ascii_lowercase();
         if normalized == "help" {
+            telemetry::log_command_submission(&input, CommandLogMode::Ai);
             self.renderer
                 .append_output_text(AI_HELP_MESSAGE, ScrollBehavior::Bottom)?;
             return Ok(());
         }
         if normalized == "quit" {
+            telemetry::log_command_submission(&input, CommandLogMode::Ai);
             return self.update_ai_mode(false, true);
         }
         self.queue_ai_answer(input)

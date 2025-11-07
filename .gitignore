@@ -3,6 +3,8 @@
 !AGENTS.md
 
 backend.log
+questions.log
+answers.log
 
 # Generated build artifacts
 target/

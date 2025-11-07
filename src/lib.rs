@@ -6,6 +6,7 @@ mod keyword_icons;
 mod markdown;
 mod renderer;
 mod state;
+mod telemetry;
 mod terminal;
 mod utils;
 

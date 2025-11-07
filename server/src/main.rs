@@ -11,6 +11,7 @@ use axum::http::{header::CACHE_CONTROL, HeaderValue, Request, StatusCode};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
 use axum::{body::Body, Json, Router};
+use chrono::{SecondsFormat, Utc};
 use dotenvy::Error as DotenvError;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -20,6 +21,8 @@ use std::fmt::Write;
 use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use tokio::fs::{self, OpenOptions};
+use tokio::io::AsyncWriteExt;
 use tokio::net::TcpListener;
 use tokio::signal;
 use tokio::sync::Mutex;
@@ -27,6 +30,7 @@ use tower::service_fn;
 use tower::ServiceExt;
 use tower_http::services::ServeDir;
 use tracing::{error, info, warn};
+use uuid::Uuid;
 
 const GOOGLE_MODEL_NAME: &str = "gemini-2.5-flash-lite";
 const GOOGLE_ENDPOINT: &str =
@@ -57,6 +61,8 @@ struct AppState {
     client: AiClient,
     retriever: Option<RagRetriever>,
     terminal_data: Arc<TerminalDataPayload>,
+    questions_log: PathBuf,
+    answers_log: PathBuf,
 }
 
 #[derive(Debug, Clone)]
@@ -123,6 +129,13 @@ struct AiRequest {
     question: String,
 }
 
+#[derive(Debug, Deserialize)]
+struct CommandLogRequest {
+    command: String,
+    #[serde(default)]
+    mode: Option<String>,
+}
+
 #[derive(Debug, Serialize)]
 struct AiResponse {
     answer: String,
@@ -131,6 +144,37 @@ struct AiResponse {
     model: Option<&'static str>,
     #[serde(skip_serializing_if = "Option::is_none")]
     context_chunks: Option<Vec<ContextChunkMeta>>,
+}
+
+#[derive(Serialize)]
+struct CommandLogEntry {
+    timestamp: String,
+    entry_type: &'static str,
+    command: String,
+    mode: String,
+    ip: String,
+}
+
+#[derive(Serialize)]
+struct AiQuestionLogEntry {
+    timestamp: String,
+    entry_type: &'static str,
+    question_id: String,
+    question: String,
+    ip: String,
+}
+
+#[derive(Serialize)]
+struct AiAnswerLogEntry {
+    timestamp: String,
+    entry_type: &'static str,
+    question_id: String,
+    answer_id: String,
+    answer: String,
+    model: Option<String>,
+    ai_enabled: bool,
+    reason: Option<String>,
+    ip: String,
 }
 
 #[tokio::main]
@@ -206,6 +250,8 @@ async fn main() -> anyhow::Result<()> {
         );
     }
     let default_model = client.primary_model().unwrap_or(OPENAI_MODEL_NAME);
+    let questions_log = resolve_log_path("QUESTIONS_LOG_PATH", "questions.log");
+    let answers_log = resolve_log_path("ANSWERS_LOG_PATH", "answers.log");
     let state = Arc::new(AppState {
         limiter: Arc::new(Mutex::new(RateLimiter::new(
             PER_MINUTE_BUDGET_EUR,
@@ -217,6 +263,8 @@ async fn main() -> anyhow::Result<()> {
         client,
         retriever,
         terminal_data,
+        questions_log,
+        answers_log,
     });
 
     let static_root = Arc::new(static_dir.clone());
@@ -246,6 +294,7 @@ async fn main() -> anyhow::Result<()> {
 
     let router = Router::new()
         .route("/api/ai", post(handle_ai))
+        .route("/api/log/command", post(handle_command_log))
         .route("/api/data", get(handle_data))
         .route("/api/version", get(handle_version))
         .with_state(state)
@@ -402,6 +451,69 @@ fn load_env_files() {
     load(".env");
 }
 
+fn resolve_log_path(env_key: &str, default: &str) -> PathBuf {
+    std::env::var(env_key)
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| PathBuf::from(default))
+}
+
+fn current_timestamp() -> String {
+    Utc::now().to_rfc3339_opts(SecondsFormat::Secs, true)
+}
+
+async fn append_log_entry<T>(path: &Path, entry: &T) -> anyhow::Result<()>
+where
+    T: Serialize + ?Sized,
+{
+    if let Some(parent) = path.parent().filter(|p| !p.as_os_str().is_empty()) {
+        fs::create_dir_all(parent).await?;
+    }
+    let mut file = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(path)
+        .await?;
+    let line = serde_json::to_vec(entry)?;
+    file.write_all(&line).await?;
+    file.write_all(b"\n").await?;
+    Ok(())
+}
+
+async fn record_ai_question(app_state: &AppState, question_id: &str, question: &str, ip: &str) {
+    let entry = AiQuestionLogEntry {
+        timestamp: current_timestamp(),
+        entry_type: "ai_question",
+        question_id: question_id.to_string(),
+        question: question.to_string(),
+        ip: ip.to_string(),
+    };
+    if let Err(err) = append_log_entry(&app_state.questions_log, &entry).await {
+        warn!(target: "log", error = %err, "Failed to persist AI question log entry");
+    }
+}
+
+async fn record_ai_answer(
+    app_state: &AppState,
+    question_id: &str,
+    response: &AiResponse,
+    ip: &str,
+) {
+    let entry = AiAnswerLogEntry {
+        timestamp: current_timestamp(),
+        entry_type: "ai_answer",
+        question_id: question_id.to_string(),
+        answer_id: Uuid::new_v4().to_string(),
+        answer: response.answer.clone(),
+        model: response.model.map(|value| value.to_string()),
+        ai_enabled: response.ai_enabled,
+        reason: response.reason.clone(),
+        ip: ip.to_string(),
+    };
+    if let Err(err) = append_log_entry(&app_state.answers_log, &entry).await {
+        warn!(target: "log", error = %err, "Failed to persist AI answer log entry");
+    }
+}
+
 async fn handle_data(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     let value = terminal_payload_with_alias(state.terminal_data.as_ref());
     let mut response = Json(value).into_response();
@@ -417,12 +529,47 @@ async fn handle_version() -> impl IntoResponse {
     })
 }
 
+async fn handle_command_log(
+    State(state): State<Arc<AppState>>,
+    ConnectInfo(remote): ConnectInfo<SocketAddr>,
+    Json(payload): Json<CommandLogRequest>,
+) -> impl IntoResponse {
+    let trimmed = payload.command.trim();
+    if trimmed.is_empty() {
+        return StatusCode::BAD_REQUEST;
+    }
+    let mode_value = payload
+        .mode
+        .unwrap_or_else(|| "classic".to_string())
+        .trim()
+        .to_string();
+    let mode = if mode_value.is_empty() {
+        "classic".to_string()
+    } else {
+        mode_value
+    };
+    let entry = CommandLogEntry {
+        timestamp: current_timestamp(),
+        entry_type: "command",
+        command: trimmed.to_string(),
+        mode,
+        ip: remote.ip().to_string(),
+    };
+    match append_log_entry(&state.questions_log, &entry).await {
+        Ok(_) => StatusCode::NO_CONTENT,
+        Err(err) => {
+            warn!(target: "log", error = %err, "Failed to persist command log entry");
+            StatusCode::INTERNAL_SERVER_ERROR
+        }
+    }
+}
+
 async fn handle_ai(
     State(state): State<Arc<AppState>>,
     ConnectInfo(remote): ConnectInfo<SocketAddr>,
     Json(payload): Json<AiRequest>,
 ) -> impl IntoResponse {
-    let question = payload.question.trim();
+    let question = payload.question.trim().to_string();
     let primary_model = state.client.primary_model();
     if question.is_empty() {
         let response = AiResponse {
@@ -447,9 +594,13 @@ async fn handle_ai(
         return (StatusCode::BAD_REQUEST, Json(response));
     }
 
+    let ip = remote.ip().to_string();
+    let question_id = Uuid::new_v4().to_string();
+    record_ai_question(state.as_ref(), &question_id, &question, &ip).await;
+
     let mut rag_chunks = Vec::new();
     if let Some(retriever) = state.retriever.as_ref() {
-        match retriever.retrieve(question).await {
+        match retriever.retrieve(&question).await {
             Ok(chunks) => {
                 if !chunks.is_empty() {
                     let ids: Vec<&str> = chunks.iter().map(|chunk| chunk.id.as_str()).collect();
@@ -494,10 +645,8 @@ async fn handle_ai(
         Some(rag_chunks.as_slice())
     };
 
-    let openai_cost_estimate = state.estimate_openai_cost(question, &rag_chunks);
-    let request_cost_estimate = state.estimate_cost(question, &rag_chunks);
-
-    let ip = remote.ip().to_string();
+    let openai_cost_estimate = state.estimate_openai_cost(&question, &rag_chunks);
+    let request_cost_estimate = state.estimate_cost(&question, &rag_chunks);
     let mut limiter = state.limiter.lock().await;
     if let Err(limit) = limiter.check_and_record(&ip, request_cost_estimate) {
         let snapshot = limiter.usage_snapshot(&ip);
@@ -527,6 +676,7 @@ async fn handle_ai(
             model: primary_model,
             context_chunks: context_meta.clone(),
         };
+        record_ai_answer(state.as_ref(), &question_id, &response, &ip).await;
         return (status, Json(response));
     }
     let mut snapshot = limiter.usage_snapshot(&ip);
@@ -536,7 +686,7 @@ async fn handle_ai(
         .client
         .ask(
             &state.knowledge,
-            question,
+            &question,
             rag_context,
             openai_cost_estimate,
         )
@@ -578,6 +728,7 @@ async fn handle_ai(
                         model: Some(model),
                         context_chunks: context_meta.clone(),
                     };
+                    record_ai_answer(state.as_ref(), &question_id, &response, &ip).await;
                     return (status, Json(response));
                 }
                 snapshot = limiter.usage_snapshot(&ip);
@@ -601,7 +752,7 @@ async fn handle_ai(
             info!(
                 target: "ai",
                 model,
-                user_question = question,
+                user_question = question.as_str(),
                 "AI request prompt logged"
             );
             info!(
@@ -617,6 +768,7 @@ async fn handle_ai(
                 model: Some(model),
                 context_chunks: context_meta.clone(),
             };
+            record_ai_answer(state.as_ref(), &question_id, &response, &ip).await;
             (StatusCode::OK, Json(response))
         }
         Err(err) => {
@@ -634,7 +786,7 @@ async fn handle_ai(
                 cost_estimate_eur = request_cost_estimate,
                 "AI request failed"
             );
-            error!(target: "ai", backend_error = %err, question = question);
+            error!(target: "ai", backend_error = %err, question = question.as_str());
             let response = AiResponse {
                 answer: format!(
                     "The AI backend is temporarily unavailable ({err}). Please retry in a moment."
@@ -644,6 +796,7 @@ async fn handle_ai(
                 model: primary_model,
                 context_chunks: context_meta,
             };
+            record_ai_answer(state.as_ref(), &question_id, &response, &ip).await;
             (StatusCode::SERVICE_UNAVAILABLE, Json(response))
         }
     }
@@ -1624,6 +1777,8 @@ mod tests {
             client,
             retriever: None,
             terminal_data: empty_terminal_data(),
+            questions_log: PathBuf::from("test-questions.log"),
+            answers_log: PathBuf::from("test-answers.log"),
         };
         assert_eq!(app_state.estimate_cost("Hello AI?", &[]), 0.0);
     }
