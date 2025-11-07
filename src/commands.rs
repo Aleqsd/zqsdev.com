@@ -353,7 +353,9 @@ fn execute_ai(state: &AppState) -> Result<CommandAction, String> {
         "  • Toggle the AI Mode button above the terminal to activate the assistant.".to_string(),
     );
     lines.push("  • While active, type a natural-language question or use the helper chips (`help`, `quit`).".to_string());
-    lines.push("  • The assistant only answers using Alexandre DO-O ALMEIDA's résumé data. If it can't find something, it will say so.".to_string());
+    lines.push(
+        "  • The assistant grounds every reply in Alexandre DO-O ALMEIDA's résumé via a Pinecone-powered RAG layer. When retrieval fails, it falls back to the local JSON bundles instead of hallucinating.".to_string(),
+    );
     lines.push(format!(
         "  • Model in use: {AI_MODEL_NAME} (Groq primary with Gemini then OpenAI fallback)."
     ));
