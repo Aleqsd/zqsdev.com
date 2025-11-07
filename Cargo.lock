@@ -2000,7 +2000,7 @@ dependencies = [
 
 [[package]]
 name = "zqs_terminal"
-version = "1.0.1"
+version = "1.0.2"
 dependencies = [
  "console_error_panic_hook",
  "futures",
@@ -2017,7 +2017,7 @@ dependencies = [
 
 [[package]]
 name = "zqs_terminal_server"
-version = "1.0.1"
+version = "1.0.2"
 dependencies = [
  "anyhow",
  "axum",

@@ -1,7 +1,7 @@
 use crate::utils;
 use futures::{pin_mut, stream, StreamExt};
 use std::cell::RefCell;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use wasm_bindgen::JsCast;
 use wasm_bindgen::JsValue;
 use wasm_bindgen_futures::{spawn_local, JsFuture};
@@ -621,9 +621,13 @@ async fn preload_icons_async() -> Result<(), JsValue> {
     }
 
     let mut pending = Vec::new();
+    let mut seen = HashSet::new();
     ICON_SOURCES.with(|store| {
         let store = store.borrow();
         for icon_path in KEYWORD_PATTERNS.iter().map(|pattern| pattern.icon_path) {
+            if !seen.insert(icon_path) {
+                continue;
+            }
             if !store.contains_key(icon_path) && icon_path != "/images/alexandre.webp" {
                 pending.push(icon_path);
             }
