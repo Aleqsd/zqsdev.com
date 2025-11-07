@@ -37,6 +37,7 @@ build:
 	else \
 		$(MAKE) rag; \
 	fi
+	cargo build --release --manifest-path $(SERVER_MANIFEST)
 
 build-frontend:
 	@SKIP_RAG=1 $(MAKE) build
