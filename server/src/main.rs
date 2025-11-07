@@ -1341,7 +1341,26 @@ fn build_projects_chunk(payload: &TerminalDataPayload) -> Option<ContextChunk> {
             .get("description")
             .and_then(Value::as_str)
             .unwrap_or("");
-        summaries.push(format!("{title} ({date}) — {description}"));
+        let tech = project
+            .get("tech")
+            .and_then(Value::as_array)
+            .map(|entries| {
+                entries
+                    .iter()
+                    .filter_map(Value::as_str)
+                    .map(|value| value.trim())
+                    .filter(|value| !value.is_empty())
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
+        if tech.is_empty() {
+            summaries.push(format!("{title} ({date}) — {description}"));
+        } else {
+            summaries.push(format!(
+                "{title} ({date}) — {description}\nTech: {}",
+                tech.join(", ")
+            ));
+        }
     }
     if summaries.is_empty() {
         return None;
@@ -1665,6 +1684,15 @@ mod tests {
         assert!(
             chunks.iter().any(|chunk| chunk.source == "faq.json"),
             "faq chunk missing from fallback context: {chunks:?}"
+        );
+        let projects_chunk = chunks
+            .iter()
+            .find(|chunk| chunk.source == "projects.json")
+            .expect("projects chunk missing from fallback context");
+        assert!(
+            projects_chunk.body.contains("Tech:"),
+            "projects chunk should include tech stack listings: {}",
+            projects_chunk.body
         );
     }
 
