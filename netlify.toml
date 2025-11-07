@@ -72,6 +72,11 @@ for = "/pkg/*.js"
   Cache-Control = "no-store"
 
 [[headers]]
+for = "/pkg/*.wasm"
+  [headers.values]
+  Cache-Control = "no-store"
+
+[[headers]]
 for = "/data/*.json"
   [headers.values]
   Cache-Control = "no-store"
