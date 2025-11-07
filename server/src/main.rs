@@ -391,8 +391,8 @@ fn load_env_files() {
 }
 
 async fn handle_data(State(state): State<Arc<AppState>>) -> impl IntoResponse {
-    let payload = state.terminal_data.as_ref().clone();
-    let mut response = Json(payload).into_response();
+    let value = terminal_payload_with_alias(state.terminal_data.as_ref());
+    let mut response = Json(value).into_response();
     let header = HeaderValue::from_static("public, max-age=60, must-revalidate");
     response.headers_mut().insert(CACHE_CONTROL, header);
     response
@@ -1343,6 +1343,17 @@ fn build_projects_chunk(payload: &TerminalDataPayload) -> Option<ContextChunk> {
     })
 }
 
+fn terminal_payload_with_alias(payload: &TerminalDataPayload) -> serde_json::Value {
+    let mut value =
+        serde_json::to_value(payload).expect("terminal data payload should serialize");
+    if let Some(map) = value.as_object_mut() {
+        if let Some(faqs) = map.get("faqs").cloned() {
+            map.entry("faq".to_string()).or_insert(faqs);
+        }
+    }
+    value
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1560,6 +1571,18 @@ mod tests {
                 .any(|chunk| chunk.source == "experience.json"),
             "experience chunk missing from fallback context: {chunks:?}"
         );
+    }
+
+    #[test]
+    fn terminal_payload_includes_faq_alias() {
+        let data_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../static/data");
+        let payload = load_terminal_payload(&data_dir);
+        let value = terminal_payload_with_alias(&payload);
+        let map = value
+            .as_object()
+            .expect("serialized payload should be a JSON object");
+        assert!(map.contains_key("faqs"), "faqs key missing from payload");
+        assert!(map.contains_key("faq"), "faq alias missing from payload");
     }
 
     #[test]
