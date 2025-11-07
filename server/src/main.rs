@@ -13,6 +13,7 @@ use axum::routing::{get, post};
 use axum::{body::Body, Json, Router};
 use dotenvy::Error as DotenvError;
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use std::convert::Infallible;
 use std::env::VarError;
 use std::fmt::Write;
@@ -445,6 +446,17 @@ async fn handle_ai(
             Err(err) => {
                 warn!(target: "rag", error = %err, "RAG retrieval failed for question");
             }
+        }
+    }
+    if rag_chunks.is_empty() {
+        let fallback = fallback_context_chunks(state.terminal_data.as_ref());
+        if !fallback.is_empty() {
+            info!(
+                target: "rag",
+                chunk_count = fallback.len(),
+                "Using static fallback context chunks"
+            );
+            rag_chunks = fallback;
         }
     }
     let context_meta = if rag_chunks.is_empty() {
@@ -1197,6 +1209,140 @@ fn build_user_prompt(question: &str, context: Option<&[ContextChunk]>) -> String
     }
 }
 
+fn fallback_context_chunks(payload: &TerminalDataPayload) -> Vec<ContextChunk> {
+    let mut chunks = Vec::new();
+    if let Some(profile_chunk) = build_profile_chunk(payload) {
+        chunks.push(profile_chunk);
+    }
+    if let Some(experience_chunk) = build_experience_chunk(payload) {
+        chunks.push(experience_chunk);
+    }
+    if let Some(project_chunk) = build_projects_chunk(payload) {
+        chunks.push(project_chunk);
+    }
+    if chunks.is_empty() {
+        if let Ok(snapshot) = serde_json::to_string(&payload.knowledge_json()) {
+            chunks.push(ContextChunk {
+                id: "static-terminal-snapshot".to_string(),
+                source: "static/data".to_string(),
+                topic: "Résumé snapshot".to_string(),
+                body: snapshot,
+                score: 0.0,
+            });
+        }
+    }
+    chunks
+}
+
+fn build_profile_chunk(payload: &TerminalDataPayload) -> Option<ContextChunk> {
+    let profile = payload.profile.as_object()?;
+    let mut lines = Vec::new();
+    if let Some(name) = profile.get("name").and_then(Value::as_str) {
+        lines.push(format!("Name: {name}"));
+    }
+    if let Some(headline) = profile.get("headline").and_then(Value::as_str) {
+        lines.push(format!("Headline: {headline}"));
+    }
+    if let Some(location) = profile.get("location").and_then(Value::as_str) {
+        lines.push(format!("Location: {location}"));
+    }
+    if let Some(summary) = profile.get("summary_en").and_then(Value::as_str) {
+        lines.push(format!("Summary: {summary}"));
+    }
+    if let Some(languages) = profile.get("languages").and_then(Value::as_array) {
+        let spoken: Vec<&str> = languages.iter().filter_map(Value::as_str).collect();
+        if !spoken.is_empty() {
+            lines.push(format!("Languages: {}", spoken.join(", ")));
+        }
+    }
+    if lines.is_empty() {
+        return None;
+    }
+    Some(ContextChunk {
+        id: "static-profile".to_string(),
+        source: "profile.json".to_string(),
+        topic: "Profile overview".to_string(),
+        body: lines.join("\n"),
+        score: 0.0,
+    })
+}
+
+fn build_experience_chunk(payload: &TerminalDataPayload) -> Option<ContextChunk> {
+    let experiences = payload.experiences.as_array()?;
+    if experiences.is_empty() {
+        return None;
+    }
+    let mut sections = Vec::new();
+    for experience in experiences.iter().take(3) {
+        let company = experience
+            .get("company")
+            .and_then(Value::as_str)
+            .unwrap_or("Unknown company");
+        let title = experience
+            .get("title")
+            .and_then(Value::as_str)
+            .unwrap_or("Role");
+        let start = experience.get("start").and_then(Value::as_str).unwrap_or("");
+        let end = experience.get("end").and_then(Value::as_str).unwrap_or("Present");
+        let location = experience
+            .get("location")
+            .and_then(Value::as_str)
+            .unwrap_or("");
+        sections.push(format!("{company} — {title} ({start} - {end}) {location}"));
+        if let Some(highlights) = experience.get("highlights").and_then(Value::as_array) {
+            let details: Vec<&str> = highlights.iter().filter_map(Value::as_str).take(2).collect();
+            if !details.is_empty() {
+                sections.push(format!("Highlights: {}", details.join(" | ")));
+            }
+        }
+    }
+    if sections.is_empty() {
+        return None;
+    }
+    Some(ContextChunk {
+        id: "static-experience".to_string(),
+        source: "experience.json".to_string(),
+        topic: "Recent experience".to_string(),
+        body: sections.join("\n"),
+        score: 0.0,
+    })
+}
+
+fn build_projects_chunk(payload: &TerminalDataPayload) -> Option<ContextChunk> {
+    let projects = payload.projects.as_object()?;
+    let items = projects
+        .get("projects")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    if items.is_empty() {
+        return None;
+    }
+    let mut summaries = Vec::new();
+    for project in items.iter().take(2) {
+        let title = project
+            .get("title")
+            .and_then(Value::as_str)
+            .unwrap_or("Project");
+        let date = project.get("date").and_then(Value::as_str).unwrap_or("");
+        let description = project
+            .get("description")
+            .and_then(Value::as_str)
+            .unwrap_or("");
+        summaries.push(format!("{title} ({date}) — {description}"));
+    }
+    if summaries.is_empty() {
+        return None;
+    }
+    Some(ContextChunk {
+        id: "static-projects".to_string(),
+        source: "projects.json".to_string(),
+        topic: "Notable projects".to_string(),
+        body: summaries.join("\n"),
+        score: 0.0,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1205,9 +1351,12 @@ mod tests {
 
     fn load_embedded_knowledge() -> serde_json::Value {
         let data_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../static/data");
-        TerminalDataPayload::load(&data_dir)
+        load_terminal_payload(&data_dir).knowledge_json()
+    }
+
+    fn load_terminal_payload(data_dir: &Path) -> TerminalDataPayload {
+        TerminalDataPayload::load(data_dir)
             .expect("should load knowledge base from static data")
-            .knowledge_json()
     }
 
     fn empty_terminal_data() -> std::sync::Arc<TerminalDataPayload> {
@@ -1389,6 +1538,27 @@ mod tests {
         assert!(
             prompt.ends_with("What is Alexandre working on?"),
             "prompt should include the user question at the end: {prompt}"
+        );
+    }
+
+    #[test]
+    fn fallback_context_includes_profile_and_experience() {
+        let data_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../static/data");
+        let payload = load_terminal_payload(&data_dir);
+        let chunks = fallback_context_chunks(&payload);
+        assert!(
+            !chunks.is_empty(),
+            "fallback context should include at least one chunk"
+        );
+        assert!(
+            chunks.iter().any(|chunk| chunk.source == "profile.json"),
+            "profile chunk missing from fallback context: {chunks:?}"
+        );
+        assert!(
+            chunks
+                .iter()
+                .any(|chunk| chunk.source == "experience.json"),
+            "experience chunk missing from fallback context: {chunks:?}"
         );
     }
 
