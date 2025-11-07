@@ -69,6 +69,7 @@ class LiveSmokeTester:
         tests: Sequence[Tuple[str, Callable[[], str]]] = (
             ("Homepage loads", self.test_homepage),
             ("Static assets respond", self.test_static_assets),
+            ("Backend version endpoint", self.test_backend_version_endpoint),
             ("Terminal data endpoint", self.test_terminal_data_endpoint),
             ("Profile dataset", self.test_profile_dataset),
             ("Skills dataset", self.test_skills_dataset),
@@ -336,6 +337,16 @@ class LiveSmokeTester:
         ), "wasm icon payload does not contain an SVG tag"
 
         return f"webassembly_projects={len(webassembly_projects)} icon=wasm-original.svg"
+
+    def test_backend_version_endpoint(self) -> str:
+        response = self.session.get(self._url("/api/version"), timeout=self.timeout)
+        status = response.status_code
+        assert status == 200, f"version endpoint returned {status}"
+        payload = response.json()
+        version = payload.get("version", "")
+        commit = payload.get("commit", "unknown")
+        assert version, "backend version missing in version payload"
+        return f"backend_version={version} commit={commit}"
 
     def test_ai_projects_detail(self) -> str:
         payload = {

@@ -132,6 +132,12 @@ impl TerminalData {
 }
 
 #[derive(Debug, Clone)]
+pub struct BackendVersionMeta {
+    pub version: String,
+    pub commit: String,
+}
+
+#[derive(Debug, Clone)]
 pub struct AppState {
     pub prompt_label: String,
     pub input_buffer: String,
@@ -152,6 +158,7 @@ pub struct AppState {
     pub achievement_shutdown_unlocked: bool,
     pub achievements_modal_open: bool,
     pub achievements_spoilers_enabled: bool,
+    pub backend_version: Option<BackendVersionMeta>,
 }
 
 impl AppState {
@@ -176,6 +183,7 @@ impl AppState {
             achievement_shutdown_unlocked: false,
             achievements_modal_open: false,
             achievements_spoilers_enabled: false,
+            backend_version: None,
         }
     }
 
@@ -197,6 +205,14 @@ impl AppState {
 
     pub fn set_ai_model(&mut self, model: Option<String>) {
         self.ai_model = model;
+    }
+
+    pub fn set_backend_version(&mut self, info: BackendVersionMeta) {
+        self.backend_version = Some(info);
+    }
+
+    pub fn backend_version(&self) -> Option<&BackendVersionMeta> {
+        self.backend_version.as_ref()
     }
 
     pub fn set_input_disabled(&mut self, disabled: bool) {

@@ -1,3 +1,4 @@
+use crate::build_info;
 use crate::state::{
     AppState, Award, Education, Experience, Profile, ProjectsCollection, TerminalData,
 };
@@ -167,6 +168,7 @@ pub fn execute(
         "cookie" => execute_cookie(),
         "ai" => execute_ai(state),
         "clear" => Ok(CommandAction::Clear),
+        "version" | "ver" => execute_version(state),
         _ => {
             return Err(CommandError::NotFound {
                 command: normalized,
@@ -361,6 +363,32 @@ fn execute_ai(state: &AppState) -> Result<CommandAction, String> {
         lines.push(
             "AI Mode is currently deactivated. Tap the AI Mode button to switch it on.".to_string(),
         );
+    }
+
+    Ok(CommandAction::Output(lines.join("\n")))
+}
+
+fn execute_version(state: &AppState) -> Result<CommandAction, String> {
+    let mut lines = Vec::new();
+    lines.push("Deployment versions:".to_string());
+    lines.push(format!(
+        "  Frontend: v{} (commit {})",
+        build_info::FRONTEND_VERSION,
+        build_info::frontend_commit()
+    ));
+
+    if let Some(info) = state.backend_version() {
+        let parity = if info.version == build_info::FRONTEND_VERSION {
+            "in sync"
+        } else {
+            "version mismatch"
+        };
+        lines.push(format!(
+            "  Backend: v{} (commit {}) [{parity}]",
+            info.version, info.commit
+        ));
+    } else {
+        lines.push("  Backend: unavailable (version endpoint unreachable)".to_string());
     }
 
     Ok(CommandAction::Output(lines.join("\n")))

@@ -1,4 +1,5 @@
 mod ai;
+mod build_info;
 mod commands;
 mod input;
 mod keyword_icons;
@@ -9,8 +10,9 @@ mod terminal;
 mod utils;
 
 use crate::renderer::Renderer;
-use crate::state::{AppState, Profile, TerminalData};
+use crate::state::{AppState, BackendVersionMeta, Profile, TerminalData};
 use crate::terminal::Terminal;
+use serde::Deserialize;
 use std::cell::RefCell;
 use std::rc::Rc;
 use wasm_bindgen::prelude::*;
@@ -41,6 +43,17 @@ async fn load_terminal_data(terminal: Rc<Terminal>, state: Rc<RefCell<AppState>>
             {
                 let mut state_mut = state.borrow_mut();
                 state_mut.set_data(data);
+            }
+            {
+                let state_clone = Rc::clone(&state);
+                spawn_local(async move {
+                    match fetch_backend_version().await {
+                        Ok(meta) => state_clone.borrow_mut().set_backend_version(meta),
+                        Err(err) => {
+                            utils::log(&format!("Failed to load backend version info: {:?}", err))
+                        }
+                    }
+                });
             }
             if let Err(err) = terminal.on_data_ready() {
                 utils::log(&format!("Failed to render welcome message: {:?}", err));
@@ -114,4 +127,19 @@ async fn fetch_all_data_from_static() -> Result<TerminalData, JsValue> {
         testimonials,
         faqs,
     ))
+}
+
+#[derive(Deserialize)]
+struct BackendVersionPayload {
+    version: String,
+    #[serde(default)]
+    commit: Option<String>,
+}
+
+async fn fetch_backend_version() -> Result<BackendVersionMeta, JsValue> {
+    let payload = utils::fetch_json::<BackendVersionPayload>("/api/version").await?;
+    Ok(BackendVersionMeta {
+        version: payload.version,
+        commit: payload.commit.unwrap_or_else(|| "unknown".to_string()),
+    })
 }

@@ -44,6 +44,11 @@ const PER_MINUTE_BUDGET_EUR: f64 = 0.50;
 const PER_HOUR_BUDGET_EUR: f64 = 2.00;
 const PER_DAY_BUDGET_EUR: f64 = 2.00; // Align daily to €2 hard cap
 const PER_MONTH_BUDGET_EUR: f64 = 10.00;
+const SERVER_VERSION: &str = env!("CARGO_PKG_VERSION");
+
+fn server_commit_hash() -> &'static str {
+    option_env!("GIT_COMMIT_HASH").unwrap_or("unknown")
+}
 
 #[derive(Clone)]
 struct AppState {
@@ -94,6 +99,12 @@ struct ContextChunkMeta {
     source: String,
     topic: String,
     score: f32,
+}
+
+#[derive(Debug, Serialize)]
+struct VersionPayload {
+    version: &'static str,
+    commit: &'static str,
 }
 
 impl ContextChunkMeta {
@@ -236,6 +247,7 @@ async fn main() -> anyhow::Result<()> {
     let router = Router::new()
         .route("/api/ai", post(handle_ai))
         .route("/api/data", get(handle_data))
+        .route("/api/version", get(handle_version))
         .with_state(state)
         .fallback_service(static_service);
 
@@ -396,6 +408,13 @@ async fn handle_data(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     let header = HeaderValue::from_static("public, max-age=60, must-revalidate");
     response.headers_mut().insert(CACHE_CONTROL, header);
     response
+}
+
+async fn handle_version() -> impl IntoResponse {
+    Json(VersionPayload {
+        version: SERVER_VERSION,
+        commit: server_commit_hash(),
+    })
 }
 
 async fn handle_ai(
