@@ -787,6 +787,22 @@ mod tests {
     }
 
     #[test]
+    fn tokenize_detects_webassembly_keyword() {
+        let segments = tokenize("Deploying a WebAssembly UI.");
+        assert_eq!(
+            segments,
+            vec![
+                Segment::Text("Deploying a ".to_string()),
+                Segment::Icon(IconMatch {
+                    token: "WebAssembly".to_string(),
+                    icon_path: "/icons/wasm-original.svg"
+                }),
+                Segment::Text(" UI.".to_string()),
+            ]
+        );
+    }
+
+    #[test]
     fn tokenize_detects_sql_and_gcp() {
         let segments = tokenize("Data layer runs on SQL with GCP services.");
         assert_eq!(
