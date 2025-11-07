@@ -603,17 +603,20 @@ async fn preload_icons_async() -> Result<(), JsValue> {
 
     let priority = ["/favicon.ico", "/images/alexandre.webp"];
     for &asset in &priority {
-        if asset == "/images/alexandre.webp" {
-            if ICON_SOURCES.with(|store| store.borrow().contains_key(asset)) {
-                continue;
+        match asset {
+            "/images/alexandre.webp" => {
+                if ICON_SOURCES.with(|store| store.borrow().contains_key(asset)) {
+                    continue;
+                }
+                if let Ok(url) = fetch_icon_url(&window, asset).await {
+                    ICON_SOURCES.with(|store| {
+                        store.borrow_mut().insert(asset, url);
+                    });
+                }
             }
-            if let Ok(url) = fetch_icon_url(&window, asset).await {
-                ICON_SOURCES.with(|store| {
-                    store.borrow_mut().insert(asset, url);
-                });
+            _ => {
+                let _ = fetch_resource(&window, asset).await;
             }
-        } else {
-            let _ = fetch_resource(&window, asset).await;
         }
     }
 
