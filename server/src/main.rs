@@ -1191,17 +1191,11 @@ fn build_user_prompt(question: &str, context: Option<&[ContextChunk]>) -> String
     if let Some(chunks) = context {
         let mut buffer = String::new();
         buffer.push_str(
-            "Use the referenced context chunks to answer the question. Cite chunks like [chunk:static-profile].\n",
+            "Use the referenced context snippets to answer the question. When citing a snippet, mention it naturally like \"(source: Core skills section)\" and never reference file names.\n",
         );
         for chunk in chunks {
-            let label = sanitize_chunk_label(&chunk.id);
-            let _ = writeln!(
-                buffer,
-                "[chunk:{label}] source: {} | topic: {}\n{}\n",
-                chunk.source,
-                chunk.topic,
-                chunk.body.trim()
-            );
+            let label = format!("{} section", chunk.topic);
+            let _ = writeln!(buffer, "[context] {label}\n{}\n", chunk.body.trim());
         }
         buffer.push_str("Question:\n");
         buffer.push_str(question);
@@ -1440,24 +1434,6 @@ fn build_faq_chunk(payload: &TerminalDataPayload) -> Option<ContextChunk> {
     })
 }
 
-fn sanitize_chunk_label(id: &str) -> String {
-    let mut label = String::with_capacity(id.len());
-    for ch in id.chars() {
-        if ch.is_whitespace() {
-            label.push('-');
-        } else if matches!(ch, '[' | ']' | '\n' | '\r') {
-            continue;
-        } else {
-            label.push(ch);
-        }
-    }
-    if label.is_empty() {
-        "context".to_string()
-    } else {
-        label
-    }
-}
-
 fn terminal_payload_with_alias(payload: &TerminalDataPayload) -> serde_json::Value {
     let mut value = serde_json::to_value(payload).expect("terminal data payload should serialize");
     if let Some(map) = value.as_object_mut() {
@@ -1652,8 +1628,8 @@ mod tests {
         ];
         let prompt = build_user_prompt("What is Alexandre working on?", Some(&chunks));
         assert!(
-            prompt.contains("[chunk:chunk-1] source: profile.json"),
-            "prompt should list chunk sources with descriptive labels: {prompt}"
+            prompt.contains("[context] Profile section"),
+            "prompt should list chunk sources using readable section labels: {prompt}"
         );
         assert!(
             prompt.contains("Highlights about CI/CD"),
