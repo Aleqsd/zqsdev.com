@@ -20,18 +20,21 @@ This file captures the details an operator or automation agent needs to keep the
 Run `make update` from the repo root to:
 1. `git pull --rebase` the repository.
 2. Rebuild the WebAssembly bundle and proxy binaries (`make build`).
-   - `make build` now chains into `make rag`, so ensure `OPENAI_API_KEY`/`PINECONE_API_KEY`/`PINECONE_HOST` are exported beforehand. Set `SKIP_RAG=1 make build` if you intentionally want to skip the RAG refresh.
+   - `make build` now chains into `make rag`, so ensure `OPENAI_API_KEY`/`PINECONE_API_KEY`/`PINECONE_HOST` are exported beforehand. Set `SKIP_RAG=1 make build` if you intentionally want to skip the RAG refresh (CI boxes without secrets should always do this).
+   - The final step in `make build` is `cargo build --release --manifest-path server/Cargo.toml`; copy the resulting `target/release/zqs_terminal_server` to `/opt/zqsdev/bin/zqs-terminal-server` (use `install`+rename to avoid “text file busy”) **before** restarting the service, or the backend will continue serving the previous version even after a restart.
 3. Restart the systemd unit (`sudo systemctl restart zqs-terminal.service`).
 
 ## Workflow notes
 - Before handoff, run `make build` and `make test` so the maintainer can refresh the live site with confidence.
 - Typical deploy loop: `make build && make test`, `git push` (Netlify redeploys the frontend automatically), **restart the backend _before_ running any prod tests** with `sudo systemctl restart zqs-terminal.service`, and only then run `make autotest BASE_URL=https://www.zqsdev.com` to smoke-test production.
+- `make update` expects a clean working tree; regenerate artifacts, stage them (remember `static/build_id.js` and `static/pkg/**/*`), or stash before running so the initial `git pull --rebase` succeeds.
 - `static/build_id.js` is now tracked; always include the regenerated file produced by `make build` in your commits so Netlify's auto-deploys never fall back to the `?build=dev` cache-buster.
 - `make autotest` now fails fast if the deployed `build_id.js` ever falls back to `"dev"`, ensuring production assets are tied to a real commit.
 - Extend the automated test suite for every new feature or bugfix fix to keep coverage trending upward.
 - Run `make rag` (or `python3 scripts/build_rag.py --skip-pinecone`) after editing any `static/data/*.json` so the SQLite cache mirrors the résumé data even if Pinecone is updated later; `make rag-inspect` dumps per-source stats if you want to verify the on-disk contents.
 - After deploying, run `make autotest BASE_URL=https://www.zqsdev.com` (or your target) to ensure `/api/ai` returns grounded answers with `context_chunks` metadata.
 - Use the hidden `version` terminal command (or `make version-check`) to verify the frontend and backend are running the same release and to grab the GitHub commit links directly from production.
+- If `make version-check` reports an outdated backend commit, confirm the install/copy step above actually replaced `/opt/zqsdev/bin/zqs-terminal-server` and then rerun the restart; the API only reports the embedded `env!(\"CARGO_PKG_VERSION\")` from the running binary.
 
 ## Versioning
 - The project version lives in `VERSION`, `Cargo.toml`, and `server/Cargo.toml`.
