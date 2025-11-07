@@ -14,7 +14,7 @@ This file captures the details an operator or automation agent needs to keep the
 - TLS certificate: managed by Certbot (`/etc/letsencrypt/live/api.zqsdev.com/`), renews automatically.
 - If the proxy breaks, reload Nginx with `sudo systemctl reload nginx` after adjustments.
 - Netlify rewrite: `/api/*` → `https://api.zqsdev.com/api/:splat`. Re-deploy the site after editing `netlify.toml`.
-- Netlify build command: `make build-frontend` so CI only refreshes the static bundle + build id without touching RAG/back-end artifacts.
+- Netlify build pipeline: publish-only (no build command). Always run `make build && make test` locally so the committed `static/` assets and `build_id.js` are fresh before pushing.
 
 ## Update workflow
 Run `make update` from the repo root to:
@@ -27,6 +27,7 @@ Run `make update` from the repo root to:
 - Before handoff, run `make build` and `make test` so the maintainer can refresh the live site with confidence.
 - Typical deploy loop: `make build && make test`, `git push` (Netlify redeploys the frontend automatically), **restart the backend _before_ running any prod tests** with `sudo systemctl restart zqs-terminal.service`, and only then run `make autotest BASE_URL=https://www.zqsdev.com` to smoke-test production.
 - `static/build_id.js` is now tracked; always include the regenerated file produced by `make build` in your commits so Netlify's auto-deploys never fall back to the `?build=dev` cache-buster.
+- `make autotest` now fails fast if the deployed `build_id.js` ever falls back to `"dev"`, ensuring production assets are tied to a real commit.
 - Extend the automated test suite for every new feature or bugfix fix to keep coverage trending upward.
 - Run `make rag` (or `python3 scripts/build_rag.py --skip-pinecone`) after editing any `static/data/*.json` so the SQLite cache mirrors the résumé data even if Pinecone is updated later; `make rag-inspect` dumps per-source stats if you want to verify the on-disk contents.
 - After deploying, run `make autotest BASE_URL=https://www.zqsdev.com` (or your target) to ensure `/api/ai` returns grounded answers with `context_chunks` metadata.

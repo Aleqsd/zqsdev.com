@@ -17,6 +17,7 @@ import argparse
 import dataclasses
 import json
 import os
+import re
 import sys
 import time
 from pathlib import Path
@@ -68,6 +69,7 @@ class LiveSmokeTester:
     def run(self) -> bool:
         tests: Sequence[Tuple[str, Callable[[], str]]] = (
             ("Homepage loads", self.test_homepage),
+            ("Build id not dev", self.test_build_id_not_dev),
             ("Static assets respond", self.test_static_assets),
             ("Backend version endpoint", self.test_backend_version_endpoint),
             ("Terminal data endpoint", self.test_terminal_data_endpoint),
@@ -168,6 +170,17 @@ class LiveSmokeTester:
         assert not missing, f"missing markers: {', '.join(missing)}"
         cache_control = response.headers.get("Cache-Control", "none")
         return f"status=200 size={len(body)} cache={cache_control}"
+
+    def test_build_id_not_dev(self) -> str:
+        response = self.session.get(self._url("build_id.js"), timeout=self.timeout)
+        status = response.status_code
+        assert status == 200, f"build_id.js returned {status}"
+        body = response.text.strip()
+        match = re.search(r'__BUILD_ID__\s*=\s*"(?P<build>[^"\\]+)"', body)
+        assert match, "could not locate build id assignment"
+        build_id = match.group("build").strip()
+        assert build_id and build_id != "dev", f"unsafe build id detected: {build_id}"
+        return f"build_id={build_id}"
 
     def test_static_assets(self) -> str:
         assets: Sequence[Tuple[str, Tuple[str, ...]]] = (
