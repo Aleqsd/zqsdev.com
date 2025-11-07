@@ -1219,6 +1219,12 @@ fn fallback_context_chunks(payload: &TerminalDataPayload) -> Vec<ContextChunk> {
     if let Some(skills_chunk) = build_skills_chunk(payload) {
         chunks.push(skills_chunk);
     }
+    if let Some(education_chunk) = build_education_chunk(payload) {
+        chunks.push(education_chunk);
+    }
+    if let Some(testimonials_chunk) = build_testimonials_chunk(payload) {
+        chunks.push(testimonials_chunk);
+    }
     if let Some(faq_chunk) = build_faq_chunk(payload) {
         chunks.push(faq_chunk);
     }
@@ -1237,218 +1243,76 @@ fn fallback_context_chunks(payload: &TerminalDataPayload) -> Vec<ContextChunk> {
 }
 
 fn build_profile_chunk(payload: &TerminalDataPayload) -> Option<ContextChunk> {
-    let profile = payload.profile.as_object()?;
-    let mut lines = Vec::new();
-    if let Some(name) = profile.get("name").and_then(Value::as_str) {
-        lines.push(format!("Name: {name}"));
-    }
-    if let Some(headline) = profile.get("headline").and_then(Value::as_str) {
-        lines.push(format!("Headline: {headline}"));
-    }
-    if let Some(location) = profile.get("location").and_then(Value::as_str) {
-        lines.push(format!("Location: {location}"));
-    }
-    if let Some(summary) = profile.get("summary_en").and_then(Value::as_str) {
-        lines.push(format!("Summary: {summary}"));
-    }
-    if let Some(languages) = profile.get("languages").and_then(Value::as_array) {
-        let spoken: Vec<&str> = languages.iter().filter_map(Value::as_str).collect();
-        if !spoken.is_empty() {
-            lines.push(format!("Languages: {}", spoken.join(", ")));
-        }
-    }
-    if lines.is_empty() {
-        return None;
-    }
-    Some(ContextChunk {
-        id: "static-profile".to_string(),
-        source: "profile.json".to_string(),
-        topic: "Profile overview".to_string(),
-        body: lines.join("\n"),
-        score: 0.0,
-    })
+    chunk_from_value(
+        &payload.profile,
+        "static-profile",
+        "profile.json",
+        "Profile data",
+    )
 }
 
 fn build_experience_chunk(payload: &TerminalDataPayload) -> Option<ContextChunk> {
-    let experiences = payload.experiences.as_array()?;
-    if experiences.is_empty() {
-        return None;
-    }
-    let mut sections = Vec::new();
-    for experience in experiences.iter().take(3) {
-        let company = experience
-            .get("company")
-            .and_then(Value::as_str)
-            .unwrap_or("Unknown company");
-        let title = experience
-            .get("title")
-            .and_then(Value::as_str)
-            .unwrap_or("Role");
-        let start = experience
-            .get("start")
-            .and_then(Value::as_str)
-            .unwrap_or("");
-        let end = experience
-            .get("end")
-            .and_then(Value::as_str)
-            .unwrap_or("Present");
-        let location = experience
-            .get("location")
-            .and_then(Value::as_str)
-            .unwrap_or("");
-        sections.push(format!("{company} — {title} ({start} - {end}) {location}"));
-        if let Some(highlights) = experience.get("highlights").and_then(Value::as_array) {
-            let details: Vec<&str> = highlights
-                .iter()
-                .filter_map(Value::as_str)
-                .take(2)
-                .collect();
-            if !details.is_empty() {
-                sections.push(format!("Highlights: {}", details.join(" | ")));
-            }
-        }
-    }
-    if sections.is_empty() {
-        return None;
-    }
-    Some(ContextChunk {
-        id: "static-experience".to_string(),
-        source: "experience.json".to_string(),
-        topic: "Recent experience".to_string(),
-        body: sections.join("\n"),
-        score: 0.0,
-    })
+    chunk_from_value(
+        &payload.experiences,
+        "static-experience",
+        "experience.json",
+        "Experience data",
+    )
 }
 
 fn build_projects_chunk(payload: &TerminalDataPayload) -> Option<ContextChunk> {
-    let projects = payload.projects.as_object()?;
-    let items = projects
-        .get("projects")
-        .and_then(Value::as_array)
-        .cloned()
-        .unwrap_or_default();
-    if items.is_empty() {
-        return None;
-    }
-    let mut summaries = Vec::new();
-    for project in items.iter().take(2) {
-        let title = project
-            .get("title")
-            .and_then(Value::as_str)
-            .unwrap_or("Project");
-        let date = project.get("date").and_then(Value::as_str).unwrap_or("");
-        let description = project
-            .get("description")
-            .and_then(Value::as_str)
-            .unwrap_or("");
-        let tech = project
-            .get("tech")
-            .and_then(Value::as_array)
-            .map(|entries| {
-                entries
-                    .iter()
-                    .filter_map(Value::as_str)
-                    .map(|value| value.trim())
-                    .filter(|value| !value.is_empty())
-                    .collect::<Vec<_>>()
-            })
-            .unwrap_or_default();
-        if tech.is_empty() {
-            summaries.push(format!("{title} ({date}) — {description}"));
-        } else {
-            summaries.push(format!(
-                "{title} ({date}) — {description}\nTech: {}",
-                tech.join(", ")
-            ));
-        }
-    }
-    if summaries.is_empty() {
-        return None;
-    }
-    Some(ContextChunk {
-        id: "static-projects".to_string(),
-        source: "projects.json".to_string(),
-        topic: "Notable projects".to_string(),
-        body: summaries.join("\n"),
-        score: 0.0,
-    })
+    chunk_from_value(
+        &payload.projects,
+        "static-projects",
+        "projects.json",
+        "Projects data",
+    )
 }
 
 fn build_skills_chunk(payload: &TerminalDataPayload) -> Option<ContextChunk> {
-    let skills = payload.skills.as_object()?;
-    if skills.is_empty() {
-        return None;
-    }
-    let mut sections = Vec::new();
-    for (category, entries_value) in skills.iter() {
-        if let Some(entries) = entries_value.as_array() {
-            let highlights: Vec<&str> = entries.iter().filter_map(Value::as_str).take(3).collect();
-            if !highlights.is_empty() {
-                sections.push(format!("{category}: {}", highlights.join(", ")));
-            }
-        }
-        if sections.len() >= 4 {
-            break;
-        }
-    }
-    if sections.is_empty() {
-        return None;
-    }
-    Some(ContextChunk {
-        id: "static-skills".to_string(),
-        source: "skills.json".to_string(),
-        topic: "Core skills".to_string(),
-        body: sections.join("\n"),
-        score: 0.0,
-    })
+    chunk_from_value(
+        &payload.skills,
+        "static-skills",
+        "skills.json",
+        "Skills data",
+    )
+}
+
+fn build_education_chunk(payload: &TerminalDataPayload) -> Option<ContextChunk> {
+    chunk_from_value(
+        &payload.education,
+        "static-education",
+        "education.json",
+        "Education data",
+    )
+}
+
+fn build_testimonials_chunk(payload: &TerminalDataPayload) -> Option<ContextChunk> {
+    chunk_from_value(
+        &payload.testimonials,
+        "static-testimonials",
+        "testimonials.json",
+        "Testimonials data",
+    )
 }
 
 fn build_faq_chunk(payload: &TerminalDataPayload) -> Option<ContextChunk> {
-    let faqs = payload.faqs.as_array()?;
-    if faqs.is_empty() {
+    chunk_from_value(&payload.faqs, "static-faq", "faq.json", "FAQ data")
+}
+
+fn chunk_from_value(value: &Value, id: &str, source: &str, topic: &str) -> Option<ContextChunk> {
+    if value.is_null() {
         return None;
     }
-    let mut selections = Vec::new();
-    if let Some(idx) = faqs.iter().position(|entry| {
-        entry
-            .get("answer")
-            .and_then(Value::as_str)
-            .map(|answer| answer.to_lowercase().contains("codex"))
-            .unwrap_or(false)
-    }) {
-        selections.push(idx);
-    }
-    for idx in 0..faqs.len() {
-        if selections.contains(&idx) {
-            continue;
-        }
-        selections.push(idx);
-        if selections.len() >= 3 {
-            break;
-        }
-    }
-    let mut sections = Vec::new();
-    for idx in selections {
-        if let Some(entry) = faqs.get(idx) {
-            let question = entry
-                .get("question")
-                .and_then(Value::as_str)
-                .unwrap_or("Question");
-            let answer = entry
-                .get("answer")
-                .and_then(Value::as_str)
-                .unwrap_or("Answer unavailable.");
-            sections.push(format!("{question}: {answer}"));
-        }
-    }
-    if sections.is_empty() {
+    let body = serde_json::to_string_pretty(value).unwrap_or_else(|_| value.to_string());
+    if body.trim().is_empty() {
         return None;
     }
     Some(ContextChunk {
-        id: "static-faq".to_string(),
-        source: "faq.json".to_string(),
-        topic: "Frequently asked questions".to_string(),
-        body: sections.join("\n\n"),
+        id: id.to_string(),
+        source: source.to_string(),
+        topic: topic.to_string(),
+        body,
         score: 0.0,
     })
 }
@@ -1685,13 +1549,23 @@ mod tests {
             chunks.iter().any(|chunk| chunk.source == "faq.json"),
             "faq chunk missing from fallback context: {chunks:?}"
         );
+        assert!(
+            chunks.iter().any(|chunk| chunk.source == "education.json"),
+            "education chunk missing from fallback context: {chunks:?}"
+        );
+        assert!(
+            chunks
+                .iter()
+                .any(|chunk| chunk.source == "testimonials.json"),
+            "testimonials chunk missing from fallback context: {chunks:?}"
+        );
         let projects_chunk = chunks
             .iter()
             .find(|chunk| chunk.source == "projects.json")
             .expect("projects chunk missing from fallback context");
         assert!(
-            projects_chunk.body.contains("Tech:"),
-            "projects chunk should include tech stack listings: {}",
+            projects_chunk.body.contains("WebAssembly"),
+            "projects chunk should include full tech stack details: {}",
             projects_chunk.body
         );
     }
