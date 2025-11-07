@@ -77,6 +77,7 @@ class LiveSmokeTester:
             ("Projects command icons", self.test_projects_command_icons),
             ("FAQ dataset", self.test_faq_dataset),
             ("Testimonials dataset", self.test_testimonials_dataset),
+            ("AI projects tech detail", self.test_ai_projects_detail),
             ("AI concierge", self.test_ai_endpoint),
         )
         self.expected_tests = len(tests)
@@ -335,6 +336,28 @@ class LiveSmokeTester:
         ), "wasm icon payload does not contain an SVG tag"
 
         return f"webassembly_projects={len(webassembly_projects)} icon=wasm-original.svg"
+
+    def test_ai_projects_detail(self) -> str:
+        payload = {
+            "question": "Which technologies power the ZQSDev Terminal project?"
+        }
+        response = self.session.post(
+            self._url("/api/ai"), json=payload, timeout=self.timeout
+        )
+        status = response.status_code
+        assert status == 200, f"unexpected status {status}"
+        data = response.json()
+        assert data.get("ai_enabled") is True, "ai disabled for project detail test"
+        answer = data.get("answer", "")
+        required_terms = ("WebAssembly", "Rust", "RAG")
+        missing = [term for term in required_terms if term.lower() not in answer.lower()]
+        assert not missing, f"missing tech terms in answer: {missing}"
+        contexts = data.get("context_chunks") or []
+        projects_context = any(
+            chunk.get("source") == "projects.json" for chunk in contexts
+        )
+        assert projects_context, "AI response missing projects.json context"
+        return f"terms_present={','.join(required_terms)} contexts={len(contexts)}"
 
     def test_faq_dataset(self) -> str:
         data = self._require_terminal_data()
