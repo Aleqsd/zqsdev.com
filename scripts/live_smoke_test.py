@@ -346,7 +346,23 @@ class LiveSmokeTester:
         version = payload.get("version", "")
         commit = payload.get("commit", "unknown")
         assert version, "backend version missing in version payload"
+        expected_version = self._local_version()
+        assert (
+            version == expected_version
+        ), f"backend version mismatch (expected {expected_version}, got {version})"
         return f"backend_version={version} commit={commit}"
+
+    @staticmethod
+    def _local_version() -> str:
+        path = Path("VERSION")
+        if path.is_file():
+            return path.read_text(encoding="utf-8").strip()
+        cargo = Path("Cargo.toml")
+        if cargo.is_file():
+            for line in cargo.read_text(encoding="utf-8").splitlines():
+                if line.strip().startswith("version ="):
+                    return line.split("=", 1)[1].strip().strip('"')
+        return "unknown"
 
     def test_ai_projects_detail(self) -> str:
         payload = {
