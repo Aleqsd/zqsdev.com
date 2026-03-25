@@ -7,7 +7,7 @@ use crate::rate_limit::RateLimiter;
 use crate::static_data::TerminalDataPayload;
 use anyhow::{anyhow, Context};
 use axum::extract::{ConnectInfo, State};
-use axum::http::{header::CACHE_CONTROL, HeaderValue, Request, StatusCode};
+use axum::http::{header::CACHE_CONTROL, HeaderMap, HeaderValue, Request, StatusCode};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
 use axum::{body::Body, Json, Router};
@@ -49,6 +49,7 @@ const PER_HOUR_BUDGET_EUR: f64 = 2.00;
 const PER_DAY_BUDGET_EUR: f64 = 2.00; // Align daily to €2 hard cap
 const PER_MONTH_BUDGET_EUR: f64 = 10.00;
 const SERVER_VERSION: &str = env!("CARGO_PKG_VERSION");
+const MAX_LOG_TEXT_CHARS: usize = 2_000;
 
 fn server_commit_hash() -> &'static str {
     option_env!("GIT_COMMIT_HASH").unwrap_or("unknown")
@@ -151,6 +152,7 @@ struct CommandLogEntry {
     timestamp: String,
     entry_type: &'static str,
     command: String,
+    command_len: usize,
     mode: String,
     ip: String,
 }
@@ -161,6 +163,7 @@ struct AiQuestionLogEntry {
     entry_type: &'static str,
     question_id: String,
     question: String,
+    question_len: usize,
     ip: String,
 }
 
@@ -171,6 +174,7 @@ struct AiAnswerLogEntry {
     question_id: String,
     answer_id: String,
     answer: String,
+    answer_len: usize,
     model: Option<String>,
     ai_enabled: bool,
     reason: Option<String>,
@@ -484,7 +488,8 @@ async fn record_ai_question(app_state: &AppState, question_id: &str, question: &
         timestamp: current_timestamp(),
         entry_type: "ai_question",
         question_id: question_id.to_string(),
-        question: question.to_string(),
+        question: sanitize_log_text(question),
+        question_len: question.chars().count(),
         ip: ip.to_string(),
     };
     if let Err(err) = append_log_entry(&app_state.questions_log, &entry).await {
@@ -503,7 +508,8 @@ async fn record_ai_answer(
         entry_type: "ai_answer",
         question_id: question_id.to_string(),
         answer_id: Uuid::new_v4().to_string(),
-        answer: response.answer.clone(),
+        answer: sanitize_log_text(&response.answer),
+        answer_len: response.answer.chars().count(),
         model: response.model.map(|value| value.to_string()),
         ai_enabled: response.ai_enabled,
         reason: response.reason.clone(),
@@ -531,6 +537,7 @@ async fn handle_version() -> impl IntoResponse {
 
 async fn handle_command_log(
     State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
     ConnectInfo(remote): ConnectInfo<SocketAddr>,
     Json(payload): Json<CommandLogRequest>,
 ) -> impl IntoResponse {
@@ -551,9 +558,10 @@ async fn handle_command_log(
     let entry = CommandLogEntry {
         timestamp: current_timestamp(),
         entry_type: "command",
-        command: trimmed.to_string(),
+        command: sanitize_log_text(trimmed),
+        command_len: trimmed.chars().count(),
         mode,
-        ip: remote.ip().to_string(),
+        ip: client_ip(&headers, remote),
     };
     match append_log_entry(&state.questions_log, &entry).await {
         Ok(_) => StatusCode::NO_CONTENT,
@@ -566,10 +574,12 @@ async fn handle_command_log(
 
 async fn handle_ai(
     State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
     ConnectInfo(remote): ConnectInfo<SocketAddr>,
     Json(payload): Json<AiRequest>,
 ) -> impl IntoResponse {
     let question = payload.question.trim().to_string();
+    let logged_question = sanitize_log_text(&question);
     let primary_model = state.client.primary_model();
     if question.is_empty() {
         let response = AiResponse {
@@ -594,7 +604,7 @@ async fn handle_ai(
         return (StatusCode::BAD_REQUEST, Json(response));
     }
 
-    let ip = remote.ip().to_string();
+    let ip = client_ip(&headers, remote);
     let question_id = Uuid::new_v4().to_string();
     record_ai_question(state.as_ref(), &question_id, &question, &ip).await;
 
@@ -698,6 +708,7 @@ async fn handle_ai(
                 model,
                 cost_eur,
             } = ai_answer;
+            let logged_answer = sanitize_log_text(&answer_text);
             if cost_eur > 0.0 {
                 let mut limiter = state.limiter.lock().await;
                 if let Err(limit) = limiter.record_cost_if_within(cost_eur) {
@@ -752,13 +763,15 @@ async fn handle_ai(
             info!(
                 target: "ai",
                 model,
-                user_question = question.as_str(),
+                user_question_len = question.chars().count(),
+                user_question = logged_question.as_str(),
                 "AI request prompt logged"
             );
             info!(
                 target: "ai",
                 model,
-                ai_answer = answer_text.as_str(),
+                ai_answer_len = answer_text.chars().count(),
+                ai_answer = logged_answer.as_str(),
                 "AI request answer logged"
             );
             let response = AiResponse {
@@ -786,7 +799,11 @@ async fn handle_ai(
                 cost_estimate_eur = request_cost_estimate,
                 "AI request failed"
             );
-            error!(target: "ai", backend_error = %err, question = question.as_str());
+            error!(
+                target: "ai",
+                backend_error = %err,
+                user_question = logged_question.as_str()
+            );
             let response = AiResponse {
                 answer: format!(
                     "The AI backend is temporarily unavailable ({err}). Please retry in a moment."
@@ -800,6 +817,145 @@ async fn handle_ai(
             (StatusCode::SERVICE_UNAVAILABLE, Json(response))
         }
     }
+}
+
+fn client_ip(headers: &HeaderMap, remote: SocketAddr) -> String {
+    if remote.ip().is_loopback() {
+        if let Some(value) = forwarded_ip(headers.get("x-forwarded-for")) {
+            return value;
+        }
+        if let Some(value) = forwarded_ip(headers.get("x-real-ip")) {
+            return value;
+        }
+    }
+    remote.ip().to_string()
+}
+
+fn forwarded_ip(value: Option<&HeaderValue>) -> Option<String> {
+    let value = value?.to_str().ok()?;
+    value
+        .split(',')
+        .map(str::trim)
+        .find(|item| !item.is_empty())
+        .map(str::to_string)
+}
+
+fn sanitize_log_text(input: &str) -> String {
+    let normalized = normalize_log_text(input);
+    let redacted = redact_known_secret_patterns(&normalized);
+    truncate_for_log(&redacted, MAX_LOG_TEXT_CHARS)
+}
+
+fn normalize_log_text(input: &str) -> String {
+    let mut normalized = String::with_capacity(input.len());
+    let mut last_was_space = false;
+
+    for ch in input.chars() {
+        let mapped = if ch.is_control() { ' ' } else { ch };
+        if mapped.is_whitespace() {
+            if !last_was_space {
+                normalized.push(' ');
+                last_was_space = true;
+            }
+        } else {
+            normalized.push(mapped);
+            last_was_space = false;
+        }
+    }
+
+    normalized.trim().to_string()
+}
+
+fn redact_known_secret_patterns(input: &str) -> String {
+    let mut redacted = input.to_string();
+    redacted = redact_prefixed_secret(&redacted, "sk-proj-", "[redacted-openai-key]", 12);
+    redacted = redact_prefixed_secret(&redacted, "sk-", "[redacted-openai-key]", 20);
+    redacted = redact_prefixed_secret(&redacted, "gsk_", "[redacted-groq-key]", 12);
+    redacted = redact_prefixed_secret(&redacted, "pcsk_", "[redacted-pinecone-key]", 12);
+    redacted = redact_prefixed_secret(&redacted, "AIza", "[redacted-google-key]", 12);
+    redact_bearer_token(&redacted)
+}
+
+fn redact_prefixed_secret(
+    input: &str,
+    prefix: &str,
+    replacement: &str,
+    min_secret_tail_len: usize,
+) -> String {
+    let mut redacted = String::with_capacity(input.len());
+    let mut remaining = input;
+
+    while let Some(index) = remaining.find(prefix) {
+        let (before, candidate) = remaining.split_at(index);
+        redacted.push_str(before);
+
+        let mut end = prefix.len();
+        for ch in candidate[prefix.len()..].chars() {
+            if is_secret_char(ch) {
+                end += ch.len_utf8();
+            } else {
+                break;
+            }
+        }
+
+        if end.saturating_sub(prefix.len()) >= min_secret_tail_len {
+            redacted.push_str(replacement);
+        } else {
+            redacted.push_str(&candidate[..end]);
+        }
+
+        remaining = &candidate[end..];
+    }
+
+    redacted.push_str(remaining);
+    redacted
+}
+
+fn redact_bearer_token(input: &str) -> String {
+    let marker = "Bearer ";
+    let mut redacted = String::with_capacity(input.len());
+    let mut remaining = input;
+
+    while let Some(index) = remaining.find(marker) {
+        let (before, after_marker) = remaining.split_at(index);
+        redacted.push_str(before);
+        redacted.push_str(marker);
+
+        let token = &after_marker[marker.len()..];
+        let mut end = 0;
+        for ch in token.chars() {
+            if is_secret_char(ch) {
+                end += ch.len_utf8();
+            } else {
+                break;
+            }
+        }
+
+        if end >= 12 {
+            redacted.push_str("[redacted-bearer-token]");
+        } else {
+            redacted.push_str(&token[..end]);
+        }
+
+        remaining = &token[end..];
+    }
+
+    redacted.push_str(remaining);
+    redacted
+}
+
+fn truncate_for_log(input: &str, max_chars: usize) -> String {
+    let char_count = input.chars().count();
+    if char_count <= max_chars {
+        return input.to_string();
+    }
+
+    let truncated = input.chars().take(max_chars).collect::<String>();
+    format!("{truncated} [truncated {} chars]", char_count - max_chars)
+}
+
+fn is_secret_char(ch: char) -> bool {
+    ch.is_ascii_alphanumeric() || matches!(ch, '-' | '_' | '.')
 }
 
 impl AppState {
@@ -1889,6 +2045,44 @@ mod tests {
         assert!(
             availability.contains("start this month"),
             "Availability answer should confirm immediate start: {availability}"
+        );
+    }
+
+    #[test]
+    fn sanitize_log_text_redacts_known_secret_patterns() {
+        let input = "OPENAI_API_KEY=sk-proj-1234567890abcdefghijklmnop Authorization: Bearer secret-token-1234567890 gsk_abcdefghijklmnopqrstuvwxyz";
+        let sanitized = sanitize_log_text(input);
+
+        assert!(
+            sanitized.contains("[redacted-openai-key]"),
+            "OpenAI-style secrets should be redacted: {sanitized}"
+        );
+        assert!(
+            sanitized.contains("[redacted-bearer-token]"),
+            "Bearer tokens should be redacted: {sanitized}"
+        );
+        assert!(
+            sanitized.contains("[redacted-groq-key]"),
+            "Groq-style secrets should be redacted: {sanitized}"
+        );
+        assert!(
+            !sanitized.contains("sk-proj-1234567890abcdefghijklmnop"),
+            "Raw OpenAI-style secret leaked into logs: {sanitized}"
+        );
+    }
+
+    #[test]
+    fn sanitize_log_text_normalizes_whitespace_and_truncates() {
+        let input = format!("line1\nline2\t{}", "x".repeat(MAX_LOG_TEXT_CHARS + 10));
+        let sanitized = sanitize_log_text(&input);
+
+        assert!(
+            !sanitized.contains('\n') && !sanitized.contains('\t'),
+            "Control characters should be normalized: {sanitized}"
+        );
+        assert!(
+            sanitized.contains("[truncated "),
+            "Long log payloads should be truncated: {sanitized}"
         );
     }
 }
