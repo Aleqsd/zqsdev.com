@@ -1558,8 +1558,8 @@ struct StoredAchievements {
 mod tests {
     use super::*;
     use crate::state::{
-        Education, Experience, FaqEntry, Profile, ProfileLinks, ProjectsCollection, TerminalData,
-        Testimonial,
+        Education, Experience, FaqEntry, Profile, ProfileLinks, ProjectsCollection,
+        ResumeVariant, TerminalData, Testimonial,
     };
     use wasm_bindgen_test::wasm_bindgen_test;
 
@@ -1578,8 +1578,13 @@ mod tests {
                 github: None,
                 linkedin: None,
                 website: None,
-                resume_url: Some("https://cv.zqsdev.com".to_string()),
+                resume_url: Some("https://founding.zqsdev.com".to_string()),
             },
+            resume_variants: vec![ResumeVariant {
+                id: "founding".to_string(),
+                label: "Founding Engineer".to_string(),
+                url: "https://founding.zqsdev.com/".to_string(),
+            }],
             languages: None,
         };
 

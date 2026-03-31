@@ -317,7 +317,7 @@ fn execute_resume(state: &AppState) -> Result<CommandAction, String> {
         .links
         .resume_url
         .clone()
-        .unwrap_or_else(|| "https://cv.zqsdev.com".to_string());
+        .unwrap_or_else(|| "https://founding.zqsdev.com".to_string());
     let target = utils::tag_resume_source(&base);
     Ok(CommandAction::Download(target))
 }
@@ -547,7 +547,7 @@ mod tests {
     use wasm_bindgen_test::wasm_bindgen_test;
 
     fn stub_state() -> AppState {
-        use crate::state::{FaqEntry, Profile, ProfileLinks, Testimonial};
+        use crate::state::{FaqEntry, Profile, ProfileLinks, ResumeVariant, Testimonial};
 
         let mut state = AppState::new();
 
@@ -562,8 +562,25 @@ mod tests {
                 github: Some("https://github.com/example".to_string()),
                 linkedin: None,
                 website: None,
-                resume_url: Some("https://cv.zqsdev.com".to_string()),
+                resume_url: Some("https://founding.zqsdev.com".to_string()),
             },
+            resume_variants: vec![
+                ResumeVariant {
+                    id: "founding".to_string(),
+                    label: "Founding Engineer".to_string(),
+                    url: "https://founding.zqsdev.com/".to_string(),
+                },
+                ResumeVariant {
+                    id: "devops".to_string(),
+                    label: "DevOps Engineer".to_string(),
+                    url: "https://devops.zqsdev.com/".to_string(),
+                },
+                ResumeVariant {
+                    id: "software".to_string(),
+                    label: "Software Engineer".to_string(),
+                    url: "https://software.zqsdev.com/".to_string(),
+                },
+            ],
             languages: Some(vec![
                 "English (TOEIC 990/990) - Full professional proficiency".to_string(),
                 "French - Native or bilingual proficiency".to_string(),
@@ -743,7 +760,7 @@ mod tests {
             "Contact HTML should omit the French summary when unavailable:\n{output}"
         );
         assert!(
-            !output.contains("cv.zqsdev.com"),
+            !output.contains("founding.zqsdev.com"),
             "Contact HTML should hide resume link when not provided:\n{output}"
         );
         assert!(
@@ -981,6 +998,7 @@ mod tests {
                 website: None,
                 resume_url: None,
             },
+            resume_variants: Vec::new(),
             languages: None,
         };
 
@@ -1009,12 +1027,12 @@ mod tests {
             github: None,
             linkedin: Some("https://linkedin.com/in/example".to_string()),
             website: Some("https://zqsdev.com".to_string()),
-            resume_url: Some("https://cv.zqsdev.com".to_string()),
+            resume_url: Some("https://founding.zqsdev.com".to_string()),
         };
 
         let html = super::render_links_html(&links).expect("links should render");
         assert!(
-            html.contains(&crate::utils::tag_resume_source("https://cv.zqsdev.com")),
+            html.contains(&crate::utils::tag_resume_source("https://founding.zqsdev.com")),
             "Résumé link should surface the tagged URL: {html}"
         );
         assert!(

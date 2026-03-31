@@ -2,10 +2,29 @@
 publish = "static"
 command = ""
 
-# Serve the résumé viewer directly when the cv subdomain is hit
+# Redirect the legacy résumé subdomain to the default founding résumé
 [[redirects]]
 from = "https://cv.zqsdev.com/*"
-to = "/cv/:splat"
+to = "https://founding.zqsdev.com/:splat"
+status = 301
+force = true
+
+# Serve each targeted résumé viewer from its dedicated subdomain
+[[redirects]]
+from = "https://founding.zqsdev.com/*"
+to = "/cv/founding/:splat"
+status = 200
+force = true
+
+[[redirects]]
+from = "https://devops.zqsdev.com/*"
+to = "/cv/devops/:splat"
+status = 200
+force = true
+
+[[redirects]]
+from = "https://software.zqsdev.com/*"
+to = "/cv/software/:splat"
 status = 200
 force = true
 
@@ -63,6 +82,11 @@ for = "/index.html"
 
 [[headers]]
 for = "/*.css"
+  [headers.values]
+  Cache-Control = "no-store"
+
+[[headers]]
+for = "/*.pdf"
   [headers.values]
   Cache-Control = "no-store"
 

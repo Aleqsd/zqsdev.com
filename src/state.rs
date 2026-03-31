@@ -10,6 +10,13 @@ pub struct ProfileLinks {
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct ResumeVariant {
+    pub id: String,
+    pub label: String,
+    pub url: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Profile {
     pub name: String,
     pub headline: String,
@@ -18,6 +25,8 @@ pub struct Profile {
     pub location: Option<String>,
     pub email: Option<String>,
     pub links: ProfileLinks,
+    #[serde(default)]
+    pub resume_variants: Vec<ResumeVariant>,
     pub languages: Option<Vec<String>>,
 }
 

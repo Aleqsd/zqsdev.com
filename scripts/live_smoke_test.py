@@ -74,6 +74,8 @@ class LiveSmokeTester:
             ("Backend version endpoint", self.test_backend_version_endpoint),
             ("Terminal data endpoint", self.test_terminal_data_endpoint),
             ("Profile dataset", self.test_profile_dataset),
+            ("Resume variants", self.test_resume_variants),
+            ("Legacy CV redirect", self.test_legacy_cv_redirect),
             ("Skills dataset", self.test_skills_dataset),
             ("Experience dataset", self.test_experience_dataset),
             ("Projects dataset", self.test_projects_dataset),
@@ -294,6 +296,49 @@ class LiveSmokeTester:
             200 <= resume_response.status_code < 400
         ), f"resume_url returned {resume_response.status_code}"
         return f"email={email} resume={resume_response.status_code}"
+
+    def test_resume_variants(self) -> str:
+        data = self._require_terminal_data()
+        variants = data["profile"].get("resume_variants")
+        assert isinstance(variants, list) and variants, "resume_variants missing"
+
+        expected = {
+            "founding": "https://founding.zqsdev.com/",
+            "devops": "https://devops.zqsdev.com/",
+            "software": "https://software.zqsdev.com/",
+        }
+        actual = {}
+        statuses = []
+        for variant in variants:
+            assert isinstance(variant, dict), f"resume variant has invalid shape: {variant!r}"
+            variant_id = variant.get("id")
+            label = variant.get("label")
+            url = variant.get("url")
+            assert variant_id, f"resume variant missing id: {variant!r}"
+            assert label, f"resume variant missing label: {variant!r}"
+            assert url, f"resume variant missing url: {variant!r}"
+            actual[variant_id] = url
+            response = self._head_or_get(url)
+            assert (
+                200 <= response.status_code < 400
+            ), f"resume variant {variant_id} returned {response.status_code}"
+            statuses.append(f"{variant_id}:{response.status_code}")
+
+        assert actual == expected, f"unexpected resume_variants payload: {actual!r}"
+        return ", ".join(statuses)
+
+    def test_legacy_cv_redirect(self) -> str:
+        response = self.session.get(
+            "https://cv.zqsdev.com/",
+            timeout=self.timeout,
+            allow_redirects=False,
+        )
+        assert response.status_code == 301, f"legacy CV returned {response.status_code}"
+        location = response.headers.get("Location", "")
+        assert location.startswith(
+            "https://founding.zqsdev.com/"
+        ), f"legacy CV redirected to unexpected location: {location}"
+        return f"status=301 location={location}"
 
     def test_skills_dataset(self) -> str:
         data = self._require_terminal_data()

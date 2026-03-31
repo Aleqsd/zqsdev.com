@@ -62,7 +62,12 @@ pub fn escape_html(input: &str) -> String {
 }
 
 pub fn tag_resume_source(url: &str) -> String {
-    const CV_HOST: &str = "cv.zqsdev.com";
+    const CV_HOSTS: &[&str] = &[
+        "cv.zqsdev.com",
+        "founding.zqsdev.com",
+        "devops.zqsdev.com",
+        "software.zqsdev.com",
+    ];
     const PARAM_KEY: &str = "from";
     const PARAM_VALUE: &str = "interactive";
 
@@ -78,7 +83,7 @@ pub fn tag_resume_source(url: &str) -> String {
         .split(&['/', '?', '#'][..])
         .next()
         .unwrap_or("");
-    if host_target != CV_HOST {
+    if !CV_HOSTS.iter().any(|host| host_target == *host) {
         return url.to_string();
     }
 
@@ -160,18 +165,18 @@ mod tests {
 
     #[test]
     fn tag_resume_source_appends_param_without_query() {
-        let url = "https://cv.zqsdev.com/";
+        let url = "https://founding.zqsdev.com/";
         let tagged = tag_resume_source(url);
-        assert_eq!(tagged, "https://cv.zqsdev.com/?from=interactive");
+        assert_eq!(tagged, "https://founding.zqsdev.com/?from=interactive");
     }
 
     #[test]
     fn tag_resume_source_appends_param_with_existing_query_and_fragment() {
-        let url = "https://cv.zqsdev.com/view?lang=en#top";
+        let url = "https://devops.zqsdev.com/view?lang=en#top";
         let tagged = tag_resume_source(url);
         assert_eq!(
             tagged,
-            "https://cv.zqsdev.com/view?lang=en&from=interactive#top"
+            "https://devops.zqsdev.com/view?lang=en&from=interactive#top"
         );
     }
 
@@ -183,9 +188,9 @@ mod tests {
 
     #[test]
     fn tag_resume_source_does_not_duplicate_existing_param() {
-        let url = "https://cv.zqsdev.com/?from=interactive";
+        let url = "https://software.zqsdev.com/?from=interactive";
         assert_eq!(tag_resume_source(url), url);
-        let url_mixed = "https://cv.zqsdev.com/?From=Interactive";
+        let url_mixed = "https://software.zqsdev.com/?From=Interactive";
         assert_eq!(tag_resume_source(url_mixed), url_mixed);
     }
 
@@ -197,10 +202,10 @@ mod tests {
             "https://cv.zqsdev.com/?from=interactive"
         );
 
-        let url_complex = "https://cv.zqsdev.com/?lang=en&from=www#top";
+        let url_complex = "https://founding.zqsdev.com/?lang=en&from=www#top";
         assert_eq!(
             tag_resume_source(url_complex),
-            "https://cv.zqsdev.com/?lang=en&from=interactive#top"
+            "https://founding.zqsdev.com/?lang=en&from=interactive#top"
         );
     }
 }

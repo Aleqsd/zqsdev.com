@@ -8,8 +8,25 @@
         "github": "https://github.com/aleqsd",
         "linkedin": "https://www.linkedin.com/in/alexandre-dooalmeida",
         "website": "https://www.zqsdev.com/",
-        "resume_url": "https://cv.zqsdev.com/"
+        "resume_url": "https://founding.zqsdev.com/"
     },
+    "resume_variants": [
+        {
+            "id": "founding",
+            "label": "Founding Engineer",
+            "url": "https://founding.zqsdev.com/"
+        },
+        {
+            "id": "devops",
+            "label": "DevOps Engineer",
+            "url": "https://devops.zqsdev.com/"
+        },
+        {
+            "id": "software",
+            "label": "Software Engineer",
+            "url": "https://software.zqsdev.com/"
+        }
+    ],
     "languages": [
         "English (TOEIC 990/990) - Full professional proficiency",
         "French - Native or bilingual proficiency",

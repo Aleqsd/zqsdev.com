@@ -1,20 +1,22 @@
-// PDF.js (ESM via CDN)
 import {
   getDocument,
   GlobalWorkerOptions,
 } from "https://cdn.jsdelivr.net/npm/pdfjs-dist@5.4.54/build/pdf.mjs";
+
 GlobalWorkerOptions.workerSrc =
   "https://cdn.jsdelivr.net/npm/pdfjs-dist@5.4.54/build/pdf.worker.mjs";
 
-const PDF_URL = "CV_Alexandre_DO_O_ALMEIDA_2025.pdf?v=7";
+const body = document.body;
 const viewer = document.getElementById("viewer");
 const loading = document.getElementById("loading");
-
-const state = { pdf: null, pages: [], scaleByWidth: true };
+const emailBtn = document.getElementById("copy-email");
+const PDF_URL = body.dataset.pdfUrl || "resume.pdf";
 const CTA_PARAM = "from";
 const CTA_INTERACTIVE_VALUE = "interactive";
-const CTA_SELF_VALUE = "cv";
+const CTA_SELF_VALUE = body.dataset.sourceValue || "cv";
 const KNOWN_HELPER_HOSTS = ["www.zqsdev.com", "zqsdev.com"];
+
+const state = { pdf: null, pages: [] };
 
 function configureResumeCta() {
   const cta = document.querySelector(".terminal-cta");
@@ -48,7 +50,11 @@ function configureResumeCta() {
   }
 }
 
-configureResumeCta();
+function configurePdfLinks() {
+  document.querySelectorAll("[data-pdf-link]").forEach((link) => {
+    link.href = PDF_URL;
+  });
+}
 
 function clearViewer() {
   viewer.querySelectorAll(".page").forEach((el) => el.remove());
@@ -61,7 +67,6 @@ async function renderPage(page, canvas, scale) {
   const outputScale = window.devicePixelRatio || 1;
   canvas.width = Math.floor(viewport.width * outputScale);
   canvas.height = Math.floor(viewport.height * outputScale);
-
   canvas.style.width = `${Math.floor(viewport.width)}px`;
   canvas.style.height = `${Math.floor(viewport.height)}px`;
 
@@ -82,7 +87,7 @@ async function renderAllPages() {
   clearViewer();
   const containerWidth = viewer.clientWidth;
 
-  for (let num = 1; num <= state.pdf.numPages; num++) {
+  for (let num = 1; num <= state.pdf.numPages; num += 1) {
     const page = await state.pdf.getPage(num);
 
     const wrapper = document.createElement("div");
@@ -104,13 +109,12 @@ async function renderAllPages() {
   }
 }
 
-// Resize (debounced via rAF)
 let resizeTimer = null;
 window.addEventListener("resize", () => {
   if (resizeTimer) cancelAnimationFrame(resizeTimer);
   resizeTimer = requestAnimationFrame(async () => {
     const containerWidth = viewer.clientWidth;
-    for (let num = 1; num <= (state.pdf?.numPages || 0); num++) {
+    for (let num = 1; num <= (state.pdf?.numPages || 0); num += 1) {
       const entry = state.pages[num];
       if (!entry) continue;
       const newScale = computeScale(entry.page, containerWidth);
@@ -127,43 +131,46 @@ function showToast(message) {
   if (!toast) return;
   toast.innerHTML = `<span class="icon">📋</span>${message}`;
   toast.classList.add("show");
-  clearTimeout(showToast._t);
-  showToast._t = setTimeout(() => toast.classList.remove("show"), 1800);
+  clearTimeout(showToast.timeoutId);
+  showToast.timeoutId = setTimeout(() => toast.classList.remove("show"), 1800);
 }
 
-// Copy email + popup
-const emailBtn = document.getElementById("copy-email");
-emailBtn.addEventListener("click", async (e) => {
-  e.preventDefault();
-  const email = "alexandre@zqsdev.com";
-  try {
-    await navigator.clipboard.writeText(email);
-    showToast("Email copied to clipboard");
-  } catch {
-    // Fallback (sélection dans un input temporaire)
-    const tmp = document.createElement("input");
-    tmp.value = email;
-    document.body.appendChild(tmp);
-    tmp.select();
-    document.execCommand("copy");
-    tmp.remove();
-    showToast("Email copied");
-  }
-});
+if (emailBtn) {
+  emailBtn.addEventListener("click", async (event) => {
+    event.preventDefault();
+    const email = "alexandre@zqsdev.com";
+    try {
+      await navigator.clipboard.writeText(email);
+      showToast("Email copied to clipboard");
+    } catch {
+      const tmp = document.createElement("input");
+      tmp.value = email;
+      document.body.appendChild(tmp);
+      tmp.select();
+      document.execCommand("copy");
+      tmp.remove();
+      showToast("Email copied");
+    }
+  });
+}
 
-// Init
+configureResumeCta();
+configurePdfLinks();
+
 (async () => {
   try {
     const task = getDocument(PDF_URL);
     state.pdf = await task.promise;
     await renderAllPages();
-  } catch (e) {
-    console.error(e);
+  } catch (error) {
+    console.error(error);
     viewer.innerHTML = `
       <div class="fallback">
         <p>Unable to display the resume inline.</p>
-        <a href="${PDF_URL}" download>Download resume</a>
-        <a href="${PDF_URL}" target="_blank" rel="noopener">Open in new tab</a>
+        <div class="fallback-actions">
+          <a href="${PDF_URL}" download>Download resume</a>
+          <a href="${PDF_URL}" target="_blank" rel="noopener">Open in new tab</a>
+        </div>
       </div>`;
   } finally {
     loading?.remove();

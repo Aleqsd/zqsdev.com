@@ -1695,8 +1695,8 @@ mod tests {
             .and_then(|value| value.as_str())
             .expect("profile.links.resume_url should be populated");
         assert!(
-            resume.starts_with("https://cv.zqsdev.com"),
-            "Résumé link should point to the cv subdomain: {resume}"
+            resume.starts_with("https://founding.zqsdev.com"),
+            "Résumé link should point to the default founding résumé domain: {resume}"
         );
 
         let website = links
