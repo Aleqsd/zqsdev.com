@@ -1521,6 +1521,9 @@ fn build_user_prompt(question: &str, context: Option<&[ContextChunk]>) -> String
         buffer.push_str(
             "Use the referenced context snippets to answer the question. When citing a snippet, mention it naturally like \"(source: Core skills section)\" and never reference file names.\n",
         );
+        buffer.push_str(
+            "If the context includes a project tech stack or named technologies, repeat the exact technology names from context in your answer. Do not collapse or generalize them into broader categories.\n",
+        );
         for chunk in chunks {
             let label = format!("{} section", chunk.topic);
             let _ = writeln!(buffer, "[context] {label}\n{}\n", chunk.body.trim());
@@ -1845,6 +1848,10 @@ mod tests {
         assert!(
             prompt.contains("Highlights about CI/CD"),
             "prompt should inline chunk bodies: {prompt}"
+        );
+        assert!(
+            prompt.contains("repeat the exact technology names from context"),
+            "prompt should explicitly preserve named technologies: {prompt}"
         );
         assert!(
             prompt.ends_with("What is Alexandre working on?"),
