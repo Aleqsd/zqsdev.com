@@ -1528,11 +1528,108 @@ fn build_user_prompt(question: &str, context: Option<&[ContextChunk]>) -> String
             let label = format!("{} section", chunk.topic);
             let _ = writeln!(buffer, "[context] {label}\n{}\n", chunk.body.trim());
         }
+        let explicit_technologies = extract_explicit_technologies(question, chunks);
+        if !explicit_technologies.is_empty() {
+            let _ = writeln!(
+                buffer,
+                "Explicit technologies found in context: {}.",
+                explicit_technologies.join(", ")
+            );
+        }
         buffer.push_str("Question:\n");
         buffer.push_str(question);
         buffer
     } else {
         question.to_string()
+    }
+}
+
+fn extract_explicit_technologies(question: &str, chunks: &[ContextChunk]) -> Vec<String> {
+    let keywords = question_keywords(question);
+    let mut collected = Vec::new();
+
+    for chunk in chunks {
+        let Ok(value) = serde_json::from_str::<Value>(&chunk.body) else {
+            continue;
+        };
+        let mut matched = Vec::new();
+        collect_matching_tech_terms(&value, &keywords, &mut matched, true);
+        if matched.is_empty() {
+            collect_matching_tech_terms(&value, &keywords, &mut matched, false);
+        }
+        for tech in matched {
+            if !collected.iter().any(|existing| existing == &tech) {
+                collected.push(tech);
+            }
+        }
+    }
+
+    collected
+}
+
+fn question_keywords(question: &str) -> Vec<String> {
+    const STOP_WORDS: &[&str] = &[
+        "the", "a", "an", "and", "or", "to", "for", "of", "in", "on", "with", "which", "what",
+        "who", "how", "is", "are", "do", "does", "power", "powers", "project", "technologies",
+    ];
+
+    question
+        .split(|ch: char| !ch.is_alphanumeric())
+        .filter_map(|token| {
+            let lowered = token.trim().to_ascii_lowercase();
+            if lowered.len() < 3 || STOP_WORDS.contains(&lowered.as_str()) {
+                None
+            } else {
+                Some(lowered)
+            }
+        })
+        .collect()
+}
+
+fn collect_matching_tech_terms(
+    value: &Value,
+    keywords: &[String],
+    out: &mut Vec<String>,
+    require_keyword_match: bool,
+) {
+    match value {
+        Value::Object(map) => {
+            let title = map
+                .get("title")
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_ascii_lowercase();
+            let description = map
+                .get("description")
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_ascii_lowercase();
+            let keyword_match = keywords.is_empty()
+                || keywords
+                    .iter()
+                    .any(|keyword| title.contains(keyword) || description.contains(keyword));
+
+            if let Some(tech) = map.get("tech").and_then(Value::as_array) {
+                if keyword_match || !require_keyword_match {
+                    for item in tech.iter().filter_map(Value::as_str) {
+                        let trimmed = item.trim();
+                        if !trimmed.is_empty() && !out.iter().any(|existing| existing == trimmed) {
+                            out.push(trimmed.to_string());
+                        }
+                    }
+                }
+            }
+
+            for child in map.values() {
+                collect_matching_tech_terms(child, keywords, out, require_keyword_match);
+            }
+        }
+        Value::Array(items) => {
+            for item in items {
+                collect_matching_tech_terms(item, keywords, out, require_keyword_match);
+            }
+        }
+        _ => {}
     }
 }
 
@@ -1856,6 +1953,36 @@ mod tests {
         assert!(
             prompt.ends_with("What is Alexandre working on?"),
             "prompt should include the user question at the end: {prompt}"
+        );
+    }
+
+    #[test]
+    fn user_prompt_surfaces_matching_project_technologies() {
+        let chunks = vec![ContextChunk {
+            id: "projects-projects:1".to_string(),
+            source: "projects.json".to_string(),
+            topic: "projects".to_string(),
+            body: serde_json::json!({
+                "projects": [
+                    {
+                        "title": "ZQSDev Terminal – AI Résumé Concierge",
+                        "description": "Built this interactive portfolio terminal.",
+                        "tech": ["Rust", "RAG", "LLM APIs", "WebAssembly", "Netlify"]
+                    }
+                ]
+            })
+            .to_string(),
+            score: 0.91,
+        }];
+
+        let prompt = build_user_prompt(
+            "Which technologies power the ZQSDev Terminal project?",
+            Some(&chunks),
+        );
+
+        assert!(
+            prompt.contains("Explicit technologies found in context: Rust, RAG, LLM APIs, WebAssembly, Netlify."),
+            "prompt should surface the matching project tech stack verbatim: {prompt}"
         );
     }
 
