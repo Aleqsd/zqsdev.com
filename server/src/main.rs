@@ -1549,7 +1549,7 @@ fn extract_explicit_technologies(question: &str, chunks: &[ContextChunk]) -> Vec
     let mut collected = Vec::new();
 
     for chunk in chunks {
-        let Ok(value) = serde_json::from_str::<Value>(&chunk.body) else {
+        let Some(value) = parse_chunk_json_body(&chunk.body) else {
             continue;
         };
         let mut matched = Vec::new();
@@ -1565,6 +1565,18 @@ fn extract_explicit_technologies(question: &str, chunks: &[ContextChunk]) -> Vec
     }
 
     collected
+}
+
+fn parse_chunk_json_body(body: &str) -> Option<Value> {
+    let trimmed = body.trim();
+    if let Ok(value) = serde_json::from_str::<Value>(trimmed) {
+        return Some(value);
+    }
+
+    let json_start = trimmed
+        .char_indices()
+        .find_map(|(idx, ch)| (ch == '{' || ch == '[').then_some(idx))?;
+    serde_json::from_str::<Value>(&trimmed[json_start..]).ok()
 }
 
 fn question_keywords(question: &str) -> Vec<String> {
@@ -1961,16 +1973,17 @@ mod tests {
         let chunks = vec![ContextChunk {
             id: "projects-projects:1".to_string(),
             source: "projects.json".to_string(),
-            topic: "projects".to_string(),
-            body: serde_json::json!({
-                "projects": [
-                    {
-                        "title": "ZQSDev Terminal – AI Résumé Concierge",
-                        "description": "Built this interactive portfolio terminal.",
-                        "tech": ["Rust", "RAG", "LLM APIs", "WebAssembly", "Netlify"]
-                    }
-                ]
-            })
+            topic: "projects: ZQSDev Terminal – AI Résumé Concierge".to_string(),
+            body: concat!(
+                "Source: projects\n",
+                "Topic: projects\n",
+                "Label: ZQSDev Terminal – AI Résumé Concierge\n\n",
+                "{\n",
+                "  \"title\": \"ZQSDev Terminal – AI Résumé Concierge\",\n",
+                "  \"description\": \"Built this interactive portfolio terminal.\",\n",
+                "  \"tech\": [\"Rust\", \"RAG\", \"LLM APIs\", \"WebAssembly\", \"Netlify\"]\n",
+                "}"
+            )
             .to_string(),
             score: 0.91,
         }];
@@ -1984,6 +1997,23 @@ mod tests {
             prompt.contains("Explicit technologies found in context: Rust, RAG, LLM APIs, WebAssembly, Netlify."),
             "prompt should surface the matching project tech stack verbatim: {prompt}"
         );
+    }
+
+    #[test]
+    fn parse_chunk_json_body_skips_rag_headers() {
+        let value = parse_chunk_json_body(
+            "Source: projects\nTopic: projects\nLabel: Demo\n\n{\"tech\":[\"Rust\",\"WebAssembly\"]}",
+        )
+        .expect("json payload should be parsed after headers");
+
+        let tech = value["tech"]
+            .as_array()
+            .expect("tech array should be present")
+            .iter()
+            .filter_map(Value::as_str)
+            .collect::<Vec<_>>();
+
+        assert_eq!(tech, vec!["Rust", "WebAssembly"]);
     }
 
     #[test]

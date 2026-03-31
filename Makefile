@@ -51,7 +51,9 @@ rag-inspect:
 
 test:
 	@command -v wasm-pack >/dev/null 2>&1 || { echo "wasm-pack not found. Install with 'cargo install wasm-pack'."; exit 1; }
+	@command -v python3 >/dev/null 2>&1 || { echo "python3 not found. Install Python 3 to continue."; exit 1; }
 	rustup target add $(WASM_TARGET) >/dev/null 2>&1 || true
+	python3 -m unittest scripts.test_build_rag
 	wasm-pack test --node
 	cargo test --manifest-path $(SERVER_MANIFEST)
 

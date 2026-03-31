@@ -14,7 +14,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 
-import requests
+try:
+    import requests
+except ModuleNotFoundError:  # pragma: no cover - exercised when optional dependency is absent
+    requests = None
 
 OPENAI_EMBEDDING_ENDPOINT = "https://api.openai.com/v1/embeddings"
 
@@ -97,6 +100,8 @@ def main() -> None:
         sys.exit("PINECONE_API_KEY is required unless --skip-pinecone is set.")
     if not args.skip_pinecone and not args.pinecone_host:
         sys.exit("PINECONE_HOST must be provided (argument or env) unless --skip-pinecone.")
+    if not args.skip_pinecone:
+        require_requests()
 
     chunks = build_chunks(args.data_dir, chunk_size=args.chunk_size, overlap=args.chunk_overlap)
     print(f"Discovered {len(chunks)} chunks from {args.data_dir}")
@@ -166,21 +171,37 @@ def generate_documents(source: str, payload) -> Iterable[Tuple[str, str, str]]:
             topic = guess_label(entry) or f"{source}-{idx}"
             body = render_body(entry)
             base_id = f"{source}-{slugify(topic)}"
-            text = f"Source: {source}\nTopic: {topic}\n\n{body}".strip()
+            text = format_document(source, topic, body)
             yield base_id, topic, text
         return
 
     if isinstance(payload, dict):
         for key, value in payload.items():
+            if isinstance(value, list) and value and all(isinstance(entry, dict) for entry in value):
+                for idx, entry in enumerate(value, start=1):
+                    label = guess_label(entry) or f"{key}-{idx}"
+                    body = render_body(entry)
+                    base_id = f"{source}-{slugify(key)}-{slugify(label)}"
+                    topic = f"{key}: {label}"
+                    text = format_document(source, str(key), body, label=label)
+                    yield base_id, topic, text
+                continue
             topic = str(key)
             body = render_body(value)
             base_id = f"{source}-{slugify(topic)}"
-            text = f"Source: {source}\nTopic: {topic}\n\n{body}".strip()
+            text = format_document(source, topic, body)
             yield base_id, topic, text
         return
 
     text = f"Source: {source}\n\n{payload}"
     yield f"{source}-all", source, text
+
+
+def format_document(source: str, topic: str, body: str, label: Optional[str] = None) -> str:
+    parts = [f"Source: {source}", f"Topic: {topic}"]
+    if label:
+        parts.append(f"Label: {label}")
+    return "\n".join(parts) + f"\n\n{body}".strip()
 
 
 def split_text(text: str, chunk_size: int, overlap: int) -> List[str]:
@@ -235,6 +256,12 @@ def load_existing_rows(sqlite_path: Path) -> Dict[str, str]:
         return {}
     finally:
         conn.close()
+
+
+def require_requests():
+    if requests is None:
+        raise SystemExit("Python package 'requests' is required. Install with 'pip install requests'.")
+    return requests
 
 
 def persist_sqlite(sqlite_path: Path, chunks: Sequence[DocumentChunk]) -> None:
@@ -299,9 +326,10 @@ class OpenAIEmbeddings:
         self.batch_size = batch_size
 
     def embed(self, texts: Sequence[str]) -> List[List[float]]:
+        http = require_requests()
         vectors: List[List[float]] = []
         for batch in chunked(texts, self.batch_size):
-            response = requests.post(
+            response = http.post(
                 OPENAI_EMBEDDING_ENDPOINT,
                 headers={
                     "Authorization": f"Bearer {self.api_key}",
@@ -327,12 +355,13 @@ class PineconeClient:
         self.batch_size = batch_size
 
     def upsert(self, vectors: Sequence[Dict]) -> None:
+        http = require_requests()
         print(f"Upserting {len(vectors)} vector(s) to Pinecone...")
         for batch in chunked(vectors, self.batch_size):
             payload = {"vectors": batch}
             if self.namespace:
                 payload["namespace"] = self.namespace
-            response = requests.post(
+            response = http.post(
                 f"{self.base_url}/vectors/upsert",
                 headers=self._headers(),
                 json=payload,
@@ -342,11 +371,12 @@ class PineconeClient:
                 raise SystemExit(f"Pinecone upsert failed ({response.status_code}): {response.text}")
 
     def delete(self, ids: Sequence[str]) -> None:
+        http = require_requests()
         print(f"Deleting {len(ids)} vector(s) from Pinecone...")
         payload = {"ids": list(ids)}
         if self.namespace:
             payload["namespace"] = self.namespace
-        response = requests.post(
+        response = http.post(
             f"{self.base_url}/vectors/delete",
             headers=self._headers(),
             json=payload,
