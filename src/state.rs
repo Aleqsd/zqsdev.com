@@ -165,6 +165,7 @@ pub struct AppState {
     pub achievement_cookie_unlocked: bool,
     pub achievement_konami_unlocked: bool,
     pub achievement_shutdown_unlocked: bool,
+    pub achievement_platinum_unlocked: bool,
     pub achievements_modal_open: bool,
     pub achievements_spoilers_enabled: bool,
     pub backend_version: Option<BackendVersionMeta>,
@@ -190,6 +191,7 @@ impl AppState {
             achievement_cookie_unlocked: false,
             achievement_konami_unlocked: false,
             achievement_shutdown_unlocked: false,
+            achievement_platinum_unlocked: false,
             achievements_modal_open: false,
             achievements_spoilers_enabled: false,
             backend_version: None,
@@ -260,6 +262,21 @@ impl AppState {
         Self::unlock_flag(&mut self.achievement_shutdown_unlocked)
     }
 
+    pub fn all_base_achievements_unlocked(&self) -> bool {
+        self.achievement_shaw_unlocked
+            && self.achievement_pokemon_unlocked
+            && self.achievement_cookie_unlocked
+            && self.achievement_konami_unlocked
+            && self.achievement_shutdown_unlocked
+    }
+
+    pub fn unlock_platinum_trophy(&mut self) -> bool {
+        if !self.all_base_achievements_unlocked() {
+            return false;
+        }
+        Self::unlock_flag(&mut self.achievement_platinum_unlocked)
+    }
+
     fn unlock_flag(flag: &mut bool) -> bool {
         if *flag {
             false
@@ -267,5 +284,41 @@ impl AppState {
             *flag = true;
             true
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::AppState;
+
+    #[test]
+    fn platinum_requires_every_base_achievement() {
+        let mut state = AppState::new();
+
+        assert!(!state.unlock_platinum_trophy());
+
+        state.unlock_shaw_celebration();
+        state.unlock_pokemon_master();
+        state.unlock_cookie_rain();
+        state.unlock_konami_secret();
+        assert!(!state.all_base_achievements_unlocked());
+        assert!(!state.unlock_platinum_trophy());
+
+        state.unlock_shutdown_protocol();
+        assert!(state.all_base_achievements_unlocked());
+        assert!(state.unlock_platinum_trophy());
+    }
+
+    #[test]
+    fn platinum_unlock_is_idempotent() {
+        let mut state = AppState::new();
+        state.unlock_shaw_celebration();
+        state.unlock_pokemon_master();
+        state.unlock_cookie_rain();
+        state.unlock_konami_secret();
+        state.unlock_shutdown_protocol();
+
+        assert!(state.unlock_platinum_trophy());
+        assert!(!state.unlock_platinum_trophy());
     }
 }

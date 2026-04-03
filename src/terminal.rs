@@ -1,6 +1,6 @@
 use crate::ai;
 use crate::commands::{self, CommandAction, CommandError, PokemonAttemptOutcome};
-use crate::renderer::{AchievementView, Renderer, ScrollBehavior};
+use crate::renderer::{AchievementTier, AchievementView, Renderer, ScrollBehavior};
 use crate::state::AppState;
 use crate::telemetry::{self, CommandLogMode};
 use crate::utils;
@@ -90,6 +90,8 @@ const ACHIEVEMENT_KONAMI_TITLE: &str = "Kamehameha!";
 const ACHIEVEMENT_KONAMI_DESCRIPTION: &str = "And this... is to go even further beyond!";
 const ACHIEVEMENT_SHUTDOWN_TITLE: &str = "AAAAAAAAAAAAAH";
 const ACHIEVEMENT_SHUTDOWN_DESCRIPTION: &str = "Why would you do that?!";
+const ACHIEVEMENT_PLATINUM_TITLE: &str = "Platinum Trophy";
+const ACHIEVEMENT_PLATINUM_DESCRIPTION: &str = "Unlocked every Easter egg in the terminal.";
 const ACHIEVEMENTS_STORAGE_KEY: &str = "zqs_terminal_achievements";
 const ACHIEVEMENTS_STORAGE_VERSION: &str = env!("CARGO_PKG_VERSION");
 const ACHIEVEMENT_SHAW_HINT: &str = "Hornet shouts can be heard in the terminal.";
@@ -97,6 +99,7 @@ const ACHIEVEMENT_POKEMON_HINT: &str = "Gotta catch 'em all!";
 const ACHIEVEMENT_COOKIE_HINT: &str = "Tap into the cookie zone.";
 const ACHIEVEMENT_KONAMI_HINT: &str = "Konami";
 const ACHIEVEMENT_SHUTDOWN_HINT: &str = "Why would you remove my files?";
+const ACHIEVEMENT_PLATINUM_HINT: &str = "Claim every other Easter egg to reveal the rarest trophy.";
 
 impl Terminal {
     pub fn new(state: SharedState, renderer: SharedRenderer) -> Self {
@@ -174,6 +177,7 @@ impl Terminal {
             state.achievement_cookie_unlocked = false;
             state.achievement_konami_unlocked = false;
             state.achievement_shutdown_unlocked = false;
+            state.achievement_platinum_unlocked = false;
             state.achievements_spoilers_enabled = false;
             state.konami_triggered = false;
             state.konami_index = 0;
@@ -258,9 +262,9 @@ impl Terminal {
                 self.trigger_achievement_popup(
                     ACHIEVEMENT_SHUTDOWN_TITLE,
                     ACHIEVEMENT_SHUTDOWN_DESCRIPTION,
+                    AchievementTier::Standard,
                 )?;
-                self.persist_achievements_state();
-                self.refresh_achievements_modal_if_visible()?;
+                self.finalize_achievement_unlock()?;
             }
 
             self.trigger_shutdown_sequence(1000)?;
@@ -353,9 +357,9 @@ impl Terminal {
                 self.trigger_achievement_popup(
                     ACHIEVEMENT_KONAMI_TITLE,
                     ACHIEVEMENT_KONAMI_DESCRIPTION,
+                    AchievementTier::Standard,
                 )?;
-                self.persist_achievements_state();
-                self.refresh_achievements_modal_if_visible()?;
+                self.finalize_achievement_unlock()?;
             }
             return Ok(true);
         }
@@ -595,9 +599,9 @@ impl Terminal {
                 self.trigger_achievement_popup(
                     ACHIEVEMENT_POKEMON_TITLE,
                     ACHIEVEMENT_POKEMON_DESCRIPTION,
+                    AchievementTier::Standard,
                 )?;
-                self.persist_achievements_state();
-                self.refresh_achievements_modal_if_visible()?;
+                self.finalize_achievement_unlock()?;
             }
             let success_effect = self.renderer.render_pokemon_capture_success()?;
             self.dismiss_pokemon_effect_after_delay(&success_effect, 5000);
@@ -711,10 +715,64 @@ impl Terminal {
         });
     }
 
-    fn trigger_achievement_popup(&self, title: &str, description: &str) -> Result<(), JsValue> {
-        let toast = self.renderer.render_achievement_toast(title, description)?;
+    fn trigger_achievement_popup(
+        &self,
+        title: &str,
+        description: &str,
+        tier: AchievementTier,
+    ) -> Result<(), JsValue> {
+        let toast = self
+            .renderer
+            .render_achievement_toast(title, description, tier)?;
         Self::schedule_toast_dismissal(Rc::clone(&self.renderer), toast, 5200);
         Ok(())
+    }
+
+    fn finalize_achievement_unlock(&self) -> Result<(), JsValue> {
+        self.sync_platinum_unlock()?;
+        self.persist_achievements_state();
+        self.refresh_achievements_modal_if_visible()
+    }
+
+    fn sync_platinum_unlock(&self) -> Result<(), JsValue> {
+        let celebrate = {
+            let mut state = self.state.borrow_mut();
+            state.unlock_platinum_trophy()
+        };
+        if celebrate {
+            self.trigger_achievement_popup(
+                ACHIEVEMENT_PLATINUM_TITLE,
+                ACHIEVEMENT_PLATINUM_DESCRIPTION,
+                AchievementTier::Platinum,
+            )?;
+        }
+        Ok(())
+    }
+
+    fn sync_platinum_unlock_shared(state: &SharedState, renderer: &SharedRenderer) {
+        let celebrate = {
+            let mut state_mut = state.borrow_mut();
+            state_mut.unlock_platinum_trophy()
+        };
+        if !celebrate {
+            return;
+        }
+
+        match renderer.render_achievement_toast(
+            ACHIEVEMENT_PLATINUM_TITLE,
+            ACHIEVEMENT_PLATINUM_DESCRIPTION,
+            AchievementTier::Platinum,
+        ) {
+            Ok(toast) => {
+                Self::schedule_toast_dismissal(Rc::clone(renderer), toast, 5200);
+            }
+            Err(err) => {
+                utils::log(&format!(
+                    "Failed to display platinum achievement toast: {:?}",
+                    err
+                ));
+            }
+        }
     }
 
     fn schedule_toast_dismissal(renderer: SharedRenderer, toast: HtmlElement, delay_ms: u32) {
@@ -780,35 +838,47 @@ impl Terminal {
                 ACHIEVEMENT_SHAW_TITLE,
                 ACHIEVEMENT_SHAW_DESCRIPTION,
                 ACHIEVEMENT_SHAW_HINT,
+                AchievementTier::Standard,
             ),
             (
                 state.achievement_pokemon_unlocked,
                 ACHIEVEMENT_POKEMON_TITLE,
                 ACHIEVEMENT_POKEMON_DESCRIPTION,
                 ACHIEVEMENT_POKEMON_HINT,
+                AchievementTier::Standard,
             ),
             (
                 state.achievement_cookie_unlocked,
                 ACHIEVEMENT_COOKIE_TITLE,
                 ACHIEVEMENT_COOKIE_DESCRIPTION,
                 ACHIEVEMENT_COOKIE_HINT,
+                AchievementTier::Standard,
             ),
             (
                 state.achievement_konami_unlocked,
                 ACHIEVEMENT_KONAMI_TITLE,
                 ACHIEVEMENT_KONAMI_DESCRIPTION,
                 ACHIEVEMENT_KONAMI_HINT,
+                AchievementTier::Standard,
             ),
             (
                 state.achievement_shutdown_unlocked,
                 ACHIEVEMENT_SHUTDOWN_TITLE,
                 ACHIEVEMENT_SHUTDOWN_DESCRIPTION,
                 ACHIEVEMENT_SHUTDOWN_HINT,
+                AchievementTier::Standard,
+            ),
+            (
+                state.achievement_platinum_unlocked,
+                ACHIEVEMENT_PLATINUM_TITLE,
+                ACHIEVEMENT_PLATINUM_DESCRIPTION,
+                ACHIEVEMENT_PLATINUM_HINT,
+                AchievementTier::Platinum,
             ),
         ];
 
-        for (is_unlocked, title, description, hint) in entries {
-            let view = AchievementView::new(title, description, hint, is_unlocked);
+        for (is_unlocked, title, description, hint, tier) in entries {
+            let view = AchievementView::new(title, description, hint, is_unlocked, tier);
             if is_unlocked {
                 unlocked.push(view);
             } else {
@@ -874,6 +944,8 @@ impl Terminal {
             state.achievement_cookie_unlocked = data.cookie;
             state.achievement_konami_unlocked = data.konami;
             state.achievement_shutdown_unlocked = data.shutdown;
+            state.achievement_platinum_unlocked =
+                data.platinum || state.all_base_achievements_unlocked();
             state.achievements_spoilers_enabled = data.spoilers_enabled;
         }
         Ok(())
@@ -909,6 +981,7 @@ impl Terminal {
             cookie: state.achievement_cookie_unlocked,
             konami: state.achievement_konami_unlocked,
             shutdown: state.achievement_shutdown_unlocked,
+            platinum: state.achievement_platinum_unlocked,
             spoilers_enabled: state.achievements_spoilers_enabled,
         }
     }
@@ -937,9 +1010,11 @@ impl Terminal {
             return;
         }
 
-        match renderer
-            .render_achievement_toast(ACHIEVEMENT_COOKIE_TITLE, ACHIEVEMENT_COOKIE_DESCRIPTION)
-        {
+        match renderer.render_achievement_toast(
+            ACHIEVEMENT_COOKIE_TITLE,
+            ACHIEVEMENT_COOKIE_DESCRIPTION,
+            AchievementTier::Standard,
+        ) {
             Ok(toast) => {
                 Self::schedule_toast_dismissal(Rc::clone(&renderer), toast, 5200);
             }
@@ -951,6 +1026,7 @@ impl Terminal {
             }
         }
 
+        Self::sync_platinum_unlock_shared(&state, &renderer);
         Self::persist_achievements_snapshot_shared(&state);
 
         if let Err(err) = Self::refresh_achievements_modal_for_shared(&state, &renderer) {
@@ -1095,9 +1171,12 @@ impl Terminal {
         };
 
         if celebrate {
-            self.trigger_achievement_popup(ACHIEVEMENT_SHAW_TITLE, ACHIEVEMENT_SHAW_DESCRIPTION)?;
-            self.persist_achievements_state();
-            self.refresh_achievements_modal_if_visible()?;
+            self.trigger_achievement_popup(
+                ACHIEVEMENT_SHAW_TITLE,
+                ACHIEVEMENT_SHAW_DESCRIPTION,
+                AchievementTier::Standard,
+            )?;
+            self.finalize_achievement_unlock()?;
         }
 
         self.renderer.force_scroll_to_bottom();
@@ -1551,6 +1630,8 @@ struct StoredAchievements {
     cookie: bool,
     konami: bool,
     shutdown: bool,
+    #[serde(default)]
+    platinum: bool,
     spoilers_enabled: bool,
 }
 
@@ -1558,8 +1639,8 @@ struct StoredAchievements {
 mod tests {
     use super::*;
     use crate::state::{
-        Education, Experience, FaqEntry, Profile, ProfileLinks, ProjectsCollection,
-        ResumeVariant, TerminalData, Testimonial,
+        Education, Experience, FaqEntry, Profile, ProfileLinks, ProjectsCollection, ResumeVariant,
+        TerminalData, Testimonial,
     };
     use wasm_bindgen_test::wasm_bindgen_test;
 
@@ -1697,6 +1778,43 @@ mod tests {
             "Only the quit suggestion should match prefix `q`"
         );
         assert_eq!(suggestions[0].0, "quit");
+    }
+
+    #[test]
+    fn achievement_views_include_platinum_entry() {
+        let state = AppState::new();
+        let achievements = super::Terminal::build_achievement_views(&state);
+
+        assert_eq!(achievements.len(), 6);
+        assert_eq!(
+            achievements
+                .last()
+                .map(|achievement| achievement.title.as_str()),
+            Some(super::ACHIEVEMENT_PLATINUM_TITLE)
+        );
+    }
+
+    #[test]
+    fn achievement_views_promote_unlocked_platinum_into_unlocked_section() {
+        let mut state = AppState::new();
+        state.achievement_shaw_unlocked = true;
+        state.achievement_pokemon_unlocked = true;
+        state.achievement_cookie_unlocked = true;
+        state.achievement_konami_unlocked = true;
+        state.achievement_shutdown_unlocked = true;
+        state.achievement_platinum_unlocked = true;
+
+        let achievements = super::Terminal::build_achievement_views(&state);
+        assert_eq!(
+            achievements
+                .first()
+                .map(|achievement| achievement.title.as_str()),
+            Some(super::ACHIEVEMENT_SHAW_TITLE)
+        );
+        assert!(achievements
+            .iter()
+            .take_while(|achievement| achievement.unlocked)
+            .any(|achievement| achievement.title == super::ACHIEVEMENT_PLATINUM_TITLE));
     }
 
     #[wasm_bindgen_test]

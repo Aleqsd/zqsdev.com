@@ -597,7 +597,58 @@ body.theme-midnight {
 .achievement-toast__icon {
     font-size: 1.45rem;
     line-height: 1;
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.2rem;
+    min-width: 2.2rem;
+    height: 2.2rem;
     filter: drop-shadow(0 0 8px rgba(92, 207, 230, 0.75));
+}
+
+.achievement-toast__icon[data-icon="platinum"],
+.achievement-card__icon[data-icon="platinum"] {
+    color: transparent;
+    filter: none;
+    isolation: isolate;
+}
+
+.achievement-toast__icon[data-icon="platinum"]::before,
+.achievement-card__icon[data-icon="platinum"]::before {
+    content: "🏆";
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.55rem;
+    filter: grayscale(1) brightness(1.35) contrast(1.05)
+        drop-shadow(0 0 10px rgba(214, 233, 255, 0.6))
+        drop-shadow(0 0 18px rgba(114, 180, 255, 0.32));
+    z-index: 1;
+}
+
+.achievement-toast__icon[data-icon="platinum"]::after,
+.achievement-card__icon[data-icon="platinum"]::after {
+    content: "";
+    position: absolute;
+    inset: -0.1rem;
+    border-radius: 50%;
+    background: radial-gradient(circle at 35% 30%, rgba(255, 255, 255, 0.45), transparent 42%),
+        conic-gradient(
+            from 220deg,
+            rgba(154, 202, 255, 0.08),
+            rgba(255, 255, 255, 0.7),
+            rgba(148, 195, 255, 0.25),
+            rgba(255, 255, 255, 0.14),
+            rgba(154, 202, 255, 0.08)
+        );
+    border: 1px solid rgba(215, 235, 255, 0.75);
+    box-shadow: 0 0 0 1px rgba(132, 178, 236, 0.25),
+        0 0 18px rgba(173, 220, 255, 0.5),
+        inset 0 0 16px rgba(255, 255, 255, 0.2);
+    z-index: 0;
 }
 
 .achievement-toast__content {
@@ -797,6 +848,19 @@ body.theme-midnight {
     box-shadow: inset 0 0 0 1px rgba(92, 207, 230, 0.05);
 }
 
+.achievement-card[data-tier="platinum"][data-state="unlocked"] {
+    border-color: rgba(225, 239, 255, 0.68);
+    background: linear-gradient(
+        145deg,
+        rgba(30, 42, 62, 0.96) 0%,
+        rgba(17, 28, 45, 0.94) 42%,
+        rgba(15, 24, 40, 0.96) 100%
+    );
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08),
+        0 18px 34px -26px rgba(155, 204, 255, 0.65),
+        0 0 26px -20px rgba(240, 247, 255, 0.5);
+}
+
 .achievement-card::after {
     content: attr(data-hint);
     position: absolute;
@@ -841,6 +905,11 @@ body.theme-midnight {
     font-size: 1.6rem;
     line-height: 1;
     display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.4rem;
+    min-width: 2.4rem;
+    height: 2.4rem;
     transition: transform 0.25s ease, filter 0.25s ease, opacity 0.25s ease;
 }
 
@@ -851,6 +920,19 @@ body.theme-midnight {
 .achievement-card__icon[data-icon="egg"] {
     filter: grayscale(1) brightness(0.55);
     opacity: 0.6;
+}
+
+.achievement-card[data-tier="platinum"][data-state="unlocked"] .achievement-card__status {
+    color: rgba(232, 241, 255, 0.92);
+    text-shadow: 0 0 12px rgba(156, 204, 255, 0.35);
+}
+
+.achievement-card[data-tier="platinum"][data-state="unlocked"] .achievement-card__title {
+    color: #f6fbff;
+}
+
+.achievement-card[data-tier="platinum"][data-state="unlocked"] .achievement-card__description {
+    color: rgba(226, 236, 250, 0.88);
 }
 
 .projects {

@@ -33,20 +33,43 @@ pub enum ScrollBehavior {
 }
 
 #[derive(Clone, Debug)]
+pub enum AchievementTier {
+    Standard,
+    Platinum,
+}
+
+impl AchievementTier {
+    fn as_attr(&self) -> &'static str {
+        match self {
+            Self::Standard => "standard",
+            Self::Platinum => "platinum",
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
 pub struct AchievementView {
     pub title: String,
     pub description: String,
     pub hint: String,
     pub unlocked: bool,
+    pub tier: AchievementTier,
 }
 
 impl AchievementView {
-    pub fn new(title: &str, description: &str, hint: &str, unlocked: bool) -> Self {
+    pub fn new(
+        title: &str,
+        description: &str,
+        hint: &str,
+        unlocked: bool,
+        tier: AchievementTier,
+    ) -> Self {
         Self {
             title: title.to_string(),
             description: description.to_string(),
             hint: hint.to_string(),
             unlocked,
+            tier,
         }
     }
 }
@@ -350,6 +373,7 @@ impl Renderer {
                     "locked"
                 },
             )?;
+            item.set_attribute("data-tier", achievement.tier.as_attr())?;
             item.set_attribute("data-hint", &achievement.hint)?;
             item.set_attribute("tabindex", "0")?;
 
@@ -376,13 +400,20 @@ impl Renderer {
                 .create_element("span")?
                 .dyn_into::<HtmlElement>()?;
             icon.set_class_name("achievement-card__icon");
-            let (icon_symbol, icon_kind) = if achievement.unlocked {
-                ("🏆", "trophy")
+            let icon_kind = if achievement.unlocked {
+                match achievement.tier {
+                    AchievementTier::Standard => "trophy",
+                    AchievementTier::Platinum => "platinum",
+                }
             } else {
-                ("🥚", "egg")
+                "egg"
             };
-            icon.set_text_content(Some(icon_symbol));
             icon.set_attribute("data-icon", icon_kind)?;
+            match icon_kind {
+                "trophy" => icon.set_text_content(Some("🏆")),
+                "egg" => icon.set_text_content(Some("🥚")),
+                _ => icon.set_text_content(None),
+            }
 
             let meta = self
                 .document
@@ -932,6 +963,7 @@ impl Renderer {
         &self,
         title: &str,
         description: &str,
+        tier: AchievementTier,
     ) -> Result<HtmlElement, JsValue> {
         let toast = self
             .document
@@ -946,7 +978,11 @@ impl Renderer {
             .create_element("div")?
             .dyn_into::<HtmlElement>()?;
         icon.set_class_name("achievement-toast__icon");
-        icon.set_text_content(Some("🥚"));
+        icon.set_attribute("data-icon", tier.as_attr())?;
+        match tier {
+            AchievementTier::Standard => icon.set_text_content(Some("🏆")),
+            AchievementTier::Platinum => icon.set_text_content(None),
+        }
 
         let content = self
             .document
