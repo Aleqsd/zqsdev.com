@@ -2,60 +2,59 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <title>DevOps Engineer Resume - Alexandre DO O ALMEIDA</title>
+    <title>Resume - Alexandre DO O ALMEIDA</title>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta
       name="description"
-      content="DevOps Engineer resume of Alexandre DO O ALMEIDA."
+      content="Resume of Alexandre DO O ALMEIDA - DevOps Engineer."
     />
-    <meta property="og:title" content="DevOps Engineer Resume - Alexandre DO O ALMEIDA" />
+    <meta property="og:title" content="Resume - Alexandre DO O ALMEIDA" />
     <meta
       property="og:description"
-      content="CI/CD, automation, infrastructure, platform delivery, and reliability engineering."
+      content="DevOps Engineer."
     />
     <meta property="og:type" content="website" />
     <meta property="og:url" content="https://devops.zqsdev.com/" />
-    <link rel="icon" href="../favicon.ico" />
-    <link rel="stylesheet" href="../styles.css" />
+    <link rel="icon" href="https://zqsdev.com/favicon.ico" />
+    <link rel="stylesheet" href="classic.css" />
   </head>
-  <body data-pdf-url="resume.pdf" data-source-value="devops">
-    <div class="resume-shell">
-      <header>
-        <a class="terminal-cta" href="https://www.zqsdev.com/" target="_blank" rel="noopener">
-          🚀 Try my Interactive AI Resume
-        </a>
-        <a data-pdf-link target="_blank" rel="noopener">📄 View PDF</a>
-        <a data-pdf-link download>⬇️ Download PDF</a>
-        <span class="email-wrapper">
-          <a href="#" id="copy-email">✉️ Copy Email</a>
-        </span>
-        <a href="https://founding.zqsdev.com/" target="_blank" rel="noopener">🏗️ Founding CV</a>
-        <a href="https://software.zqsdev.com/" target="_blank" rel="noopener">💻 Software CV</a>
-      </header>
+  <body
+    data-pdf-url="resume.pdf"
+    data-source-value="devops"
+    data-download-filename="Alexandre_DO_O_ALMEIDA_Resume_DevOps_Engineer.pdf"
+  >
+    <header>
+      <a class="terminal-cta" href="https://www.zqsdev.com/" target="_blank" rel="noopener">
+        🚀 Try my Interactive AI Resume!
+      </a>
+      <a data-pdf-link target="_blank" rel="noopener">📄 View PDF</a>
+      <a data-pdf-link download>⬇️ Download PDF</a>
+      <span class="email-wrapper">
+        <a href="#" id="copy-email">✉️ Copy Email</a>
+      </span>
+      <a href="https://www.linkedin.com/in/alexandre-dooalmeida" target="_blank" rel="noopener">
+        💼 LinkedIn
+      </a>
+      <a href="https://github.com/aleqsd" target="_blank" rel="noopener">💻 GitHub</a>
+      <a href="https://founding.zqsdev.com/" target="_blank" rel="noopener">🏗️ Founding CV</a>
+      <a href="https://software.zqsdev.com/" target="_blank" rel="noopener">💻 Software CV</a>
+    </header>
 
-      <section class="resume-hero">
-        <span class="resume-badge">Targeted Resume</span>
-        <h1>DevOps Engineer Resume</h1>
-        <p>
-          This version highlights CI/CD ownership, build and test automation, release confidence,
-          platform enablement, and production-facing engineering systems.
-        </p>
-        <div class="resume-links">
-          <a href="https://www.linkedin.com/in/alexandre-dooalmeida" target="_blank" rel="noopener">
-            💼 LinkedIn
-          </a>
-          <a href="https://github.com/aleqsd" target="_blank" rel="noopener">💻 GitHub</a>
+    <main>
+      <div id="viewer" aria-live="polite">
+        <p id="loading" class="sr-only">Loading resume…</p>
+      </div>
+
+      <noscript>
+        <div class="fallback">
+          <p>JavaScript is required to display the resume inline.</p>
+          <a data-pdf-link download>⬇️ Download resume</a>
+          <a data-pdf-link target="_blank" rel="noopener">📄 Open in new tab</a>
         </div>
-      </section>
+      </noscript>
+      <div id="toast" class="toast" aria-live="polite" aria-atomic="true"></div>
+    </main>
 
-      <main>
-        <div id="viewer" aria-live="polite">
-          <p id="loading" class="sr-only">Loading resume…</p>
-        </div>
-        <div id="toast" class="toast" aria-live="polite" aria-atomic="true"></div>
-      </main>
-    </div>
-
-    <script type="module" src="../viewer.js" defer></script>
+    <script type="module" src="classic-viewer.js" defer></script>
   </body>
 </html>

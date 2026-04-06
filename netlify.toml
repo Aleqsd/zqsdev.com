@@ -9,6 +9,43 @@ to = "https://founding.zqsdev.com/:splat"
 status = 301
 force = true
 
+# Shared classic CV assets served same-origin on each résumé subdomain
+[[redirects]]
+from = "https://founding.zqsdev.com/classic.css"
+to = "/cv/classic.css"
+status = 200
+force = true
+
+[[redirects]]
+from = "https://founding.zqsdev.com/classic-viewer.js"
+to = "/cv/classic-viewer.js"
+status = 200
+force = true
+
+[[redirects]]
+from = "https://devops.zqsdev.com/classic.css"
+to = "/cv/classic.css"
+status = 200
+force = true
+
+[[redirects]]
+from = "https://devops.zqsdev.com/classic-viewer.js"
+to = "/cv/classic-viewer.js"
+status = 200
+force = true
+
+[[redirects]]
+from = "https://software.zqsdev.com/classic.css"
+to = "/cv/classic.css"
+status = 200
+force = true
+
+[[redirects]]
+from = "https://software.zqsdev.com/classic-viewer.js"
+to = "/cv/classic-viewer.js"
+status = 200
+force = true
+
 # Serve each targeted résumé viewer from its dedicated subdomain
 [[redirects]]
 from = "https://founding.zqsdev.com/*"
