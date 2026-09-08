@@ -2,6 +2,11 @@
 publish = "static"
 command = ""
 
+# Preserve relative language links under the CV host's /cv rewrite. Otherwise
+# Netlify transforms fr.html into /cv/fr, which receives the /cv prefix twice.
+[build.processing.html]
+pretty_urls = false
+
 # One canonical resume in English and French, with one PDF per language.
 [[redirects]]
 from = "https://founding.zqsdev.com/*"

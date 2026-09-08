@@ -20,8 +20,10 @@ import os
 import re
 import sys
 import time
+from html.parser import HTMLParser
 from pathlib import Path
 from typing import Callable, List, Optional, Sequence, Tuple
+from urllib.parse import urljoin
 
 import requests
 
@@ -36,6 +38,30 @@ class TestResult:
 
 class StopOnFailure(Exception):
     """Raised internally when --fail-fast is active."""
+
+
+class CvPage(HTMLParser):
+    """Read links after CDN processing, including minified, unquoted attributes."""
+
+    def __init__(self, html: str) -> None:
+        super().__init__()
+        self.language = None
+        self.language_link = None
+        self.downloads = []
+        self.has_resume = False
+        self.feed(html)
+
+    def handle_starttag(self, tag, attributes) -> None:
+        attrs = dict(attributes)
+        classes = attrs.get("class", "").split()
+        if tag == "html":
+            self.language = attrs.get("lang")
+        if "resume-document" in classes:
+            self.has_resume = True
+        if tag == "a" and "language-switch" in classes:
+            self.language_link = attrs.get("href")
+        if tag == "a" and "download" in attrs:
+            self.downloads.append(attrs)
 
 
 class LiveSmokeTester:
@@ -76,6 +102,7 @@ class LiveSmokeTester:
             ("Profile dataset", self.test_profile_dataset),
             ("Resume variants", self.test_resume_variants),
             ("Legacy CV redirect", self.test_legacy_cv_redirect),
+            ("CV language switch", self.test_cv_language_switch),
             ("Skills dataset", self.test_skills_dataset),
             ("Experience dataset", self.test_experience_dataset),
             ("Projects dataset", self.test_projects_dataset),
@@ -331,8 +358,9 @@ class LiveSmokeTester:
         canonical = "https://cv.zqsdev.com/"
         response = self.session.get(canonical, timeout=self.timeout, allow_redirects=False)
         assert response.status_code == 200, f"canonical CV returned {response.status_code}"
-        assert 'class="resume-document"' in response.text, "canonical CV must contain readable HTML"
-        assert 'href="resume.pdf"' in response.text, "PDF download missing"
+        document = CvPage(response.content.decode("utf-8"))
+        assert document.has_resume, "canonical CV must contain readable HTML"
+        assert any(link.get("href") == "resume.pdf" for link in document.downloads), "PDF download missing"
         assert "View PDF" not in response.text, "old PDF viewer still present"
         pdf = self.session.get(canonical + "resume.pdf", timeout=self.timeout)
         assert pdf.status_code == 200 and pdf.content.startswith(b"%PDF-"), "canonical PDF missing"
@@ -342,6 +370,25 @@ class LiveSmokeTester:
                 assert old.status_code == 301, f"{host}/{suffix} returned {old.status_code}"
                 assert old.headers.get("Location") == canonical + suffix, f"unexpected redirect for {host}/{suffix}"
         return "canonical HTML + PDF available; all three legacy domains redirect"
+
+    def test_cv_language_switch(self, canonical="https://cv.zqsdev.com/") -> str:
+        # Follow the actual served links so CDN URL rewriting cannot silently
+        # send the French switch to the English fallback page.
+        url = canonical
+        for language, filename in (("en", "resume.pdf"), ("fr", "resume-fr.pdf"), ("en", "resume.pdf")):
+            response = self.session.get(url, timeout=self.timeout)
+            assert response.status_code == 200, f"CV returned {response.status_code}: {url}"
+            document = CvPage(response.content.decode("utf-8"))
+            assert document.language == language, f"expected {language}, got {document.language}: {response.url}"
+            assert document.has_resume, "readable CV missing"
+            assert len(document.downloads) == 1, "each language must have one PDF download"
+            link = document.downloads[0]
+            assert link.get("href") == filename, f"wrong {language} PDF: {link}"
+            pdf = self.session.get(urljoin(response.url, link["href"]), timeout=self.timeout)
+            assert pdf.status_code == 200 and pdf.content.startswith(b"%PDF-"), f"{language} PDF missing"
+            assert document.language_link, f"language switch missing in {language}"
+            url = urljoin(response.url, document.language_link)
+        return "English -> French -> English; matching PDFs available"
 
     def test_skills_dataset(self) -> str:
         data = self._require_terminal_data()
