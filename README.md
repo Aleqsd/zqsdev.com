@@ -190,7 +190,7 @@ The V4 content is ordinary semantic HTML; the download is the exact approved one
 The original dark shell, rounded toolbar buttons and `.page` frame are preserved. On narrow screens the HTML reflows for reading, while printing preserves the A4 layout.
 Run `python3 -m unittest scripts.test_cv_site` to check the static CV and routing contracts.
 
-Portrait: Alexandre's public LinkedIn photo, reproduced at his request.
+Portrait: Alexandre's original 1080x1080 PhotoRoom PNG, supplied by him. Only the purple backdrop was recolored to #176458 by a deterministic script; all pixels outside the backdrop were preserved. The public site and PDF use this same portrait.
 Studi logo: [Studi, Wikimedia Commons](https://commons.wikimedia.org/wiki/File:Studi_logo.svg), [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/), unmodified.
 PlayStation symbol: official PlayStation site. YC badge: typographic Y.
 VibeRank icon: [official SVG](https://www.viberank.app/icon.svg), copied locally on 2026-09-08; links to [Aleqsd's profile](https://www.viberank.app/profile/Aleqsd).

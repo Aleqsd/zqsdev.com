@@ -148,7 +148,7 @@ If `PUSHOVER_API_TOKEN` and `PUSHOVER_USER_KEY` are present (in the environment,
 ## 🎨 Customising the Résumé
 - 🔗 The public resume is `https://cv.zqsdev.com/`. The interactive terminal data will be refreshed separately; its existing resume URLs redirect to this canonical CV.
 - 🧾 Edit the JSON files in `static/data/` to refresh profile details, experiences, and skills for the interactive terminal and AI knowledge base.
-- 📄 Edit `static/cv/index.html` and `static/cv/resume.css` for the public resume. `static/cv/resume.pdf` is the only downloadable CV (the approved base V4, not a variant). The HTML works without JavaScript; `resume.js` only handles the email clipboard action and the terminal return link.
+- 📄 Edit `static/cv/index.html` and `static/cv/resume.css` for the public resume. `static/cv/resume.pdf` is the only downloadable CV (the approved base V4, not a variant). The HTML works without JavaScript; `resume.js` handles the clipboard action, terminal return link and desktop fitting inside the original PDF frame.
 
 ## 🚢 Deployment
 The server is optional at runtime; the public site is served from the static bundle.
@@ -187,10 +187,10 @@ Built with 🦀 Rust and ❤️ by Alexandre DO-O ALMEIDA (ZQSDev). Enjoy the te
 ### Public CV assets
 
 The V4 content is ordinary semantic HTML; the download is the exact approved one-page PDF.
-On narrow screens the HTML reflows for reading, while printing preserves the A4 layout.
+The original dark shell, rounded toolbar buttons and `.page` frame are preserved. On narrow screens the HTML reflows for reading, while printing preserves the A4 layout.
 Run `python3 -m unittest scripts.test_cv_site` to check the static CV and routing contracts.
 
-Portrait: Alexandre's public LinkedIn photo, reproduced at his request.
+Portrait: Alexandre's original 1080x1080 PhotoRoom PNG, supplied by him. Only the purple backdrop was recolored to #176458 by a deterministic script; all pixels outside the backdrop were preserved. The public site and PDF use this same portrait.
 Studi logo: [Studi, Wikimedia Commons](https://commons.wikimedia.org/wiki/File:Studi_logo.svg), [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/), unmodified.
 PlayStation symbol: official PlayStation site. YC badge: typographic Y.
 VibeRank icon: [official SVG](https://www.viberank.app/icon.svg), copied locally on 2026-09-08; links to [Aleqsd's profile](https://www.viberank.app/profile/Aleqsd).
