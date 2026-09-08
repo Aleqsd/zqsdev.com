@@ -2,66 +2,65 @@
 publish = "static"
 command = ""
 
-# Redirect the legacy résumé subdomain to the default founding résumé
-[[redirects]]
-from = "https://cv.zqsdev.com/*"
-to = "https://founding.zqsdev.com/:splat"
-status = 301
-force = true
-
-# Shared classic CV assets served same-origin on each résumé subdomain
-[[redirects]]
-from = "https://founding.zqsdev.com/classic.css"
-to = "/cv/classic.css"
-status = 200
-force = true
-
-[[redirects]]
-from = "https://founding.zqsdev.com/classic-viewer.js"
-to = "/cv/classic-viewer.js"
-status = 200
-force = true
-
-[[redirects]]
-from = "https://devops.zqsdev.com/classic.css"
-to = "/cv/classic.css"
-status = 200
-force = true
-
-[[redirects]]
-from = "https://devops.zqsdev.com/classic-viewer.js"
-to = "/cv/classic-viewer.js"
-status = 200
-force = true
-
-[[redirects]]
-from = "https://software.zqsdev.com/classic.css"
-to = "/cv/classic.css"
-status = 200
-force = true
-
-[[redirects]]
-from = "https://software.zqsdev.com/classic-viewer.js"
-to = "/cv/classic-viewer.js"
-status = 200
-force = true
-
-# Serve each targeted résumé viewer from its dedicated subdomain
+# One canonical HTML resume and one downloadable PDF.
 [[redirects]]
 from = "https://founding.zqsdev.com/*"
-to = "/cv/founding/:splat"
-status = 200
+to = "https://cv.zqsdev.com/:splat"
+status = 301
 force = true
 
 [[redirects]]
 from = "https://devops.zqsdev.com/*"
-to = "/cv/devops/:splat"
-status = 200
+to = "https://cv.zqsdev.com/:splat"
+status = 301
 force = true
 
 [[redirects]]
 from = "https://software.zqsdev.com/*"
-to = "/cv/software/:splat"
+to = "https://cv.zqsdev.com/:splat"
+status = 301
+force = true
+
+[[redirects]]
+from = "/cv/founding"
+to = "https://cv.zqsdev.com/"
+status = 301
+force = true
+
+[[redirects]]
+from = "/cv/founding/*"
+to = "https://cv.zqsdev.com/:splat"
+status = 301
+force = true
+
+[[redirects]]
+from = "/cv/devops"
+to = "https://cv.zqsdev.com/"
+status = 301
+force = true
+
+[[redirects]]
+from = "/cv/devops/*"
+to = "https://cv.zqsdev.com/:splat"
+status = 301
+force = true
+
+[[redirects]]
+from = "/cv/software"
+to = "https://cv.zqsdev.com/"
+status = 301
+force = true
+
+[[redirects]]
+from = "/cv/software/*"
+to = "https://cv.zqsdev.com/:splat"
+status = 301
+force = true
+
+# CV host uses the shared /cv directory, including same-origin assets and PDF.
+[[redirects]]
+from = "https://cv.zqsdev.com/*"
+to = "/cv/:splat"
 status = 200
 force = true
 

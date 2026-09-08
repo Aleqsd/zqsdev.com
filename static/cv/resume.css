@@ -1,0 +1,126 @@
+
+/* EDITING: all resume copy is ordinary HTML below. No build step or network dependency.
+   EXPORT: print on A4, scale 100%, margins None, headers/footers Off, backgrounds On.
+   PHOTO: original public LinkedIn portrait, embedded without retouching.
+   STUDI LOGO: Studi, via Wikimedia Commons, CC BY 4.0, unmodified.
+   https://commons.wikimedia.org/wiki/File:Studi_logo.svg
+   https://creativecommons.org/licenses/by/4.0/
+   Logos are decorative; employer and program names remain selectable text. */
+:root { --ink: #17282c; --accent: #176458; --muted: #56656a; --rule: #d5dfdc; }
+* { box-sizing: border-box; }
+body { margin: 0; color: var(--ink); background: #e8eeec; font-family: Arial, Helvetica, sans-serif; font-size: 10pt; line-height: 1.35; }
+.page { width: 210mm; min-height: 297mm; margin: 24px auto; padding: 12mm 13mm 11mm; background: #fff; box-shadow: 0 8px 36px #16392d15; }
+h1,h2,h3,p { margin: 0; }
+a { color: inherit; text-decoration: none; }
+a:hover { text-decoration: underline; }
+strong { font-weight: 700; }
+.header { position: relative; padding-bottom: 4mm; border-bottom: 1.2pt solid var(--ink); }
+h1 { font-size: 25pt; line-height: 1.08; letter-spacing: -1.1px; font-weight: 700; }
+.role { margin-top: 2.2mm; font-size: 14pt; line-height: 1.15; font-weight: 700; color: var(--accent); letter-spacing: -.2px; }
+.positioning { margin-top: 2.2mm; font-size: 9.6pt; color: var(--muted); }
+.contact { margin-top: 3.2mm; display: flex; gap: 4mm; flex-wrap: wrap; font-size: 8.35pt; line-height: 1.45; }
+.contact a { text-decoration: underline; text-decoration-color: #a7b6b1; text-underline-offset: 2px; }
+.portrait { position: absolute; right: 0; top: -1.2mm; width: 26mm; height: 26mm; object-fit: contain; }
+.header-main { padding-right: 30mm; min-height: 24mm; }
+.header h1 { font-size: 23pt; }
+.intro { margin-top: 3.5mm; font-size: 10pt; line-height: 1.42; }
+.agentic { margin-top: 3.5mm; padding: 0 0 0 3mm; border-left: 2pt solid var(--accent); }
+.agentic h2 { margin-bottom: 1.2mm; color: var(--accent); }
+.agentic p { font-size: 9.65pt; line-height: 1.42; }
+.usage { margin-top: 1.1mm; color: var(--muted); font-size: 8.1pt !important; }
+.usage a { text-decoration: underline; text-underline-offset: 2px; }
+section { margin-top: 3mm; }
+h2 { font-size: 8.1pt; line-height: 1.2; text-transform: uppercase; letter-spacing: 1.7px; font-weight: 700; }
+.section-title { display: flex; align-items: center; gap: 3mm; margin-bottom: 2.5mm; }
+.section-title:after { content: ''; height: .5pt; background: var(--rule); flex: 1; }
+.job { margin-bottom: 3mm; break-inside: avoid; }
+.job:last-child { margin-bottom: 0; }
+.job-head { display: grid; grid-template-columns: 11mm 1fr auto; align-items: center; column-gap: 2mm; }
+.brand { width: 10mm; height: 8mm; display: flex; align-items: center; justify-content: center; }
+.brand img { display: block; width: 10mm; height: 8mm; object-fit: contain; }
+.brand.ps img { width: 8mm; height: 8mm; }
+.yc-badge { width: 7.5mm; height: 7.5mm; background: #fb651e; color: #fff; display: grid; place-items: center; font: 18pt Arial, sans-serif; }
+h3 { font-size: 11.1pt; line-height: 1.2; letter-spacing: -.12px; }
+.company-note { color: var(--muted); font-size: 8.5pt; font-weight: 400; }
+.job-role { margin-top: .8mm; font-size: 9.3pt; color: var(--accent); font-weight: 700; }
+.date { align-self: start; padding-top: .3mm; color: var(--muted); font-size: 8.4pt; white-space: nowrap; font-variant-numeric: tabular-nums; }
+ul { margin: 1.6mm 0 0 13mm; padding-left: 3.5mm; }
+li { padding-left: .3mm; margin: 0 0 1.2mm; font-size: 9.5pt; line-height: 1.38; }
+li:last-child { margin-bottom: 0; }
+li::marker { color: var(--accent); font-size: 7pt; }
+.earlier { display: grid; grid-template-columns: 1fr auto; column-gap: 4mm; row-gap: 1.7mm; font-size: 9.05pt; line-height: 1.32; }
+.earlier .date { font-size: 8.1pt; padding-top: .1mm; }
+.stack { display: grid; grid-template-columns: 29mm 1fr; column-gap: 3mm; row-gap: 1.3mm; font-size: 9pt; }
+.stack dt { font-weight: 700; }
+.stack dd { margin: 0; }
+dl { margin: 0; }
+.education { font-size: 8.8pt; line-height: 1.5; }
+.languages { font-size: 8.5pt; color: var(--muted); margin-top: 1mm; }
+@page { size: A4; margin: 0; }
+@media print { body { background: #fff; } .page { margin: 0; box-shadow: none; } * { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
+
+
+
+/* Website controls are separate from the approved V4 document. */
+html { color-scheme: light; }
+.site-actions { position: sticky; top: 0; z-index: 10; padding: 12px 20px; background: #e8eeecf5; border-bottom: 1px solid var(--rule); }
+.site-actions nav { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 8px; }
+.site-actions a, .site-actions button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; padding: 10px 13px; border: 1px solid #bdcbc5; border-radius: 7px; background: #fff; color: var(--ink); font: 500 13px/1.2 Arial, sans-serif; text-decoration: none; cursor: pointer; transition: background-color .16s ease, border-color .16s ease; }
+.site-actions .download { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 700; }
+.site-actions a:hover, .site-actions button:hover { background: #dce7e2; border-color: var(--accent); }
+.site-actions .download:hover { background: #104d43; }
+.site-actions svg { width: 18px; height: 18px; flex-shrink: 0; }
+.site-actions img { width: 22px; height: 22px; }
+.site-actions .terminal-cta { background: transparent; }
+a:focus-visible, button:focus-visible { outline: 3px solid #2678ad; outline-offset: 3px; }
+.skip-link { position: fixed; top: 8px; left: 8px; z-index: 20; padding: 12px; background: #fff; transform: translateY(-160%); }
+.skip-link:focus { transform: translateY(0); }
+.toast { position: fixed; bottom: 22px; left: 50%; transform: translate(-50%, 8px); z-index: 30; width: max-content; max-width: calc(100% - 32px); padding: 12px 18px; border-radius: 8px; background: var(--ink); color: #fff; font: 14px/1.4 Arial, sans-serif; opacity: 0; pointer-events: none; transition: opacity .16s ease, transform .16s ease; }
+.toast.show { opacity: 1; transform: translate(-50%, 0); }
+[hidden] { display: none !important; }
+@media screen and (max-width: 840px) {
+  .site-actions { position: static; padding: 12px; }
+  .page { width: auto; max-width: 210mm; min-height: 0; margin: 16px 12px; padding: 28px; }
+  .header-main { padding-right: 85px; }
+  .portrait { width: 72px; height: 72px; top: 0; }
+  .header h1 { font-size: clamp(23px, 4.5vw, 31px); letter-spacing: -.7px; }
+  .role { font-size: 19px; }
+  .positioning { font-size: 13px; line-height: 1.5; }
+  .contact { font-size: 12px; gap: 8px 16px; }
+  .agentic { margin-top: 20px; padding-left: 12px; }
+  .agentic p { font-size: 15px; line-height: 1.55; }
+  .usage { font-size: 12px !important; line-height: 1.5; }
+  section { margin-top: 24px; }
+  h2 { font-size: 11px; }
+  .section-title { margin-bottom: 16px; }
+  .job { margin-bottom: 24px; }
+  .job-head { grid-template-columns: 36px minmax(0, 1fr); gap: 6px 12px; align-items: start; }
+  .job-head .date { grid-column: 2; font-size: 12px; }
+  h3 { font-size: 17px; line-height: 1.35; }
+  .company-note { font-size: 12px; }
+  .job-role { font-size: 14px; line-height: 1.5; }
+  ul { margin: 12px 0 0 0; padding-left: 20px; }
+  li { font-size: 15px; line-height: 1.55; margin-bottom: 9px; }
+  .earlier { font-size: 14px; line-height: 1.55; row-gap: 6px; grid-template-columns: minmax(0, 1fr); }
+  .earlier .date { font-size: 12px; margin-bottom: 12px; }
+  .stack { font-size: 14px; line-height: 1.55; grid-template-columns: minmax(0, 1fr); row-gap: 4px; }
+  .stack dd { margin-bottom: 10px; }
+  .education, .languages { font-size: 13px; line-height: 1.6; }
+}
+@media screen and (max-width: 480px) {
+  .site-actions nav { display: grid; grid-template-columns: 1fr 1fr; }
+  .site-actions .terminal-cta { grid-column: 1 / -1; }
+  .site-actions .download { grid-column: 1 / -1; }
+  .page { margin: 0; padding: 26px 20px; box-shadow: none; }
+  .header-main { padding-right: 68px; }
+  .portrait { width: 60px; height: 60px; }
+  .header h1 { font-size: 23px; line-height: 1.15; }
+  .role { font-size: 18px; line-height: 1.35; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { transition: none !important; }
+}
+@media print {
+  .site-actions, .toast, .skip-link { display: none !important; }
+  .page { width: 210mm; min-height: 297mm; margin: 0; }
+}

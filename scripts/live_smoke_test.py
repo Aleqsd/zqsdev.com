@@ -328,17 +328,20 @@ class LiveSmokeTester:
         return ", ".join(statuses)
 
     def test_legacy_cv_redirect(self) -> str:
-        response = self.session.get(
-            "https://cv.zqsdev.com/",
-            timeout=self.timeout,
-            allow_redirects=False,
-        )
-        assert response.status_code == 301, f"legacy CV returned {response.status_code}"
-        location = response.headers.get("Location", "")
-        assert location.startswith(
-            "https://founding.zqsdev.com/"
-        ), f"legacy CV redirected to unexpected location: {location}"
-        return f"status=301 location={location}"
+        canonical = "https://cv.zqsdev.com/"
+        response = self.session.get(canonical, timeout=self.timeout, allow_redirects=False)
+        assert response.status_code == 200, f"canonical CV returned {response.status_code}"
+        assert '<main class="page"' in response.text, "canonical CV must contain readable HTML"
+        assert 'href="resume.pdf"' in response.text, "PDF download missing"
+        assert "View PDF" not in response.text, "old PDF viewer still present"
+        pdf = self.session.get(canonical + "resume.pdf", timeout=self.timeout)
+        assert pdf.status_code == 200 and pdf.content.startswith(b"%PDF-"), "canonical PDF missing"
+        for host in ("founding", "devops", "software"):
+            for suffix in ("", "resume.pdf"):
+                old = self.session.get(f"https://{host}.zqsdev.com/{suffix}", timeout=self.timeout, allow_redirects=False)
+                assert old.status_code == 301, f"{host}/{suffix} returned {old.status_code}"
+                assert old.headers.get("Location") == canonical + suffix, f"unexpected redirect for {host}/{suffix}"
+        return "canonical HTML + PDF available; all three legacy domains redirect"
 
     def test_skills_dataset(self) -> str:
         data = self._require_terminal_data()

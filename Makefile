@@ -54,6 +54,7 @@ test:
 	@command -v python3 >/dev/null 2>&1 || { echo "python3 not found. Install Python 3 to continue."; exit 1; }
 	rustup target add $(WASM_TARGET) >/dev/null 2>&1 || true
 	python3 -m unittest scripts.test_build_rag
+	python3 -m unittest scripts.test_cv_site
 	wasm-pack test --node
 	cargo test --manifest-path $(SERVER_MANIFEST)
 
