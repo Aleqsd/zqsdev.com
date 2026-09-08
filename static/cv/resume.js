@@ -37,3 +37,23 @@ if (document.referrer) {
   }
 }
 if (fromTerminal) cta?.remove();
+
+// Fit the A4 HTML to the original PDF frame on desktop, keeping real text.
+const documentElement = document.getElementById("resume");
+const frame = documentElement?.parentElement;
+if (frame && "ResizeObserver" in window) {
+  const fitDocument = () => {
+    const desktop = window.matchMedia("(min-width: 841px)").matches;
+    documentElement.classList.toggle("fit-document", desktop);
+    if (desktop) {
+      const frameStyle = getComputedStyle(frame);
+      const width = frame.clientWidth - parseFloat(frameStyle.paddingLeft) - parseFloat(frameStyle.paddingRight);
+      documentElement.style.setProperty("--resume-zoom", width / (210 * 96 / 25.4));
+    } else {
+      documentElement.style.removeProperty("--resume-zoom");
+    }
+  };
+  new ResizeObserver(fitDocument).observe(frame);
+  window.addEventListener("resize", fitDocument);
+  fitDocument();
+}

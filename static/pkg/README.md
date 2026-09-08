@@ -34,7 +34,7 @@ An immersive single-page web terminal that reveals Alexandre DO-O ALMEIDA’s r�
 │   ├── images/           # Logos & Open Graph artwork
 │   ├── icons/            # Favicons & manifest assets
 │   ├── effects/          # Visual flourish assets (canvas, particles, etc.)
-│   ├── cv/               # Shared résumé viewer assets + targeted PDF variants
+│   ├── cv/               # Canonical HTML resume, PDF download and local assets
 │   └── pkg/              # wasm-bindgen output mirrored from /pkg
 ├── pkg/                  # Raw wasm-pack artefacts (ignored by git)
 ├── scripts/
@@ -146,15 +146,15 @@ If `PUSHOVER_API_TOKEN` and `PUSHOVER_USER_KEY` are present (in the environment,
 - ✍️ Commit only the sources, regenerated assets under `static/pkg/`, and version bumps. Artifacts in `/pkg`, local env files, and logs (`server.log`) are ignored by default.
 
 ## 🎨 Customising the Résumé
-- 🔗 Update the default résumé link in `static/data/profile.json` (`links.resume_url`) and keep `resume_variants` in sync with the public CV URLs.
+- 🔗 The public resume is `https://cv.zqsdev.com/`. The interactive terminal data will be refreshed separately; its existing resume URLs redirect to this canonical CV.
 - 🧾 Edit the JSON files in `static/data/` to refresh profile details, experiences, and skills for the interactive terminal and AI knowledge base.
-- 📄 Replace the targeted PDFs in `static/cv/founding/resume.pdf`, `static/cv/devops/resume.pdf`, and `static/cv/software/resume.pdf` when you refresh the public CVs.
+- 📄 Edit `static/cv/index.html` and `static/cv/resume.css` for the public resume. `static/cv/resume.pdf` is the only downloadable CV (the approved base V4, not a variant). The HTML works without JavaScript; `resume.js` only handles the email clipboard action and the terminal return link.
 
 ## 🚢 Deployment
 The server is optional at runtime; the public site is served from the static bundle.
 
 ### ☁️ Netlify (www.zqsdev.com & zqsdev.com)
-- 🌐 `netlify.toml` owns redirects so the SPA loads everywhere, `founding.zqsdev.com`, `devops.zqsdev.com`, and `software.zqsdev.com` each serve a targeted résumé viewer, `cv.zqsdev.com` redirects to the founding version, and `calendly.zqsdev.com` forwards to Calendly.
+- 🌐 `netlify.toml` serves the HTML resume at `cv.zqsdev.com`; `founding.zqsdev.com`, `devops.zqsdev.com`, `software.zqsdev.com` and their old PDF links redirect to it. `calendly.zqsdev.com` still forwards to Calendly. Keep the legacy domain aliases so existing shared links continue to work.
 - 🔁 `/api/*` requests proxy through Netlify to `https://api.zqsdev.com/api/:splat`, keeping browser requests same-origin while hitting the Axum backend.
 - 🔐 Install the Netlify CLI (`npm install -g netlify-cli`) and authenticate once with `netlify login` or `NETLIFY_AUTH_TOKEN`.
 - 🚀 `make deploy-preview` → runs `make build` then `netlify deploy --dir static --config netlify.toml`.
@@ -183,3 +183,14 @@ The proxy reads `static/data/*.json` at startup, forwards questions to `gpt-4o-m
 ---
 
 Built with 🦀 Rust and ❤️ by Alexandre DO-O ALMEIDA (ZQSDev). Enjoy the terminal! 🙂
+
+### Public CV assets
+
+The V4 content is ordinary semantic HTML; the download is the exact approved one-page PDF.
+On narrow screens the HTML reflows for reading, while printing preserves the A4 layout.
+Run `python3 -m unittest scripts.test_cv_site` to check the static CV and routing contracts.
+
+Portrait: Alexandre's public LinkedIn photo, reproduced at his request.
+Studi logo: [Studi, Wikimedia Commons](https://commons.wikimedia.org/wiki/File:Studi_logo.svg), [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/), unmodified.
+PlayStation symbol: official PlayStation site. YC badge: typographic Y.
+VibeRank icon: [official SVG](https://www.viberank.app/icon.svg), copied locally on 2026-09-08; links to [Aleqsd's profile](https://www.viberank.app/profile/Aleqsd).

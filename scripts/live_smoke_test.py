@@ -331,7 +331,7 @@ class LiveSmokeTester:
         canonical = "https://cv.zqsdev.com/"
         response = self.session.get(canonical, timeout=self.timeout, allow_redirects=False)
         assert response.status_code == 200, f"canonical CV returned {response.status_code}"
-        assert '<main class="page"' in response.text, "canonical CV must contain readable HTML"
+        assert 'class="resume-document"' in response.text, "canonical CV must contain readable HTML"
         assert 'href="resume.pdf"' in response.text, "PDF download missing"
         assert "View PDF" not in response.text, "old PDF viewer still present"
         pdf = self.session.get(canonical + "resume.pdf", timeout=self.timeout)
