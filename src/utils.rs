@@ -1,5 +1,4 @@
 use serde::de::DeserializeOwned;
-use serde_wasm_bindgen::from_value;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
 use wasm_bindgen_futures::JsFuture;
@@ -15,29 +14,52 @@ pub fn log(message: &str) {
     console::log_1(&JsValue::from_str(message));
 }
 
+/// One deadline covers headers and body. Abort the browser request on timeout.
+pub async fn fetch_text(
+    path: &str,
+    opts: RequestInit,
+    timeout_ms: u32,
+) -> Result<(u16, String), JsValue> {
+    let win = window().ok_or_else(|| JsValue::from_str("Window unavailable"))?;
+    let controller = web_sys::AbortController::new()?;
+    opts.set_signal(Some(&controller.signal()));
+    let request = Request::new_with_str_and_init(path, &opts)?;
+    let operation = async move {
+        let response: Response = JsFuture::from(win.fetch_with_request(&request))
+            .await?
+            .dyn_into()?;
+        let status = response.status();
+        let body = JsFuture::from(response.text()?)
+            .await?
+            .as_string()
+            .ok_or_else(|| JsValue::from_str("Invalid response"))?;
+        Ok((status, body))
+    };
+    match futures::future::select(
+        Box::pin(operation),
+        Box::pin(gloo_timers::future::TimeoutFuture::new(timeout_ms)),
+    )
+    .await
+    {
+        futures::future::Either::Left((result, _)) => result,
+        futures::future::Either::Right(_) => {
+            controller.abort();
+            Err(JsValue::from_str("Request timed out"))
+        }
+    }
+}
 pub async fn fetch_json<T>(path: &str) -> Result<T, JsValue>
 where
     T: DeserializeOwned,
 {
-    let window = window().ok_or_else(|| JsValue::from_str("Window unavailable"))?;
-
     let opts = RequestInit::new();
     opts.set_method("GET");
     opts.set_mode(RequestMode::SameOrigin);
-
-    let request = Request::new_with_str_and_init(path, &opts)?;
-    let response_value = JsFuture::from(window.fetch_with_request(&request)).await?;
-    let response: Response = response_value.dyn_into()?;
-
-    if !response.ok() {
-        let status = response.status();
-        return Err(JsValue::from_str(&format!(
-            "Failed to fetch {path} (status {status})"
-        )));
+    let (status, body) = fetch_text(path, opts, 4000).await?;
+    if !(200..300).contains(&status) {
+        return Err(JsValue::from_str("Data endpoint unavailable"));
     }
-
-    let json = JsFuture::from(response.json()?).await?;
-    from_value(json).map_err(|e| JsValue::from_str(&format!("JSON error for {path}: {e}")))
+    serde_json::from_str(&body).map_err(|_| JsValue::from_str("Invalid JSON data"))
 }
 
 pub fn open_link(url: &str) {

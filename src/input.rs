@@ -259,6 +259,24 @@ pub fn install_listeners(terminal: Rc<Terminal>) -> Result<(), JsValue> {
 
 fn handle_keydown(terminal: &Terminal, event: KeyboardEvent) {
     let key = event.key();
+    if let Some(element) = event.target().and_then(|t| t.dyn_into::<Element>().ok()) {
+        if element
+            .closest("button, a, select, textarea")
+            .ok()
+            .flatten()
+            .is_some()
+        {
+            return;
+        }
+        if key == "Tab"
+            && (event.shift_key()
+                || element
+                    .dyn_ref::<HtmlInputElement>()
+                    .is_some_and(|i| i.value().is_empty()))
+        {
+            return;
+        }
+    }
 
     if !event.repeat() {
         match terminal.process_konami_key(&key) {

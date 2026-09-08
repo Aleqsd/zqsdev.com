@@ -37,7 +37,7 @@ const AI_STATUS_BUSY: &str = "AI Mode: Activated — Synthesizing…";
 const AI_ACTIVATED_INFO: &str =
     "🤖 AI Mode activated. Ask anything about Alexandre DO-O ALMEIDA's profile.";
 const AI_DEACTIVATED_INFO: &str = "📟 AI Mode deactivated. Classic terminal helpers restored.";
-const AI_HELP_MESSAGE: &str = "🤖 AI Mode help:\nYou're chatting with an assistant that only uses Alexandre's résumé data.\nAsk a question or type `quit` to exit AI Mode.";
+const AI_HELP_MESSAGE: &str = "🤖 AI Mode help:\nYou're chatting with an assistant that uses Alexandre's career knowledge: experience, projects, publications and testimonials.\nAsk follow-up questions; the last 3 exchanges are remembered in this tab. Type `quit` to exit and clear this conversation.";
 const AI_DATA_LOADING: &str = "AI knowledge base still loading. Please try again shortly.";
 const BOOT_SEQUENCE_MESSAGE: &str = "Welcome to the ZQSDev interactive terminal!";
 const WELCOME_GUIDANCE_LINES: [&str; 2] = [
@@ -1350,6 +1350,11 @@ impl Terminal {
                 .append_output_text(AI_HELP_MESSAGE, ScrollBehavior::Bottom)?;
             return Ok(());
         }
+        if normalized == "clear" {
+            self.state.borrow_mut().set_ai_mode(false);
+            self.renderer.clear_output();
+            return self.update_ai_mode(true, false);
+        }
         if normalized == "quit" {
             telemetry::log_command_submission(&input, CommandLogMode::Ai);
             return self.update_ai_mode(false, true);
@@ -1365,6 +1370,25 @@ impl Terminal {
             return Ok(());
         }
 
+        let (history, generation) = {
+            let mut state = self.state.borrow_mut();
+            if state.ai_busy {
+                self.renderer.append_info_line(
+                    "A response is already in progress. Type `quit` to return to classic mode.",
+                    ScrollBehavior::Bottom,
+                )?;
+                return Ok(());
+            }
+            if question.trim().is_empty() || question.chars().count() > 1200 {
+                self.renderer.append_info_line(
+                    "Please use a question of 1–1,200 characters.",
+                    ScrollBehavior::Bottom,
+                )?;
+                return Ok(());
+            }
+            state.ai_busy = true;
+            (state.ai_history.clone(), state.ai_generation)
+        };
         self.renderer.set_ai_indicator_text(AI_STATUS_BUSY);
         if let Err(err) = self.renderer.set_ai_busy(true) {
             utils::log(&format!("Failed to flag AI busy state: {:?}", err));
@@ -1377,7 +1401,11 @@ impl Terminal {
         let shared_state = Rc::clone(&self.state);
 
         spawn_local(async move {
-            let result = ai::ask_ai(&question).await;
+            let result = ai::ask_ai(&question, &history).await;
+            if shared_state.borrow().ai_generation != generation {
+                return;
+            }
+            shared_state.borrow_mut().ai_busy = false;
 
             match result {
                 Ok(payload) => {
@@ -1385,6 +1413,17 @@ impl Terminal {
                         {
                             let mut state = shared_state.borrow_mut();
                             state.set_ai_model(payload.model.clone());
+                            state.ai_history.push(ai::Message {
+                                role: "user".into(),
+                                content: question.clone(),
+                            });
+                            state.ai_history.push(ai::Message {
+                                role: "assistant".into(),
+                                content: payload.answer.clone(),
+                            });
+                            if state.ai_history.len() > 6 {
+                                state.ai_history.drain(..2);
+                            }
                         }
                         render_current_suggestions(&shared_state, &renderer);
                         renderer.set_ai_indicator_text(AI_STATUS_ACTIVE);
@@ -1392,6 +1431,29 @@ impl Terminal {
                             renderer.append_output_markdown(&payload.answer, ScrollBehavior::Bottom)
                         {
                             utils::log(&format!("Failed to render AI answer: {:?}", err));
+                        }
+                        if !payload.sources.is_empty() {
+                            let known = [
+                                "profile",
+                                "skills",
+                                "experience",
+                                "education",
+                                "projects",
+                                "testimonials",
+                                "faq",
+                            ];
+                            let labels: Vec<_> = payload
+                                .sources
+                                .iter()
+                                .filter(|s| known.contains(&s.as_str()))
+                                .cloned()
+                                .collect();
+                            if !labels.is_empty() {
+                                let _ = renderer.append_info_line(
+                                    &format!("Sources: {}", labels.join(", ")),
+                                    ScrollBehavior::Bottom,
+                                );
+                            }
                         }
                     } else {
                         {
@@ -1406,7 +1468,7 @@ impl Terminal {
                         render_current_suggestions(&shared_state, &renderer);
                         let mut notice = payload.answer.clone();
                         if let Some(reason) = payload.reason.as_ref() {
-                            notice.push_str(&format!(" (limit: {reason})"));
+                            notice.push_str(&format!(" ({reason})"));
                         }
                         if let Err(err) = renderer.append_info_line(&notice, ScrollBehavior::Bottom)
                         {
@@ -1415,7 +1477,10 @@ impl Terminal {
                     }
                 }
                 Err(error) => {
-                    let message = format!("AI error: {error}");
+                    shared_state.borrow_mut().set_ai_mode(false);
+                    let _ = renderer.apply_ai_mode(false);
+                    render_current_suggestions(&shared_state, &renderer);
+                    let message = format!("AI: {error}. Classic commands restored: about, experience, projects, resume.");
                     if let Err(err) = renderer.append_output_text(&message, ScrollBehavior::Bottom)
                     {
                         utils::log(&format!("Failed to render AI error: {:?}", err));
@@ -1449,6 +1514,9 @@ impl Terminal {
             prev
         };
 
+        if !active {
+            self.renderer.hide_ai_loader()?;
+        }
         self.renderer.apply_ai_mode(active)?;
         self.renderer.set_ai_indicator_text(if active {
             AI_STATUS_ACTIVE

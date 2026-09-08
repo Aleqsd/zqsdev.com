@@ -12,7 +12,7 @@ pub struct CommandDefinition {
     pub icon: &'static str,
 }
 
-const AI_MODEL_NAME: &str = "llama-3.1-8b-instant";
+const AI_MODEL_NAME: &str = "gpt-5.6-luna";
 const REPO_URL: &str = "https://github.com/Aleqsd/zqsdev.com";
 
 pub const COMMAND_DEFINITIONS: &[CommandDefinition] = &[
@@ -317,7 +317,7 @@ fn execute_resume(state: &AppState) -> Result<CommandAction, String> {
         .links
         .resume_url
         .clone()
-        .unwrap_or_else(|| "https://founding.zqsdev.com".to_string());
+        .unwrap_or_else(|| "https://cv.zqsdev.com/".to_string());
     let target = utils::tag_resume_source(&base);
     Ok(CommandAction::Download(target))
 }
@@ -354,10 +354,11 @@ fn execute_ai(state: &AppState) -> Result<CommandAction, String> {
     );
     lines.push("  • While active, type a natural-language question or use the helper chips (`help`, `quit`).".to_string());
     lines.push(
-        "  • The assistant grounds every reply in Alexandre DO-O ALMEIDA's résumé via a Pinecone-powered RAG layer. When retrieval fails, it falls back to the local JSON bundles instead of hallucinating.".to_string(),
+        "  • The assistant uses Alexandre's curated experience, projects, publications and testimonials, beyond the one-page CV. It remembers the last 3 exchanges; `quit` clears the conversation. Sources are shown under each answer.".to_string(),
     );
+    let model_name = state.ai_model.as_deref().unwrap_or(AI_MODEL_NAME);
     lines.push(format!(
-        "  • Model in use: {AI_MODEL_NAME} (Groq primary with Gemini then OpenAI fallback)."
+        "  • Model in use: {model_name} (OpenAI; curated career knowledge with conversational follow-ups)."
     ));
     lines.push(String::new());
     if state.ai_mode {
@@ -785,8 +786,8 @@ mod tests {
             "Guidance should mention the current AI state: {text}"
         );
         assert!(
-            text.contains("Groq primary with Gemini then OpenAI fallback"),
-            "Guidance should mention updated backend order: {text}"
+            text.contains("OpenAI; curated career knowledge with conversational follow-ups"),
+            "Guidance should mention current provider: {text}"
         );
     }
 
@@ -1032,7 +1033,9 @@ mod tests {
 
         let html = super::render_links_html(&links).expect("links should render");
         assert!(
-            html.contains(&crate::utils::tag_resume_source("https://founding.zqsdev.com")),
+            html.contains(&crate::utils::tag_resume_source(
+                "https://founding.zqsdev.com"
+            )),
             "Résumé link should surface the tagged URL: {html}"
         );
         assert!(

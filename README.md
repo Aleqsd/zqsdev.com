@@ -8,13 +8,16 @@ An immersive single-page web terminal that reveals Alexandre DO-O ALMEIDA’s r�
 ## ✨ Features
 - 🎛️ Web-only terminal UI with history, autocomplete, theming, achievements, and an **AI Mode** toggle.
 - 📦 Static résumé data sourced from JSON so updates never require a recompile.
-- 🤖 Optional AI concierge proxied through an Axum service that tracks spend limits (≤ €0.50/min, €2/hour & day, €10/month) and now uses Retrieval-Augmented Generation (OpenAI embeddings + Pinecone + SQLite) to cite résumé snippets.
+- 🤖 Optional AI concierge proxied through an Axum service that uses complete curated knowledge and persistent spending limits.
 - 🚀 Build pipeline ships optimized WebAssembly + minified CSS in `static/`, ready for any CDN with an optional Axum proxy.
 
 ## 🤖 AI Concierge Stack
-- Retrieval: `python3 scripts/build_rag.py` chunks every résumé JSON file, stores the canonical text in `static/data/rag_chunks.db`, and mirrors the embeddings in Pinecone (1,536‑dim `text-embedding-3-small` vectors).
-- Generation: `/api/ai` embeds each user question, fetches `topK=4` matches from Pinecone, rebuilds the prompt from SQLite, and sends it to `gpt-4o-mini` (with Groq/Gemini fallbacks) while logging the chunk ids + similarity scores.
-- Transparency: every response returns a `context_chunks` array (id, source, topic, score) so tests and the UI can prove the answer was grounded instead of hallucinated.
+- Generation: one OpenAI `gpt-5.6-luna` call, Chat Completions with reasoning `none` and a 640-token output cap.
+- Knowledge: all seven curated JSON sources, including expanded projects, publications, awards and testimonials beyond the one-page CV. No paid retrieval or vector database is needed.
+- Follow-ups: the last three exchanges are kept in tab memory, bounded and validated by the server. `quit` or refresh clears them.
+- Reliability: pre-call rate/concurrency limits, a 16-second server deadline, a 20-second browser deadline and a working classic terminal on failure.
+- Spending: persistent USD ledger, conservative reservation followed by one reconciliation against reported input/output/cache usage. $0.50/minute, $2/hour and day, $10/30 days by default.
+- Attribution: `sources` contains validated section IDs, shown below each answer. Factual evaluation remains necessary; metadata alone does not establish correctness.
 
 ## 🗂️ Repository Layout
 ```
@@ -92,18 +95,14 @@ make serve-static STATIC_PORT=9000
 
 `make build` always refreshes `static/pkg/` and `static/style.min.css`, both of which must ship alongside the rest of `static/` for deployment.
 
-## 📚 Retrieval-Augmented Answers
-The AI concierge now pulls its context from a lightweight hybrid store:
+## 📚 Curated knowledge
+Edit `static/data/*.json`, run `python3 scripts/validate_knowledge.py`, build, and restart the backend after deploying data. The reviewed full-context ceiling is 64 KB. Builds require no AI credentials.
 
-1. `python3 scripts/build_rag.py` (or `make rag`) parses every JSON file under `static/data/`, chunks it, writes `static/data/rag_chunks.db`, and (optionally) upserts fresh embeddings into Pinecone. Add `--skip-pinecone` if you only want to refresh SQLite during local work.
-2. Set `OPENAI_API_KEY`, `PINECONE_API_KEY`, and `PINECONE_HOST=https://<index>-<project>.svc.<region>.pinecone.io` before running the proxy. Optional knobs: `PINECONE_NAMESPACE`, `RAG_DB_PATH` (defaults to `static/data/rag_chunks.db`), `RAG_TOP_K`, `RAG_MIN_SCORE`, and `OPENAI_EMBEDDING_MODEL` (default `text-embedding-3-small`).
-3. On each AI request, the server embeds the question via OpenAI, queries Pinecone for the top chunks, hydrates the canonical text from SQLite, and injects those snippets (tagged `[chunk-n]`) into the LLM prompt so answers stay grounded and cite their sources.
+The migration verified all 44 live SQLite chunks against the JSON sources and the Pinecone index held 44 vectors. All original projects (including Micro Mages, Mistale, BeeToBee and TheClair), education, publications, awards and two full testimonials were preserved. The obsolete terminal-project description, role dates and availability FAQ were updated; Studi and agentic engineering were added.
 
-The builder only depends on `python3` and `requests`. Install the extra packages once with `pip install requests` if they are missing. `make build` automatically runs `make rag` at the end so your WASM artifacts and RAG bundle stay in sync. Set `SKIP_RAG=1 make build` if you need to bypass that step locally (e.g. when offline).
+Legacy `build_rag.py`, `inspect_rag.py` and `make rag` remain available for historical inspection only. Normal build and runtime never query Pinecone, call embeddings or open SQLite. The old index is left intact.
 
-Inspect the bundled context with `make rag-inspect`, which prints per-source counts and a few sample chunk IDs.
-
-After every deploy, run `make autotest --base-url https://www.zqsdev.com` (or your preview URL) to ensure the AI response includes `context_chunks` metadata, proving the RAG layer is active.
+Official model reference: [GPT-5.6 Luna](https://developers.openai.com/api/docs/models/gpt-5.6-luna). Rates verified on 2026-09-08: input $0.20, cache read $0.02, cache write $0.25, output $1.20 per million tokens. Set all rates explicitly when selecting another model.
 
 ## ✅ Tests & Quality Gates
 
@@ -117,7 +116,7 @@ The CI pipeline should run the same trio so local runs stay in lockstep with aut
 
 ## 🩺 Live Production Smoke Test
 
-Run `make autotest` (or directly `python3 scripts/live_smoke_test.py`) to exercise the deployed site once end-to-end. It validates the Netlify bundle, the `/api/data` payloads, and sends a single question to the AI concierge. Install the lone dependency with `pip install requests`, then wire either command into your scheduler (cron, GitHub Actions, etc.). Optional flags:
+Run `make autotest` (or directly `python3 scripts/live_smoke_test.py`) to exercise the deployed site once end-to-end. It validates the Netlify bundle, the `/api/data` payloads, and sends two questions to the AI concierge. Install the lone dependency with `pip install requests`, then wire either command into your scheduler (cron, GitHub Actions, etc.). Optional flags:
 
 ```bash
 python3 scripts/live_smoke_test.py --json-output live-smoke.json
@@ -126,7 +125,7 @@ python3 scripts/live_smoke_test.py --ai-question "What's new with Alexandre?"
 make autotest AUTOTEST_FLAGS="--json-output live-smoke.json"
 ```
 
-The script exits non-zero on failure so monitors can trigger alerts. Leave the AI question count at one per run to respect the production rate limits. For cron jobs, `scripts/run_live_autotest.sh` wraps the Python entry point with sensible defaults.
+The script exits non-zero on failure so monitors can trigger alerts. Keep the two-question smoke suite bounded to respect the production rate limits. For cron jobs, `scripts/run_live_autotest.sh` wraps the Python entry point with sensible defaults.
 
 If `PUSHOVER_API_TOKEN` and `PUSHOVER_USER_KEY` are present (in the environment, `.env.local`, or `.env`), the script will send a Pushover alert only when a check fails or the run ends early with skipped tests. Disable that behaviour with `--no-pushover` or `AUTOTEST_FLAGS="--no-pushover"` if needed.
 
@@ -138,7 +137,7 @@ If `PUSHOVER_API_TOKEN` and `PUSHOVER_USER_KEY` are present (in the environment,
    ```
 2. Update at least `OPENAI_API_KEY=...` if you plan to enable AI Mode locally.
 
-`OPENAI_API_KEY` is the only required secret today. The template also reserves slots for `GROQ_API_KEY`, `PUSHOVER_USER_KEY`, and `PUSHOVER_API_TOKEN` so future integrations can reuse the same workflow. The proxy loads `.env.local` first, then `.env`, which keeps machine-specific overrides out of version control. Both files are ignored by git so real keys stay on your machine.
+`OPENAI_API_KEY` is the only required secret today. No other AI provider or vector-database credentials are needed. The proxy loads `.env.local` first, then `.env`, which keeps machine-specific overrides out of version control. Both files are ignored by git so real keys stay on your machine.
 
 ## 📦 Versioning & Release Workflow
 - ✅ Run `make build` and `make test` before handing changes off so `static/pkg/` and the proxy both stay green.
@@ -146,7 +145,7 @@ If `PUSHOVER_API_TOKEN` and `PUSHOVER_USER_KEY` are present (in the environment,
 - ✍️ Commit only the sources, regenerated assets under `static/pkg/`, and version bumps. Artifacts in `/pkg`, local env files, and logs (`server.log`) are ignored by default.
 
 ## 🎨 Customising the Résumé
-- 🔗 The public resume is `https://cv.zqsdev.com/`. The interactive terminal data will be refreshed separately; its existing resume URLs redirect to this canonical CV.
+- 🔗 The public resume is `https://cv.zqsdev.com/`. The terminal uses this same canonical CV, in English and French.
 - 🧾 Edit the JSON files in `static/data/` to refresh profile details, experiences, and skills for the interactive terminal and AI knowledge base.
 - 📄 Edit `static/cv/index.html` (English), `static/cv/fr.html` (French) and the shared `static/cv/resume.css` for the public resume. The approved base V4 is available as `resume.pdf` in English and `resume-fr.pdf` in French. Each static page links to its matching PDF and the other language, including without JavaScript. `resume.js` localizes the clipboard message, preserves terminal return context when switching language and fits the document inside the original PDF frame.
 
@@ -170,7 +169,7 @@ If you want AI Mode in production, deploy the proxy (e.g. on Fly.io, Railway, or
 - 🔑 `OPENAI_API_KEY` set.
 - ⚙️ Optional `HOST`, `PORT`, and `STATIC_DIR` overrides.
 
-The proxy reads `static/data/*.json` at startup, forwards questions to `gpt-4o-mini`, and enforces spend ceilings before gracefully falling back to the classic terminal experience when limits trigger.
+The proxy reads `static/data/*.json` at startup, forwards questions to `gpt-5.6-luna`, and enforces spend ceilings before gracefully falling back to the classic terminal experience when limits trigger.
 
 ### 🧭 Systemd service (production)
 - 🧾 Unit file: `/etc/systemd/system/zqs-terminal.service` runs `/opt/zqsdev/bin/zqs-terminal-server` as the `zqsdev` user with `WorkingDirectory=/opt/zqsdev`.

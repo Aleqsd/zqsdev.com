@@ -1,152 +1,256 @@
-mod rag;
-mod rate_limit;
+mod ai;
+mod budget;
 mod static_data;
+use ai::{AiClient, AiRequest};
 
-use crate::rag::{ContextChunk, RagRetriever};
-use crate::rate_limit::RateLimiter;
-use crate::static_data::TerminalDataPayload;
-use anyhow::{anyhow, Context};
-use axum::extract::{ConnectInfo, State};
-use axum::http::{header::CACHE_CONTROL, HeaderMap, HeaderValue, Request, StatusCode};
-use axum::response::{IntoResponse, Response};
-use axum::routing::{get, post};
-use axum::{body::Body, Json, Router};
+use axum::{
+    body::Body,
+    extract::{rejection::JsonRejection, ConnectInfo, DefaultBodyLimit, State},
+    http::{header::CACHE_CONTROL, HeaderMap, HeaderValue, Request, StatusCode},
+    response::{IntoResponse, Response},
+    routing::{get, post},
+    Json, Router,
+};
+use budget::Budget;
 use chrono::{SecondsFormat, Utc};
 use dotenvy::Error as DotenvError;
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
-use std::convert::Infallible;
-use std::env::VarError;
-use std::fmt::Write;
-use std::net::SocketAddr;
-use std::path::{Path, PathBuf};
-use std::sync::Arc;
-use tokio::fs::{self, OpenOptions};
-use tokio::io::AsyncWriteExt;
-use tokio::net::TcpListener;
-use tokio::signal;
-use tokio::sync::Mutex;
-use tower::service_fn;
-use tower::ServiceExt;
+
+use static_data::TerminalDataPayload;
+use std::{
+    convert::Infallible,
+    net::SocketAddr,
+    path::{Path, PathBuf},
+    sync::Arc,
+    time::Duration,
+};
+use tokio::{
+    fs::{self, OpenOptions},
+    io::AsyncWriteExt,
+    net::TcpListener,
+    signal,
+    sync::{Mutex, Semaphore},
+};
+use tower::{service_fn, ServiceExt};
 use tower_http::services::ServeDir;
-use tracing::{error, info, warn};
+use tracing::{info, warn};
 use uuid::Uuid;
-
-const GOOGLE_MODEL_NAME: &str = "gemini-2.5-flash-lite";
-const GOOGLE_ENDPOINT: &str =
-    "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent";
-const GROQ_MODEL_NAME: &str = "llama-3.1-8b-instant";
-const GROQ_ENDPOINT: &str = "https://api.groq.com/openai/v1/chat/completions";
-const OPENAI_MODEL_NAME: &str = "gpt-4o-mini";
-const OPENAI_ENDPOINT: &str = "https://api.openai.com/v1/chat/completions";
-const OPENAI_EMBEDDING_MODEL: &str = "text-embedding-3-small";
-const MAX_COMPLETION_TOKENS: usize = 384;
-const USER_OVERHEAD_TOKENS: usize = 32;
-const INPUT_COST_EUR_PER_1K: f64 = 0.000552; // Converted from $0.0006 ≈ €0.000552 (fx ~0.92)
-const OUTPUT_COST_EUR_PER_1K: f64 = 0.002208; // Converted from $0.0024 ≈ €0.002208
-const PER_MINUTE_BUDGET_EUR: f64 = 0.50;
-const PER_HOUR_BUDGET_EUR: f64 = 2.00;
-const PER_DAY_BUDGET_EUR: f64 = 2.00; // Align daily to €2 hard cap
-const PER_MONTH_BUDGET_EUR: f64 = 10.00;
 const SERVER_VERSION: &str = env!("CARGO_PKG_VERSION");
-const MAX_LOG_TEXT_CHARS: usize = 2_000;
-
+const MAX_LOG_TEXT_CHARS: usize = 2000;
 fn server_commit_hash() -> &'static str {
     option_env!("GIT_COMMIT_HASH").unwrap_or("unknown")
 }
-
-#[derive(Clone)]
 struct AppState {
-    limiter: Arc<Mutex<RateLimiter>>,
-    knowledge: KnowledgeBase,
+    budget: Mutex<Option<Budget>>,
     client: AiClient,
-    retriever: Option<RagRetriever>,
+    slots: Semaphore,
+    deadline: Duration,
+    log_slots: Semaphore,
+    recent_logs: Mutex<std::collections::VecDeque<i64>>,
     terminal_data: Arc<TerminalDataPayload>,
     questions_log: PathBuf,
     answers_log: PathBuf,
 }
-
-#[derive(Debug, Clone)]
-struct KnowledgeBase {
-    system_prompt: String,
-    system_tokens: usize,
-}
-
-#[derive(Clone)]
-struct AiClient {
-    http: reqwest::Client,
-    google: Option<GoogleBackend>,
-    groq: Option<ApiBackend>,
-    openai: Option<ApiBackend>,
-}
-
-#[derive(Clone)]
-struct GoogleBackend {
-    endpoint: &'static str,
-    model: &'static str,
-    api_key: Arc<String>,
-}
-
-#[derive(Clone)]
-struct ApiBackend {
-    endpoint: &'static str,
-    model: &'static str,
-    api_key: Arc<String>,
-}
-
-struct AiAnswer {
-    text: String,
-    model: &'static str,
-    cost_eur: f64,
-}
-
-#[derive(Debug, Serialize, Clone)]
-struct ContextChunkMeta {
-    id: String,
-    source: String,
-    topic: String,
-    score: f32,
-}
-
-#[derive(Debug, Serialize)]
-struct VersionPayload {
-    version: &'static str,
-    commit: &'static str,
-}
-
-impl ContextChunkMeta {
-    fn from_chunk(chunk: &ContextChunk) -> Self {
-        Self {
-            id: chunk.id.clone(),
-            source: chunk.source.clone(),
-            topic: chunk.topic.clone(),
-            score: chunk.score,
-        }
-    }
-}
-
-#[derive(Debug, Deserialize)]
-struct AiRequest {
-    question: String,
-}
-
 #[derive(Debug, Deserialize)]
 struct CommandLogRequest {
     command: String,
     #[serde(default)]
     mode: Option<String>,
 }
-
 #[derive(Debug, Serialize)]
 struct AiResponse {
     answer: String,
     ai_enabled: bool,
     reason: Option<String>,
-    model: Option<&'static str>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    context_chunks: Option<Vec<ContextChunkMeta>>,
+    model: Option<String>,
+    sources: Vec<String>,
+    knowledge_updated: &'static str,
 }
-
+fn fallback(status: StatusCode, reason: &str) -> Response {
+    (status,Json(AiResponse {answer:"AI is temporarily unavailable. Classic commands are ready: about, experience, projects, testimonials, resume. / IA temporairement indisponible : les commandes classiques restent disponibles.".into(),ai_enabled:false,reason:Some(reason.into()),model:None,sources:vec![],knowledge_updated:"2026-09-08"})).into_response()
+}
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
+    load_env_files();
+    configure_tracing();
+    let static_dir = PathBuf::from(std::env::var("STATIC_DIR").unwrap_or_else(|_| "static".into()));
+    let data = Arc::new(TerminalDataPayload::load(&static_dir.join("data"))?);
+    let client = AiClient::new(&data)?;
+    let limits = [
+        ("AI_MINUTE_BUDGET_USD", 0.5),
+        ("AI_HOUR_BUDGET_USD", 2.0),
+        ("AI_DAY_BUDGET_USD", 2.0),
+        ("AI_MONTH_BUDGET_USD", 10.0),
+    ]
+    .map(|(name, default)| {
+        std::env::var(name)
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(default)
+    });
+    let budget_path = resolve_log_path("AI_BUDGET_PATH", "logs/ai-budget.json");
+    if let Some(parent) = budget_path.parent().filter(|p| !p.as_os_str().is_empty()) {
+        std::fs::create_dir_all(parent)?;
+    }
+    let parent = budget_path
+        .parent()
+        .filter(|p| !p.as_os_str().is_empty())
+        .unwrap_or(Path::new("."));
+    anyhow::ensure!(
+        !std::fs::canonicalize(parent)?.starts_with(std::fs::canonicalize(&static_dir)?),
+        "Budget must be outside public static files"
+    );
+    let budget = match Budget::open(budget_path, limits) {
+        Ok(v) => Some(v),
+        Err(e) => {
+            warn!(error=%e,"AI disabled: budget ledger unavailable");
+            None
+        }
+    };
+    let state = Arc::new(AppState {
+        budget: Mutex::new(budget),
+        client,
+        slots: Semaphore::new(2),
+        deadline: Duration::from_secs(16),
+        log_slots: Semaphore::new(2),
+        recent_logs: Mutex::new(std::collections::VecDeque::new()),
+        terminal_data: data,
+        questions_log: resolve_log_path("QUESTIONS_LOG_PATH", "questions.log"),
+        answers_log: resolve_log_path("ANSWERS_LOG_PATH", "answers.log"),
+    });
+    let static_root = Arc::new(static_dir);
+    let static_service = service_fn(move |req: Request<Body>| {
+        let path = req.uri().path().to_owned();
+        let dir =
+            ServeDir::new(static_root.as_ref().clone()).append_index_html_on_directories(true);
+        async move {
+            match dir.oneshot(req).await {
+                Ok(response) => {
+                    let mut response = response.into_response();
+                    response.headers_mut().insert(
+                        CACHE_CONTROL,
+                        HeaderValue::from_static(cache_control_for_path(&path)),
+                    );
+                    Ok::<Response, Infallible>(response)
+                }
+                Err(_) => Ok(StatusCode::INTERNAL_SERVER_ERROR.into_response()),
+            }
+        }
+    });
+    let router = Router::new()
+        .route("/api/ai", post(handle_ai))
+        .route("/api/data", get(handle_data))
+        .route("/api/version", get(handle_version))
+        .route("/api/log/command", post(handle_command_log))
+        .layer(DefaultBodyLimit::max(64 * 1024))
+        .with_state(state)
+        .fallback_service(static_service);
+    let host = std::env::var("HOST").unwrap_or_else(|_| "127.0.0.1".into());
+    let port = std::env::var("PORT").unwrap_or_else(|_| "3000".into());
+    let listener = TcpListener::bind(format!("{host}:{port}")).await?;
+    info!(version = SERVER_VERSION, "server ready");
+    axum::serve(
+        listener,
+        router.into_make_service_with_connect_info::<SocketAddr>(),
+    )
+    .with_graceful_shutdown(shutdown_signal())
+    .await?;
+    Ok(())
+}
+async fn handle_ai(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    ConnectInfo(remote): ConnectInfo<SocketAddr>,
+    payload: Result<Json<AiRequest>, JsonRejection>,
+) -> Response {
+    let Json(request) = match payload {
+        Ok(v) => v,
+        Err(_) => return fallback(StatusCode::BAD_REQUEST, "invalid_request"),
+    };
+    if request.validate().is_err() {
+        return fallback(StatusCode::BAD_REQUEST, "invalid_request");
+    }
+    if !state.client.configured() {
+        return fallback(StatusCode::SERVICE_UNAVAILABLE, "ai_not_configured");
+    }
+    let ip = client_ip(&headers, remote);
+    let id = Uuid::new_v4().to_string();
+    let body = state.client.body(&request);
+    let reservation = state.client.reservation(&body);
+    let now = Utc::now().timestamp();
+    let _permit;
+    {
+        let mut guard = state.budget.lock().await;
+        let Some(budget) = guard.as_mut() else {
+            return fallback(StatusCode::SERVICE_UNAVAILABLE, "budget_unavailable");
+        };
+        if budget.admit_ip(&ip, now).is_err() {
+            return fallback(StatusCode::TOO_MANY_REQUESTS, "request_limit");
+        }
+        _permit = match state.slots.try_acquire() {
+            Ok(p) => p,
+            Err(_) => return fallback(StatusCode::TOO_MANY_REQUESTS, "busy"),
+        };
+        if let Err(e) = budget.reserve(&id, reservation, now) {
+            warn!(error=%e,"AI admission denied");
+            return fallback(StatusCode::TOO_MANY_REQUESTS, "spending_limit");
+        }
+    }
+    // Includes logging, upstream headers, body and parsing. No paid retrieval or retries.
+    let result = tokio::time::timeout(state.deadline, async {
+        record_ai_question(&state, &id, &request.question, &ip).await;
+        state.client.ask(body).await
+    })
+    .await;
+    match result {
+        Ok(Ok(answer)) => {
+            let mut guard = state.budget.lock().await;
+            if let Some(budget) = guard.as_mut() {
+                if let Err(e) = budget.settle(&id, answer.cost) {
+                    warn!(error=%e,"Budget persistence failed; disabling AI");
+                    *guard = None;
+                }
+            }
+            drop(guard);
+            info!(question_id=%id,model=%answer.model,cost_usd=answer.cost,usage=%answer.usage,"AI response completed");
+            let response = AiResponse {
+                answer: answer.text,
+                ai_enabled: true,
+                reason: None,
+                model: Some(answer.model),
+                sources: answer.sources,
+                knowledge_updated: "2026-09-08",
+            };
+            let _ = tokio::time::timeout(
+                Duration::from_secs(1),
+                record_ai_answer(&state, &id, &response, &ip),
+            )
+            .await;
+            Json(response).into_response()
+        }
+        Ok(Err(e)) => {
+            warn!(question_id=%id,error=%e,"AI failed; reservation retained for uncertain usage");
+            fallback(StatusCode::SERVICE_UNAVAILABLE, "provider_unavailable")
+        }
+        Err(_) => {
+            warn!(question_id=%id,"AI timeout; reservation retained");
+            fallback(StatusCode::GATEWAY_TIMEOUT, "timeout")
+        }
+    }
+}
+fn client_ip(headers: &HeaderMap, remote: SocketAddr) -> String {
+    // Nginx overwrites X-Real-IP. Never trust the client-prependable first XFF entry.
+    if remote.ip().is_loopback() {
+        if let Some(ip) = headers
+            .get("x-real-ip")
+            .and_then(|h| h.to_str().ok())
+            .and_then(|s| s.parse::<std::net::IpAddr>().ok())
+        {
+            return ip.to_string();
+        }
+    }
+    remote.ip().to_string()
+}
 #[derive(Serialize)]
 struct CommandLogEntry {
     timestamp: String,
@@ -179,213 +283,6 @@ struct AiAnswerLogEntry {
     ai_enabled: bool,
     reason: Option<String>,
     ip: String,
-}
-
-#[tokio::main]
-async fn main() -> anyhow::Result<()> {
-    load_env_files();
-    configure_tracing();
-
-    let google_key = match std::env::var("GOOGLE_API_KEY") {
-        Ok(value) => Some(value),
-        Err(VarError::NotPresent) => {
-            warn!(target: "ai", msg = "GOOGLE_API_KEY not set; defaulting to Groq/OpenAI backends");
-            None
-        }
-        Err(VarError::NotUnicode(err)) => {
-            return Err(anyhow!(
-                "GOOGLE_API_KEY contains invalid unicode: {:?}",
-                err
-            ));
-        }
-    };
-
-    let groq_key = match std::env::var("GROQ_API_KEY") {
-        Ok(value) => Some(value),
-        Err(VarError::NotPresent) => {
-            warn!(target: "ai", msg = "GROQ_API_KEY not set; defaulting to Gemini/OpenAI backends");
-            None
-        }
-        Err(VarError::NotUnicode(err)) => {
-            return Err(anyhow!("GROQ_API_KEY contains invalid unicode: {:?}", err));
-        }
-    };
-
-    let openai_key = std::env::var("OPENAI_API_KEY")
-        .context("OPENAI_API_KEY is required to run the AI proxy server")?;
-
-    let static_dir =
-        PathBuf::from(std::env::var("STATIC_DIR").unwrap_or_else(|_| "static".to_string()));
-    let data_dir = static_dir.join("data");
-    let terminal_data = Arc::new(TerminalDataPayload::load(&data_dir)?);
-    let knowledge = KnowledgeBase::from_payload(terminal_data.as_ref())?;
-    let retriever = match build_retriever(&static_dir, &openai_key).await {
-        Ok(value) => value,
-        Err(err) => {
-            warn!(target: "rag", error = %err, "RAG retrieval disabled due to init failure");
-            None
-        }
-    };
-
-    let client = AiClient::new(google_key, groq_key, Some(openai_key))?;
-    if client.has_groq() {
-        info!(
-            target: "ai",
-            model = GROQ_MODEL_NAME,
-            msg = "Groq backend configured as primary model"
-        );
-    }
-    if client.has_google() {
-        info!(
-            target: "ai",
-            model = GOOGLE_MODEL_NAME,
-            msg = if client.has_groq() {
-                "Google backend configured as secondary fallback"
-            } else {
-                "Google backend configured as primary model"
-            }
-        );
-    }
-    if client.has_openai() {
-        info!(
-            target: "ai",
-            model = OPENAI_MODEL_NAME,
-            msg = "OpenAI fallback backend configured"
-        );
-    }
-    let default_model = client.primary_model().unwrap_or(OPENAI_MODEL_NAME);
-    let questions_log = resolve_log_path("QUESTIONS_LOG_PATH", "questions.log");
-    let answers_log = resolve_log_path("ANSWERS_LOG_PATH", "answers.log");
-    let state = Arc::new(AppState {
-        limiter: Arc::new(Mutex::new(RateLimiter::new(
-            PER_MINUTE_BUDGET_EUR,
-            PER_HOUR_BUDGET_EUR,
-            PER_DAY_BUDGET_EUR,
-            PER_MONTH_BUDGET_EUR,
-        ))),
-        knowledge,
-        client,
-        retriever,
-        terminal_data,
-        questions_log,
-        answers_log,
-    });
-
-    let static_root = Arc::new(static_dir.clone());
-    let static_service = service_fn(move |req: Request<Body>| {
-        let path = req.uri().path().to_owned();
-        let dir =
-            ServeDir::new(static_root.as_ref().clone()).append_index_html_on_directories(true);
-        async move {
-            match dir.oneshot(req).await {
-                Ok(response) => {
-                    let mut response = response.into_response();
-                    if response.status().is_success() {
-                        let cache_value = cache_control_for_path(&path);
-                        let header = HeaderValue::from_static(cache_value);
-                        response.headers_mut().insert(CACHE_CONTROL, header);
-                    }
-                    Ok::<Response, Infallible>(response)
-                }
-                Err(err) => Ok((
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    format!("Static file error: {err}"),
-                )
-                    .into_response()),
-            }
-        }
-    });
-
-    let router = Router::new()
-        .route("/api/ai", post(handle_ai))
-        .route("/api/log/command", post(handle_command_log))
-        .route("/api/data", get(handle_data))
-        .route("/api/version", get(handle_version))
-        .with_state(state)
-        .fallback_service(static_service);
-
-    let host = std::env::var("HOST").unwrap_or_else(|_| "0.0.0.0".to_string());
-    let port: u16 = std::env::var("PORT")
-        .ok()
-        .and_then(|v| v.parse().ok())
-        .unwrap_or(3000);
-    let addr: SocketAddr = format!("{host}:{port}")
-        .parse()
-        .context("Invalid HOST/PORT combination")?;
-
-    let listener = TcpListener::bind(addr)
-        .await
-        .context("Failed to bind TCP listener")?;
-    let bound = listener
-        .local_addr()
-        .context("Failed to read listener address")?;
-    info!(listening = %bound, model = default_model, msg = "server ready");
-
-    axum::serve(
-        listener,
-        router.into_make_service_with_connect_info::<SocketAddr>(),
-    )
-    .with_graceful_shutdown(shutdown_signal())
-    .await?;
-
-    Ok(())
-}
-
-async fn build_retriever(
-    static_dir: &Path,
-    openai_key: &str,
-) -> anyhow::Result<Option<RagRetriever>> {
-    let pinecone_key = match std::env::var("PINECONE_API_KEY") {
-        Ok(value) => value,
-        Err(_) => return Ok(None),
-    };
-    let pinecone_host = match std::env::var("PINECONE_HOST") {
-        Ok(value) => value,
-        Err(_) => {
-            warn!(target: "rag", "PINECONE_HOST not set; skipping retriever initialization");
-            return Ok(None);
-        }
-    };
-    let pinecone_namespace = std::env::var("PINECONE_NAMESPACE").ok();
-    let rag_path = std::env::var("RAG_DB_PATH")
-        .map(PathBuf::from)
-        .unwrap_or_else(|_| static_dir.join("data/rag_chunks.db"));
-    if !rag_path.exists() {
-        warn!(
-            target: "rag",
-            path = %rag_path.display(),
-            "RAG SQLite bundle missing; skipping retriever"
-        );
-        return Ok(None);
-    }
-    let embedding_model = std::env::var("OPENAI_EMBEDDING_MODEL")
-        .unwrap_or_else(|_| OPENAI_EMBEDDING_MODEL.to_string());
-    let top_k = std::env::var("RAG_TOP_K")
-        .ok()
-        .and_then(|value| value.parse::<usize>().ok())
-        .unwrap_or(4);
-    let min_score = std::env::var("RAG_MIN_SCORE")
-        .ok()
-        .and_then(|value| value.parse::<f32>().ok())
-        .unwrap_or(0.45);
-    let retriever = RagRetriever::new(
-        rag_path,
-        pinecone_host,
-        pinecone_key,
-        pinecone_namespace,
-        openai_key.to_string(),
-        embedding_model,
-        top_k,
-        min_score,
-    )
-    .await?;
-    info!(
-        target: "rag",
-        top_k,
-        min_score = min_score,
-        "Pinecone-backed retriever ready"
-    );
-    Ok(Some(retriever))
 }
 
 async fn shutdown_signal() {
@@ -510,7 +407,7 @@ async fn record_ai_answer(
         answer_id: Uuid::new_v4().to_string(),
         answer: sanitize_log_text(&response.answer),
         answer_len: response.answer.chars().count(),
-        model: response.model.map(|value| value.to_string()),
+        model: response.model.clone(),
         ai_enabled: response.ai_enabled,
         reason: response.reason.clone(),
         ip: ip.to_string(),
@@ -528,11 +425,10 @@ async fn handle_data(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     response
 }
 
-async fn handle_version() -> impl IntoResponse {
-    Json(VersionPayload {
-        version: SERVER_VERSION,
-        commit: server_commit_hash(),
-    })
+async fn handle_version(State(state): State<Arc<AppState>>) -> impl IntoResponse {
+    Json(
+        serde_json::json!({"version":SERVER_VERSION,"commit":server_commit_hash(),"model":state.client.model,"knowledge_updated":"2026-09-08","knowledge_mode":"full_context","ai_configured":state.client.configured()}),
+    )
 }
 
 async fn handle_command_log(
@@ -542,8 +438,22 @@ async fn handle_command_log(
     Json(payload): Json<CommandLogRequest>,
 ) -> impl IntoResponse {
     let trimmed = payload.command.trim();
-    if trimmed.is_empty() {
+    if trimmed.is_empty() || trimmed.chars().count() > MAX_LOG_TEXT_CHARS {
         return StatusCode::BAD_REQUEST;
+    }
+    let Ok(_permit) = state.log_slots.try_acquire() else {
+        return StatusCode::TOO_MANY_REQUESTS;
+    };
+    {
+        let mut times = state.recent_logs.lock().await;
+        let now = Utc::now().timestamp();
+        while times.front().is_some_and(|t| now - *t >= 60) {
+            times.pop_front();
+        }
+        if times.len() >= 120 {
+            return StatusCode::TOO_MANY_REQUESTS;
+        }
+        times.push_back(now);
     }
     let mode_value = payload
         .mode
@@ -555,6 +465,9 @@ async fn handle_command_log(
     } else {
         mode_value
     };
+    if mode != "classic" && mode != "ai" {
+        return StatusCode::BAD_REQUEST;
+    }
     let entry = CommandLogEntry {
         timestamp: current_timestamp(),
         entry_type: "command",
@@ -570,274 +483,6 @@ async fn handle_command_log(
             StatusCode::INTERNAL_SERVER_ERROR
         }
     }
-}
-
-async fn handle_ai(
-    State(state): State<Arc<AppState>>,
-    headers: HeaderMap,
-    ConnectInfo(remote): ConnectInfo<SocketAddr>,
-    Json(payload): Json<AiRequest>,
-) -> impl IntoResponse {
-    let question = payload.question.trim().to_string();
-    let logged_question = sanitize_log_text(&question);
-    let primary_model = state.client.primary_model();
-    if question.is_empty() {
-        let response = AiResponse {
-            answer: "Please provide a question so the AI can help.".to_string(),
-            ai_enabled: true,
-            reason: Some("empty_question".to_string()),
-            model: primary_model,
-            context_chunks: None,
-        };
-        return (StatusCode::BAD_REQUEST, Json(response));
-    }
-
-    if question.len() > 800 {
-        let response = AiResponse {
-            answer: "Question is too long for the lightweight AI mode. Please shorten it."
-                .to_string(),
-            ai_enabled: true,
-            reason: Some("question_too_long".to_string()),
-            model: primary_model,
-            context_chunks: None,
-        };
-        return (StatusCode::BAD_REQUEST, Json(response));
-    }
-
-    let ip = client_ip(&headers, remote);
-    let question_id = Uuid::new_v4().to_string();
-    record_ai_question(state.as_ref(), &question_id, &question, &ip).await;
-
-    let mut rag_chunks = Vec::new();
-    if let Some(retriever) = state.retriever.as_ref() {
-        match retriever.retrieve(&question).await {
-            Ok(chunks) => {
-                if !chunks.is_empty() {
-                    let ids: Vec<&str> = chunks.iter().map(|chunk| chunk.id.as_str()).collect();
-                    info!(
-                        target: "rag",
-                        hit_count = chunks.len(),
-                        chunk_ids = ?ids,
-                        "RAG context attached to question"
-                    );
-                }
-                rag_chunks = chunks;
-            }
-            Err(err) => {
-                warn!(target: "rag", error = %err, "RAG retrieval failed for question");
-            }
-        }
-    }
-    if rag_chunks.is_empty() {
-        let fallback = fallback_context_chunks(state.terminal_data.as_ref());
-        if !fallback.is_empty() {
-            info!(
-                target: "rag",
-                chunk_count = fallback.len(),
-                "Using static fallback context chunks"
-            );
-            rag_chunks = fallback;
-        }
-    }
-    let context_meta = if rag_chunks.is_empty() {
-        None
-    } else {
-        Some(
-            rag_chunks
-                .iter()
-                .map(ContextChunkMeta::from_chunk)
-                .collect::<Vec<_>>(),
-        )
-    };
-    let rag_context = if rag_chunks.is_empty() {
-        None
-    } else {
-        Some(rag_chunks.as_slice())
-    };
-
-    let openai_cost_estimate = state.estimate_openai_cost(&question, &rag_chunks);
-    let request_cost_estimate = state.estimate_cost(&question, &rag_chunks);
-    let mut limiter = state.limiter.lock().await;
-    if let Err(limit) = limiter.check_and_record(&ip, request_cost_estimate) {
-        let snapshot = limiter.usage_snapshot(&ip);
-        drop(limiter);
-        let (status, reason, detail) = limit.describe();
-        warn!(
-            target: "ai",
-            ip = %ip,
-            reason,
-            minute_eur = snapshot.minute_spend,
-            hour_eur = snapshot.hour_spend,
-            day_eur = snapshot.day_spend,
-            month_eur = snapshot.month_spend,
-            ip_burst = snapshot.ip_burst,
-            ip_minute = snapshot.ip_minute,
-            ip_hour = snapshot.ip_hour,
-            ip_day = snapshot.ip_day,
-            cost_estimate_eur = request_cost_estimate,
-            "AI request blocked by limiter"
-        );
-        let response = AiResponse {
-            answer: format!(
-                "AI usage limit reached ({detail}). Switching back to the classic mode for now."
-            ),
-            ai_enabled: false,
-            reason: Some(reason.to_string()),
-            model: primary_model,
-            context_chunks: context_meta.clone(),
-        };
-        record_ai_answer(state.as_ref(), &question_id, &response, &ip).await;
-        return (status, Json(response));
-    }
-    let mut snapshot = limiter.usage_snapshot(&ip);
-    drop(limiter);
-
-    match state
-        .client
-        .ask(
-            &state.knowledge,
-            &question,
-            rag_context,
-            openai_cost_estimate,
-        )
-        .await
-    {
-        Ok(ai_answer) => {
-            let AiAnswer {
-                text: answer_text,
-                model,
-                cost_eur,
-            } = ai_answer;
-            let logged_answer = sanitize_log_text(&answer_text);
-            if cost_eur > 0.0 {
-                let mut limiter = state.limiter.lock().await;
-                if let Err(limit) = limiter.record_cost_if_within(cost_eur) {
-                    let snapshot = limiter.usage_snapshot(&ip);
-                    drop(limiter);
-                    let (status, reason, detail) = limit.describe();
-                    warn!(
-                        target: "ai",
-                        ip = %ip,
-                        model,
-                        minute_eur = snapshot.minute_spend,
-                        hour_eur = snapshot.hour_spend,
-                        day_eur = snapshot.day_spend,
-                        month_eur = snapshot.month_spend,
-                        ip_burst = snapshot.ip_burst,
-                        ip_minute = snapshot.ip_minute,
-                        ip_hour = snapshot.ip_hour,
-                        ip_day = snapshot.ip_day,
-                        cost_estimate_eur = cost_eur,
-                        "AI response discarded due to budget after backend call"
-                    );
-                    let response = AiResponse {
-                        answer: format!(
-                            "AI usage limit reached ({detail}). Switching back to the classic mode for now."
-                        ),
-                        ai_enabled: false,
-                        reason: Some(reason.to_string()),
-                        model: Some(model),
-                        context_chunks: context_meta.clone(),
-                    };
-                    record_ai_answer(state.as_ref(), &question_id, &response, &ip).await;
-                    return (status, Json(response));
-                }
-                snapshot = limiter.usage_snapshot(&ip);
-                drop(limiter);
-            }
-            info!(
-                target: "ai",
-                ip = %ip,
-                model,
-                minute_eur = snapshot.minute_spend,
-                hour_eur = snapshot.hour_spend,
-                day_eur = snapshot.day_spend,
-                month_eur = snapshot.month_spend,
-                ip_burst = snapshot.ip_burst,
-                ip_minute = snapshot.ip_minute,
-                ip_hour = snapshot.ip_hour,
-                ip_day = snapshot.ip_day,
-                cost_estimate_eur = cost_eur,
-                "AI request served"
-            );
-            info!(
-                target: "ai",
-                model,
-                user_question_len = question.chars().count(),
-                user_question = logged_question.as_str(),
-                "AI request prompt logged"
-            );
-            info!(
-                target: "ai",
-                model,
-                ai_answer_len = answer_text.chars().count(),
-                ai_answer = logged_answer.as_str(),
-                "AI request answer logged"
-            );
-            let response = AiResponse {
-                answer: answer_text,
-                ai_enabled: true,
-                reason: None,
-                model: Some(model),
-                context_chunks: context_meta.clone(),
-            };
-            record_ai_answer(state.as_ref(), &question_id, &response, &ip).await;
-            (StatusCode::OK, Json(response))
-        }
-        Err(err) => {
-            info!(
-                target: "ai",
-                ip = %ip,
-                minute_eur = snapshot.minute_spend,
-                hour_eur = snapshot.hour_spend,
-                day_eur = snapshot.day_spend,
-                month_eur = snapshot.month_spend,
-                ip_burst = snapshot.ip_burst,
-                ip_minute = snapshot.ip_minute,
-                ip_hour = snapshot.ip_hour,
-                ip_day = snapshot.ip_day,
-                cost_estimate_eur = request_cost_estimate,
-                "AI request failed"
-            );
-            error!(
-                target: "ai",
-                backend_error = %err,
-                user_question = logged_question.as_str()
-            );
-            let response = AiResponse {
-                answer: format!(
-                    "The AI backend is temporarily unavailable ({err}). Please retry in a moment."
-                ),
-                ai_enabled: true,
-                reason: Some("backend_error".to_string()),
-                model: primary_model,
-                context_chunks: context_meta,
-            };
-            record_ai_answer(state.as_ref(), &question_id, &response, &ip).await;
-            (StatusCode::SERVICE_UNAVAILABLE, Json(response))
-        }
-    }
-}
-
-fn client_ip(headers: &HeaderMap, remote: SocketAddr) -> String {
-    if remote.ip().is_loopback() {
-        if let Some(value) = forwarded_ip(headers.get("x-forwarded-for")) {
-            return value;
-        }
-        if let Some(value) = forwarded_ip(headers.get("x-real-ip")) {
-            return value;
-        }
-    }
-    remote.ip().to_string()
-}
-
-fn forwarded_ip(value: Option<&HeaderValue>) -> Option<String> {
-    let value = value?.to_str().ok()?;
-    value
-        .split(',')
-        .map(str::trim)
-        .find(|item| !item.is_empty())
-        .map(str::to_string)
 }
 
 fn sanitize_log_text(input: &str) -> String {
@@ -958,805 +603,6 @@ fn is_secret_char(ch: char) -> bool {
     ch.is_ascii_alphanumeric() || matches!(ch, '-' | '_' | '.')
 }
 
-impl AppState {
-    fn estimate_cost(&self, question: &str, contexts: &[ContextChunk]) -> f64 {
-        if self.client.has_free_backend() {
-            0.0
-        } else {
-            self.estimate_openai_cost(question, contexts)
-        }
-    }
-
-    fn estimate_openai_cost(&self, question: &str, contexts: &[ContextChunk]) -> f64 {
-        let question_tokens = estimate_tokens(question);
-        let context_tokens: usize = contexts
-            .iter()
-            .map(|chunk| estimate_tokens(&chunk.body))
-            .sum();
-        let input_tokens =
-            self.knowledge.system_tokens + question_tokens + context_tokens + USER_OVERHEAD_TOKENS;
-        let output_tokens = MAX_COMPLETION_TOKENS;
-        tokens_to_cost(input_tokens, output_tokens)
-    }
-}
-
-impl KnowledgeBase {
-    fn from_payload(payload: &TerminalDataPayload) -> anyhow::Result<Self> {
-        let profile_name = payload
-            .profile
-            .get("name")
-            .and_then(|value| value.as_str())
-            .unwrap_or("Alexandre DO-O ALMEIDA");
-        let headline = payload
-            .profile
-            .get("headline")
-            .and_then(|value| value.as_str())
-            .unwrap_or("Senior DevOps & product engineer");
-        let location = payload
-            .profile
-            .get("location")
-            .and_then(|value| value.as_str())
-            .unwrap_or("Remote");
-        let summary = payload
-            .profile
-            .get("summary_en")
-            .and_then(|value| value.as_str())
-            .unwrap_or("Use the supplied résumé context to answer questions about Alexandre.");
-        let system_prompt = format!(
-            concat!(
-                "You are the AI concierge for {name} ({headline}) based in {location}. ",
-                "Answer using only the provided context chunks (tagged as [chunk-n]) that accompany each user question. ",
-                "Cite the chunk ids you reference, keep responses structured, and never invent employers, dates, metrics, or locations that are not in context. ",
-                "If context is missing, clearly say so and outline what can be shared from the résumé at a high level.\n",
-                "Profile summary: {summary}\n"
-            ),
-            name = profile_name,
-            headline = headline,
-            location = location,
-            summary = summary
-        );
-        let system_tokens = estimate_tokens(&system_prompt);
-
-        Ok(Self {
-            system_prompt,
-            system_tokens,
-        })
-    }
-}
-
-impl AiClient {
-    fn new(
-        google_key: Option<String>,
-        groq_key: Option<String>,
-        openai_key: Option<String>,
-    ) -> anyhow::Result<Self> {
-        if google_key.is_none() && groq_key.is_none() && openai_key.is_none() {
-            return Err(anyhow!(
-                "No AI provider configured. Provide GOOGLE_API_KEY, GROQ_API_KEY, or OPENAI_API_KEY."
-            ));
-        }
-
-        let http = reqwest::Client::builder()
-            .timeout(std::time::Duration::from_secs(20))
-            .build()?;
-
-        let google = google_key.map(|key| GoogleBackend {
-            endpoint: GOOGLE_ENDPOINT,
-            model: GOOGLE_MODEL_NAME,
-            api_key: Arc::new(key),
-        });
-        let groq = groq_key.map(|key| ApiBackend {
-            endpoint: GROQ_ENDPOINT,
-            model: GROQ_MODEL_NAME,
-            api_key: Arc::new(key),
-        });
-        let openai = openai_key.map(|key| ApiBackend {
-            endpoint: OPENAI_ENDPOINT,
-            model: OPENAI_MODEL_NAME,
-            api_key: Arc::new(key),
-        });
-
-        Ok(Self {
-            http,
-            google,
-            groq,
-            openai,
-        })
-    }
-
-    fn has_google(&self) -> bool {
-        self.google.is_some()
-    }
-
-    fn has_groq(&self) -> bool {
-        self.groq.is_some()
-    }
-
-    fn has_openai(&self) -> bool {
-        self.openai.is_some()
-    }
-
-    fn has_free_backend(&self) -> bool {
-        self.groq.is_some() || self.google.is_some()
-    }
-
-    fn primary_model(&self) -> Option<&'static str> {
-        if let Some(groq) = &self.groq {
-            Some(groq.model)
-        } else if let Some(google) = &self.google {
-            Some(google.model)
-        } else {
-            self.openai.as_ref().map(|openai| openai.model)
-        }
-    }
-
-    async fn ask(
-        &self,
-        knowledge: &KnowledgeBase,
-        question: &str,
-        context: Option<&[ContextChunk]>,
-        openai_cost: f64,
-    ) -> Result<AiAnswer, AiClientError> {
-        let mut failures = Vec::new();
-        let user_prompt = build_user_prompt(question, context);
-        let question_chars = question.len();
-
-        if let Some(groq) = &self.groq {
-            match self
-                .ask_backend(
-                    groq,
-                    &knowledge.system_prompt,
-                    &user_prompt,
-                    question_chars,
-                    0.0,
-                )
-                .await
-            {
-                Ok(answer) => {
-                    return Ok(AiAnswer {
-                        text: answer,
-                        model: groq.model,
-                        cost_eur: 0.0,
-                    });
-                }
-                Err(error) => {
-                    let fallback = match (self.google.is_some(), self.openai.is_some()) {
-                        (true, _) => "Gemini fallback",
-                        (false, true) => "OpenAI fallback",
-                        _ => "no fallback available",
-                    };
-                    warn!(
-                        target: "ai",
-                        model = groq.model,
-                        error = %error,
-                        fallback,
-                        "Groq backend error"
-                    );
-                    failures.push(BackendFailure::new(BackendKind::Groq, error));
-                }
-            }
-        }
-
-        if let Some(google) = &self.google {
-            match self
-                .ask_google(
-                    google,
-                    &knowledge.system_prompt,
-                    &user_prompt,
-                    question_chars,
-                )
-                .await
-            {
-                Ok(answer) => {
-                    return Ok(AiAnswer {
-                        text: answer,
-                        model: google.model,
-                        cost_eur: 0.0,
-                    });
-                }
-                Err(error) => {
-                    let fallback = if self.openai.is_some() {
-                        "OpenAI fallback"
-                    } else {
-                        "no fallback available"
-                    };
-                    warn!(
-                        target: "ai",
-                        model = google.model,
-                        error = %error,
-                        fallback,
-                        "Google backend error"
-                    );
-                    failures.push(BackendFailure::new(BackendKind::Google, error));
-                }
-            }
-        }
-
-        if let Some(openai) = &self.openai {
-            match self
-                .ask_backend(
-                    openai,
-                    &knowledge.system_prompt,
-                    &user_prompt,
-                    question_chars,
-                    openai_cost,
-                )
-                .await
-            {
-                Ok(answer) => {
-                    return Ok(AiAnswer {
-                        text: answer,
-                        model: openai.model,
-                        cost_eur: openai_cost,
-                    });
-                }
-                Err(error) => {
-                    error!(
-                        target: "ai",
-                        model = openai.model,
-                        error = %error,
-                        "OpenAI fallback failed after other backends"
-                    );
-                    failures.push(BackendFailure::new(BackendKind::OpenAi, error));
-                    return Err(AiClientError::all_backends_failed(failures));
-                }
-            }
-        }
-
-        if failures.is_empty() {
-            Err(AiClientError::NoBackendConfigured)
-        } else {
-            Err(AiClientError::all_backends_failed(failures))
-        }
-    }
-
-    async fn ask_google(
-        &self,
-        backend: &GoogleBackend,
-        system_prompt: &str,
-        user_prompt: &str,
-        question_chars: usize,
-    ) -> Result<String, BackendError> {
-        let payload = GoogleGenerateRequest::new(system_prompt, user_prompt);
-        let response = self
-            .http
-            .post(backend.endpoint)
-            .header("x-goog-api-key", backend.api_key.as_str())
-            .json(&payload)
-            .send()
-            .await?;
-
-        let status = response.status();
-        if !status.is_success() {
-            let detail = response.text().await.unwrap_or_default();
-            return Err(BackendError::ApiFailure(status, detail));
-        }
-
-        let body: GoogleGenerateResponse = response.json().await?;
-        let answer = body
-            .candidates
-            .unwrap_or_default()
-            .into_iter()
-            .find_map(GoogleCandidate::into_text)
-            .filter(|value| !value.is_empty())
-            .ok_or(BackendError::EmptyAnswer)?;
-
-        info!(
-            target: "ai",
-            cost_eur = 0.0,
-            chars = question_chars,
-            model = backend.model,
-            msg = "AI response generated by backend"
-        );
-        Ok(answer)
-    }
-
-    async fn ask_backend(
-        &self,
-        backend: &ApiBackend,
-        system_prompt: &str,
-        user_prompt: &str,
-        question_chars: usize,
-        cost_eur: f64,
-    ) -> Result<String, BackendError> {
-        let payload = ChatRequest::new(backend.model, system_prompt, user_prompt);
-        let response = self
-            .http
-            .post(backend.endpoint)
-            .bearer_auth(backend.api_key.as_str())
-            .json(&payload)
-            .send()
-            .await?;
-
-        let status = response.status();
-        if !status.is_success() {
-            let detail = response.text().await.unwrap_or_default();
-            return Err(BackendError::ApiFailure(status, detail));
-        }
-
-        let body: ChatResponse = response.json().await?;
-        let answer = body
-            .choices
-            .into_iter()
-            .find_map(|choice| choice.message.content.map(|c| c.trim().to_string()))
-            .filter(|value| !value.is_empty())
-            .ok_or(BackendError::EmptyAnswer)?;
-
-        info!(
-            target: "ai",
-            cost_eur,
-            chars = question_chars,
-            model = backend.model,
-            msg = "AI response generated by backend"
-        );
-        Ok(answer)
-    }
-}
-
-#[derive(Debug)]
-struct BackendFailure {
-    backend: BackendKind,
-    error: BackendError,
-}
-
-impl BackendFailure {
-    fn new(backend: BackendKind, error: BackendError) -> Self {
-        Self { backend, error }
-    }
-}
-
-#[derive(Debug, Clone, Copy)]
-enum BackendKind {
-    Google,
-    Groq,
-    OpenAi,
-}
-
-impl BackendKind {
-    fn as_str(&self) -> &'static str {
-        match self {
-            BackendKind::Google => "Google",
-            BackendKind::Groq => "Groq",
-            BackendKind::OpenAi => "OpenAI",
-        }
-    }
-}
-
-#[derive(Debug, thiserror::Error)]
-enum BackendError {
-    #[error("network error: {0}")]
-    Network(#[from] reqwest::Error),
-    #[error("api failure ({0}): {1}")]
-    ApiFailure(StatusCode, String),
-    #[error("AI response did not contain any answer")]
-    EmptyAnswer,
-}
-
-#[derive(Debug, thiserror::Error)]
-enum AiClientError {
-    #[error("No AI backend is configured")]
-    NoBackendConfigured,
-    #[error("All AI backends failed: {0}")]
-    AllBackendsFailed(String),
-}
-
-impl AiClientError {
-    fn all_backends_failed(failures: Vec<BackendFailure>) -> Self {
-        let summary = failures
-            .into_iter()
-            .map(|failure| {
-                format!(
-                    "{} backend failed: {}",
-                    failure.backend.as_str(),
-                    failure.error
-                )
-            })
-            .collect::<Vec<_>>()
-            .join("; ");
-        AiClientError::AllBackendsFailed(summary)
-    }
-}
-
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-struct GoogleGenerateRequest<'a> {
-    contents: [GoogleContent<'a>; 1],
-    system_instruction: GoogleContent<'a>,
-    generation_config: GoogleGenerationConfig,
-}
-
-#[derive(Serialize)]
-struct GoogleContent<'a> {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    role: Option<&'a str>,
-    parts: [GooglePart<'a>; 1],
-}
-
-#[derive(Serialize)]
-struct GooglePart<'a> {
-    text: &'a str,
-}
-
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-struct GoogleGenerationConfig {
-    temperature: f32,
-    max_output_tokens: u32,
-}
-
-impl<'a> GoogleGenerateRequest<'a> {
-    fn new(system_prompt: &'a str, user_prompt: &'a str) -> Self {
-        Self {
-            contents: [GoogleContent::user(user_prompt)],
-            system_instruction: GoogleContent::instruction(system_prompt),
-            generation_config: GoogleGenerationConfig::new(0.3, MAX_COMPLETION_TOKENS as u32),
-        }
-    }
-}
-
-impl<'a> GoogleContent<'a> {
-    fn instruction(text: &'a str) -> Self {
-        Self {
-            role: None,
-            parts: [GooglePart { text }],
-        }
-    }
-
-    fn user(text: &'a str) -> Self {
-        Self {
-            role: Some("user"),
-            parts: [GooglePart { text }],
-        }
-    }
-}
-
-impl GoogleGenerationConfig {
-    fn new(temperature: f32, max_output_tokens: u32) -> Self {
-        Self {
-            temperature,
-            max_output_tokens,
-        }
-    }
-}
-
-#[derive(Serialize)]
-struct ChatRequest<'a> {
-    model: &'a str,
-    temperature: f32,
-    max_tokens: usize,
-    messages: [ChatMessage<'a>; 2],
-}
-
-#[derive(Serialize)]
-struct ChatMessage<'a> {
-    role: &'static str,
-    content: &'a str,
-}
-
-impl<'a> ChatRequest<'a> {
-    fn new(model: &'a str, system_prompt: &'a str, user_prompt: &'a str) -> Self {
-        Self {
-            model,
-            temperature: 0.3,
-            max_tokens: MAX_COMPLETION_TOKENS,
-            messages: [
-                ChatMessage {
-                    role: "system",
-                    content: system_prompt,
-                },
-                ChatMessage {
-                    role: "user",
-                    content: user_prompt,
-                },
-            ],
-        }
-    }
-}
-
-#[derive(Deserialize)]
-struct ChatResponse {
-    choices: Vec<ChatChoice>,
-}
-
-#[derive(Deserialize)]
-struct ChatChoice {
-    message: ChatChoiceMessage,
-}
-
-#[derive(Deserialize)]
-struct ChatChoiceMessage {
-    content: Option<String>,
-}
-
-#[derive(Deserialize)]
-struct GoogleGenerateResponse {
-    candidates: Option<Vec<GoogleCandidate>>,
-}
-
-#[derive(Deserialize)]
-struct GoogleCandidate {
-    content: Option<GoogleCandidateContent>,
-}
-
-#[derive(Deserialize)]
-struct GoogleCandidateContent {
-    parts: Option<Vec<GoogleCandidatePart>>,
-}
-
-#[derive(Deserialize)]
-struct GoogleCandidatePart {
-    text: Option<String>,
-}
-
-impl GoogleCandidate {
-    fn into_text(self) -> Option<String> {
-        self.content.and_then(|content| {
-            content
-                .parts
-                .unwrap_or_default()
-                .into_iter()
-                .find_map(|part| {
-                    part.text
-                        .map(|text| text.trim().to_string())
-                        .filter(|value| !value.is_empty())
-                })
-        })
-    }
-}
-
-fn estimate_tokens(text: &str) -> usize {
-    let chars = text.chars().count() as f64;
-    (chars / 4.0).ceil() as usize
-}
-
-fn tokens_to_cost(input_tokens: usize, output_tokens: usize) -> f64 {
-    let input_cost = INPUT_COST_EUR_PER_1K * (input_tokens as f64 / 1000.0);
-    let output_cost = OUTPUT_COST_EUR_PER_1K * (output_tokens as f64 / 1000.0);
-    (input_cost + output_cost).max(0.0)
-}
-
-fn build_user_prompt(question: &str, context: Option<&[ContextChunk]>) -> String {
-    if let Some(chunks) = context {
-        let mut buffer = String::new();
-        buffer.push_str(
-            "Use the referenced context snippets to answer the question. When citing a snippet, mention it naturally like \"(source: Core skills section)\" and never reference file names.\n",
-        );
-        buffer.push_str(
-            "If the context includes a project tech stack or named technologies, repeat the exact technology names from context in your answer. Do not collapse or generalize them into broader categories.\n",
-        );
-        for chunk in chunks {
-            let label = format!("{} section", chunk.topic);
-            let _ = writeln!(buffer, "[context] {label}\n{}\n", chunk.body.trim());
-        }
-        let explicit_technologies = extract_explicit_technologies(question, chunks);
-        if !explicit_technologies.is_empty() {
-            let _ = writeln!(
-                buffer,
-                "Explicit technologies found in context: {}.",
-                explicit_technologies.join(", ")
-            );
-        }
-        buffer.push_str("Question:\n");
-        buffer.push_str(question);
-        buffer
-    } else {
-        question.to_string()
-    }
-}
-
-fn extract_explicit_technologies(question: &str, chunks: &[ContextChunk]) -> Vec<String> {
-    let keywords = question_keywords(question);
-    let mut collected = Vec::new();
-
-    for chunk in chunks {
-        let Some(value) = parse_chunk_json_body(&chunk.body) else {
-            continue;
-        };
-        let mut matched = Vec::new();
-        collect_matching_tech_terms(&value, &keywords, &mut matched, true);
-        if matched.is_empty() {
-            collect_matching_tech_terms(&value, &keywords, &mut matched, false);
-        }
-        for tech in matched {
-            if !collected.iter().any(|existing| existing == &tech) {
-                collected.push(tech);
-            }
-        }
-    }
-
-    collected
-}
-
-fn parse_chunk_json_body(body: &str) -> Option<Value> {
-    let trimmed = body.trim();
-    if let Ok(value) = serde_json::from_str::<Value>(trimmed) {
-        return Some(value);
-    }
-
-    let json_start = trimmed
-        .char_indices()
-        .find_map(|(idx, ch)| (ch == '{' || ch == '[').then_some(idx))?;
-    serde_json::from_str::<Value>(&trimmed[json_start..]).ok()
-}
-
-fn question_keywords(question: &str) -> Vec<String> {
-    const STOP_WORDS: &[&str] = &[
-        "the", "a", "an", "and", "or", "to", "for", "of", "in", "on", "with", "which", "what",
-        "who", "how", "is", "are", "do", "does", "power", "powers", "project", "technologies",
-    ];
-
-    question
-        .split(|ch: char| !ch.is_alphanumeric())
-        .filter_map(|token| {
-            let lowered = token.trim().to_ascii_lowercase();
-            if lowered.len() < 3 || STOP_WORDS.contains(&lowered.as_str()) {
-                None
-            } else {
-                Some(lowered)
-            }
-        })
-        .collect()
-}
-
-fn collect_matching_tech_terms(
-    value: &Value,
-    keywords: &[String],
-    out: &mut Vec<String>,
-    require_keyword_match: bool,
-) {
-    match value {
-        Value::Object(map) => {
-            let title = map
-                .get("title")
-                .and_then(Value::as_str)
-                .unwrap_or_default()
-                .to_ascii_lowercase();
-            let description = map
-                .get("description")
-                .and_then(Value::as_str)
-                .unwrap_or_default()
-                .to_ascii_lowercase();
-            let keyword_match = keywords.is_empty()
-                || keywords
-                    .iter()
-                    .any(|keyword| title.contains(keyword) || description.contains(keyword));
-
-            if let Some(tech) = map.get("tech").and_then(Value::as_array) {
-                if keyword_match || !require_keyword_match {
-                    for item in tech.iter().filter_map(Value::as_str) {
-                        let trimmed = item.trim();
-                        if !trimmed.is_empty() && !out.iter().any(|existing| existing == trimmed) {
-                            out.push(trimmed.to_string());
-                        }
-                    }
-                }
-            }
-
-            for child in map.values() {
-                collect_matching_tech_terms(child, keywords, out, require_keyword_match);
-            }
-        }
-        Value::Array(items) => {
-            for item in items {
-                collect_matching_tech_terms(item, keywords, out, require_keyword_match);
-            }
-        }
-        _ => {}
-    }
-}
-
-fn fallback_context_chunks(payload: &TerminalDataPayload) -> Vec<ContextChunk> {
-    let mut chunks = Vec::new();
-    if let Some(profile_chunk) = build_profile_chunk(payload) {
-        chunks.push(profile_chunk);
-    }
-    if let Some(experience_chunk) = build_experience_chunk(payload) {
-        chunks.push(experience_chunk);
-    }
-    if let Some(project_chunk) = build_projects_chunk(payload) {
-        chunks.push(project_chunk);
-    }
-    if let Some(skills_chunk) = build_skills_chunk(payload) {
-        chunks.push(skills_chunk);
-    }
-    if let Some(education_chunk) = build_education_chunk(payload) {
-        chunks.push(education_chunk);
-    }
-    if let Some(testimonials_chunk) = build_testimonials_chunk(payload) {
-        chunks.push(testimonials_chunk);
-    }
-    if let Some(faq_chunk) = build_faq_chunk(payload) {
-        chunks.push(faq_chunk);
-    }
-    if chunks.is_empty() {
-        if let Ok(snapshot) = serde_json::to_string(&payload.knowledge_json()) {
-            chunks.push(ContextChunk {
-                id: "static-terminal-snapshot".to_string(),
-                source: "static/data".to_string(),
-                topic: "Résumé snapshot".to_string(),
-                body: snapshot,
-                score: 0.0,
-            });
-        }
-    }
-    chunks
-}
-
-fn build_profile_chunk(payload: &TerminalDataPayload) -> Option<ContextChunk> {
-    chunk_from_value(
-        &payload.profile,
-        "static-profile",
-        "profile.json",
-        "Profile data",
-    )
-}
-
-fn build_experience_chunk(payload: &TerminalDataPayload) -> Option<ContextChunk> {
-    chunk_from_value(
-        &payload.experiences,
-        "static-experience",
-        "experience.json",
-        "Experience data",
-    )
-}
-
-fn build_projects_chunk(payload: &TerminalDataPayload) -> Option<ContextChunk> {
-    chunk_from_value(
-        &payload.projects,
-        "static-projects",
-        "projects.json",
-        "Projects data",
-    )
-}
-
-fn build_skills_chunk(payload: &TerminalDataPayload) -> Option<ContextChunk> {
-    chunk_from_value(
-        &payload.skills,
-        "static-skills",
-        "skills.json",
-        "Skills data",
-    )
-}
-
-fn build_education_chunk(payload: &TerminalDataPayload) -> Option<ContextChunk> {
-    chunk_from_value(
-        &payload.education,
-        "static-education",
-        "education.json",
-        "Education data",
-    )
-}
-
-fn build_testimonials_chunk(payload: &TerminalDataPayload) -> Option<ContextChunk> {
-    chunk_from_value(
-        &payload.testimonials,
-        "static-testimonials",
-        "testimonials.json",
-        "Testimonials data",
-    )
-}
-
-fn build_faq_chunk(payload: &TerminalDataPayload) -> Option<ContextChunk> {
-    chunk_from_value(&payload.faqs, "static-faq", "faq.json", "FAQ data")
-}
-
-fn chunk_from_value(value: &Value, id: &str, source: &str, topic: &str) -> Option<ContextChunk> {
-    if value.is_null() {
-        return None;
-    }
-    let body = serde_json::to_string_pretty(value).unwrap_or_else(|_| value.to_string());
-    if body.trim().is_empty() {
-        return None;
-    }
-    Some(ContextChunk {
-        id: id.to_string(),
-        source: source.to_string(),
-        topic: topic.to_string(),
-        body,
-        score: 0.0,
-    })
-}
-
 fn terminal_payload_with_alias(payload: &TerminalDataPayload) -> serde_json::Value {
     let mut value = serde_json::to_value(payload).expect("terminal data payload should serialize");
     if let Some(map) = value.as_object_mut() {
@@ -1770,483 +616,162 @@ fn terminal_payload_with_alias(payload: &TerminalDataPayload) -> serde_json::Val
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::rag::ContextChunk;
-    use serde_json::json;
-
-    fn load_embedded_knowledge() -> serde_json::Value {
-        let data_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../static/data");
-        load_terminal_payload(&data_dir).knowledge_json()
-    }
-
-    fn load_terminal_payload(data_dir: &Path) -> TerminalDataPayload {
-        TerminalDataPayload::load(data_dir).expect("should load knowledge base from static data")
-    }
-
-    fn empty_terminal_data() -> std::sync::Arc<TerminalDataPayload> {
-        std::sync::Arc::new(TerminalDataPayload {
-            profile: json!({}),
-            skills: json!([]),
-            experiences: json!([]),
-            education: json!([]),
-            projects: json!([]),
-            testimonials: json!([]),
-            faqs: json!([]),
-        })
-    }
-
-    #[test]
-    fn profile_links_target_primary_domains() {
-        let data = load_embedded_knowledge();
-        let links = data
-            .get("profile")
-            .and_then(|profile| profile.get("links"))
-            .expect("profile.links should be present");
-
-        let resume = links
-            .get("resume_url")
-            .and_then(|value| value.as_str())
-            .expect("profile.links.resume_url should be populated");
-        assert!(
-            resume.starts_with("https://founding.zqsdev.com"),
-            "Résumé link should point to the default founding résumé domain: {resume}"
-        );
-
-        let website = links
-            .get("website")
-            .and_then(|value| value.as_str())
-            .expect("profile.links.website should be populated");
-        assert!(
-            website.starts_with("https://www.zqsdev.com")
-                || website.starts_with("https://zqsdev.com"),
-            "Website link should target the primary domain: {website}"
-        );
-    }
-
-    #[test]
-    fn token_estimate_is_positive() {
-        let sample = "Hello world";
-        assert!(estimate_tokens(sample) > 0);
-    }
-
-    #[test]
-    fn cost_calculation_scales_with_tokens() {
-        let low = tokens_to_cost(500, 100);
-        let high = tokens_to_cost(5000, 1000);
-        assert!(high > low);
-    }
-
-    #[test]
-    fn primary_model_falls_back_through_backends() {
-        let client = AiClient::new(
-            Some("google-key".to_string()),
-            Some("groq-key".to_string()),
-            Some("openai-key".to_string()),
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    async fn fixture(
+        status: StatusCode,
+        delay_ms: u64,
+        limits: [f64; 4],
+    ) -> (
+        Arc<AppState>,
+        Arc<AtomicUsize>,
+        tokio::task::JoinHandle<()>,
+        PathBuf,
+    ) {
+        let calls = Arc::new(AtomicUsize::new(0));
+        let counter = calls.clone();
+        let router=Router::new().route("/",post(move || {
+            let counter=counter.clone(); async move {
+                counter.fetch_add(1,Ordering::SeqCst);
+                tokio::time::sleep(Duration::from_millis(delay_ms)).await;
+                (status,Json(serde_json::json!({"model":"gpt-5.6-luna","choices":[{"finish_reason":"stop","message":{"content":"{\"answer\":\"Micro Mages used Python.\",\"sources\":[\"projects\"]}"}}],"usage":{"prompt_tokens":100,"completion_tokens":20}})))
+            }
+        }));
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let task = tokio::spawn(async move {
+            axum::serve(listener, router).await.unwrap();
+        });
+        let dir = std::env::temp_dir().join(format!("zqs-api-test-{}", Uuid::new_v4()));
+        std::fs::create_dir(&dir).unwrap();
+        let data = TerminalDataPayload::load(
+            &Path::new(env!("CARGO_MANIFEST_DIR")).join("../static/data"),
         )
-        .expect("client should construct");
-        assert_eq!(client.primary_model(), Some(GROQ_MODEL_NAME));
-
-        let client = AiClient::new(
-            Some("google-key".to_string()),
-            None,
-            Some("openai-key".to_string()),
+        .unwrap();
+        let state = Arc::new(AppState {
+            budget: Mutex::new(Some(Budget::open(dir.join("budget.json"), limits).unwrap())),
+            client: AiClient::fixture(format!("http://{addr}/")),
+            slots: Semaphore::new(2),
+            deadline: Duration::from_millis(80),
+            log_slots: Semaphore::new(2),
+            recent_logs: Mutex::new(std::collections::VecDeque::new()),
+            terminal_data: Arc::new(data),
+            questions_log: dir.join("questions.log"),
+            answers_log: dir.join("answers.log"),
+        });
+        (state, calls, task, dir)
+    }
+    async fn request(state: Arc<AppState>) -> (StatusCode, serde_json::Value) {
+        let response = handle_ai(
+            State(state),
+            HeaderMap::new(),
+            ConnectInfo("127.0.0.1:5000".parse().unwrap()),
+            Ok(Json(AiRequest {
+                question: "Micro Mages?".into(),
+                history: vec![],
+            })),
         )
-        .expect("client should construct without Groq");
-        assert_eq!(client.primary_model(), Some(GOOGLE_MODEL_NAME));
-
-        let client =
-            AiClient::new(None, None, Some("openai-key".to_string())).expect("OpenAI only");
-        assert_eq!(client.primary_model(), Some(OPENAI_MODEL_NAME));
+        .await;
+        let status = response.status();
+        let body = axum::body::to_bytes(response.into_body(), 65536)
+            .await
+            .unwrap();
+        (status, serde_json::from_slice(&body).unwrap())
     }
-
-    #[test]
-    fn ai_response_serializes_model_field() {
-        let response = AiResponse {
-            answer: "Answer".to_string(),
-            ai_enabled: true,
-            reason: None,
-            model: Some(GROQ_MODEL_NAME),
-            context_chunks: Some(vec![ContextChunkMeta {
-                id: "chunk-1".to_string(),
-                source: "profile.json".to_string(),
-                topic: "Profile".to_string(),
-                score: 0.9,
-            }]),
-        };
-        let value = serde_json::to_value(&response).expect("serialize response");
-        assert_eq!(
-            value.get("model").and_then(|entry| entry.as_str()),
-            Some(GROQ_MODEL_NAME),
-            "Serialized AI response should expose the backend model"
-        );
-        let contexts = value
-            .get("context_chunks")
-            .and_then(|entry| entry.as_array())
-            .expect("context chunks should serialize");
-        assert_eq!(contexts.len(), 1);
-        assert_eq!(
-            contexts[0].get("id").and_then(|entry| entry.as_str()),
-            Some("chunk-1")
-        );
+    #[tokio::test]
+    async fn paid_call_once_and_usage_reconciled() {
+        let (state, calls, task, dir) = fixture(StatusCode::OK, 0, [1.; 4]).await;
+        let (status, body) = request(state).await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(body["sources"][0], "projects");
+        assert_eq!(calls.load(Ordering::SeqCst), 1);
+        let ledger: serde_json::Value =
+            serde_json::from_slice(&std::fs::read(dir.join("budget.json")).unwrap()).unwrap();
+        assert_eq!(ledger.as_array().unwrap().len(), 1);
+        assert!((ledger[0]["usd"].as_f64().unwrap() - 0.000044).abs() < 1e-9);
+        task.abort();
+        std::fs::remove_dir_all(dir).unwrap();
     }
-
-    #[test]
-    fn chat_request_uses_backend_model() {
-        let knowledge = KnowledgeBase {
-            system_prompt: "prompt".to_string(),
-            system_tokens: 4,
-        };
-        let question = "What is the latest project?";
-        let request = ChatRequest::new(GROQ_MODEL_NAME, &knowledge.system_prompt, question);
-        assert_eq!(request.model, GROQ_MODEL_NAME);
-        assert_eq!(request.messages[0].content, "prompt");
-        assert_eq!(request.messages[1].content, question);
+    #[tokio::test]
+    async fn spending_and_concurrency_block_before_provider() {
+        let (state, calls, task, dir) = fixture(StatusCode::OK, 0, [0.; 4]).await;
+        assert_eq!(request(state).await.0, StatusCode::TOO_MANY_REQUESTS);
+        assert_eq!(calls.load(Ordering::SeqCst), 0);
+        task.abort();
+        std::fs::remove_dir_all(dir).unwrap();
+        let (state, calls, task, dir) = fixture(StatusCode::OK, 0, [1.; 4]).await;
+        let permits = state.slots.acquire_many(2).await.unwrap();
+        assert_eq!(request(state.clone()).await.1["reason"], "busy");
+        assert_eq!(calls.load(Ordering::SeqCst), 0);
+        drop(permits);
+        task.abort();
+        std::fs::remove_dir_all(dir).unwrap();
     }
-
-    #[test]
-    fn google_request_includes_prompt_and_question() {
-        let prompt = "system instructions";
-        let question = "Tell me about Alexandre.";
-        let request = GoogleGenerateRequest::new(prompt, question);
-        assert_eq!(request.system_instruction.parts[0].text, prompt);
-        assert_eq!(request.contents[0].parts[0].text, question);
-        assert_eq!(request.contents[0].role, Some("user"));
-        assert_eq!(
-            request.generation_config.max_output_tokens,
-            MAX_COMPLETION_TOKENS as u32
-        );
+    #[tokio::test]
+    async fn upstream_failure_and_timeout_restore_classic_mode() {
+        for (status, delay, expected) in [
+            (StatusCode::TOO_MANY_REQUESTS, 0, "provider_unavailable"),
+            (StatusCode::OK, 300, "timeout"),
+        ] {
+            let (state, calls, task, dir) = fixture(status, delay, [1.; 4]).await;
+            let (_, body) = request(state.clone()).await;
+            assert_eq!(body["ai_enabled"], false);
+            assert_eq!(body["reason"], expected);
+            assert_eq!(calls.load(Ordering::SeqCst), 1);
+            assert_eq!(state.slots.available_permits(), 2);
+            let data = terminal_payload_with_alias(&state.terminal_data);
+            assert!(data["experiences"][0]["company"]
+                .as_str()
+                .unwrap()
+                .contains("Studi"));
+            task.abort();
+            std::fs::remove_dir_all(dir).unwrap();
+        }
     }
-
     #[test]
-    fn google_candidate_extracts_trimmed_text() {
-        let candidate = GoogleCandidate {
-            content: Some(GoogleCandidateContent {
-                parts: Some(vec![GoogleCandidatePart {
-                    text: Some("  Answer with whitespace  ".to_string()),
-                }]),
-            }),
-        };
-        assert_eq!(
-            GoogleCandidate::into_text(candidate),
-            Some("Answer with whitespace".to_string())
-        );
+    fn forwarded_header_cannot_spoof_limiter() {
+        let mut h = HeaderMap::new();
+        h.insert("x-forwarded-for", HeaderValue::from_static("fake, 1.2.3.4"));
+        h.insert("x-real-ip", HeaderValue::from_static("1.2.3.4"));
+        assert_eq!(client_ip(&h, "127.0.0.1:1".parse().unwrap()), "1.2.3.4");
+        assert_eq!(client_ip(&h, "5.6.7.8:1".parse().unwrap()), "5.6.7.8");
     }
-
     #[test]
-    fn user_prompt_includes_context_chunks() {
-        let chunks = vec![
-            ContextChunk {
-                id: "chunk-1".to_string(),
-                source: "profile.json".to_string(),
-                topic: "Profile".to_string(),
-                body: "Name: Alexandre".to_string(),
-                score: 0.92,
-            },
-            ContextChunk {
-                id: "chunk-2".to_string(),
-                source: "experience.json".to_string(),
-                topic: "PlayStation".to_string(),
-                body: "Highlights about CI/CD".to_string(),
-                score: 0.88,
-            },
-        ];
-        let prompt = build_user_prompt("What is Alexandre working on?", Some(&chunks));
-        assert!(
-            prompt.contains("[context] Profile section"),
-            "prompt should list chunk sources using readable section labels: {prompt}"
-        );
-        assert!(
-            prompt.contains("Highlights about CI/CD"),
-            "prompt should inline chunk bodies: {prompt}"
-        );
-        assert!(
-            prompt.contains("repeat the exact technology names from context"),
-            "prompt should explicitly preserve named technologies: {prompt}"
-        );
-        assert!(
-            prompt.ends_with("What is Alexandre working on?"),
-            "prompt should include the user question at the end: {prompt}"
-        );
-    }
-
-    #[test]
-    fn user_prompt_surfaces_matching_project_technologies() {
-        let chunks = vec![ContextChunk {
-            id: "projects-projects:1".to_string(),
-            source: "projects.json".to_string(),
-            topic: "projects: ZQSDev Terminal – AI Résumé Concierge".to_string(),
-            body: concat!(
-                "Source: projects\n",
-                "Topic: projects\n",
-                "Label: ZQSDev Terminal – AI Résumé Concierge\n\n",
-                "{\n",
-                "  \"title\": \"ZQSDev Terminal – AI Résumé Concierge\",\n",
-                "  \"description\": \"Built this interactive portfolio terminal.\",\n",
-                "  \"tech\": [\"Rust\", \"RAG\", \"LLM APIs\", \"WebAssembly\", \"Netlify\"]\n",
-                "}"
-            )
-            .to_string(),
-            score: 0.91,
-        }];
-
-        let prompt = build_user_prompt(
-            "Which technologies power the ZQSDev Terminal project?",
-            Some(&chunks),
-        );
-
-        assert!(
-            prompt.contains("Explicit technologies found in context: Rust, RAG, LLM APIs, WebAssembly, Netlify."),
-            "prompt should surface the matching project tech stack verbatim: {prompt}"
-        );
-    }
-
-    #[test]
-    fn parse_chunk_json_body_skips_rag_headers() {
-        let value = parse_chunk_json_body(
-            "Source: projects\nTopic: projects\nLabel: Demo\n\n{\"tech\":[\"Rust\",\"WebAssembly\"]}",
+    fn preserves_rich_knowledge_and_current_role() {
+        let data = TerminalDataPayload::load(
+            &Path::new(env!("CARGO_MANIFEST_DIR")).join("../static/data"),
         )
-        .expect("json payload should be parsed after headers");
-
-        let tech = value["tech"]
-            .as_array()
-            .expect("tech array should be present")
-            .iter()
-            .filter_map(Value::as_str)
-            .collect::<Vec<_>>();
-
-        assert_eq!(tech, vec!["Rust", "WebAssembly"]);
-    }
-
-    #[test]
-    fn fallback_context_includes_profile_and_experience() {
-        let data_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../static/data");
-        let payload = load_terminal_payload(&data_dir);
-        let chunks = fallback_context_chunks(&payload);
-        assert!(
-            !chunks.is_empty(),
-            "fallback context should include at least one chunk"
-        );
-        assert!(
-            chunks.iter().any(|chunk| chunk.source == "profile.json"),
-            "profile chunk missing from fallback context: {chunks:?}"
-        );
-        assert!(
-            chunks.iter().any(|chunk| chunk.source == "experience.json"),
-            "experience chunk missing from fallback context: {chunks:?}"
-        );
-        assert!(
-            chunks.iter().any(|chunk| chunk.source == "skills.json"),
-            "skills chunk missing from fallback context: {chunks:?}"
-        );
-        assert!(
-            chunks.iter().any(|chunk| chunk.source == "faq.json"),
-            "faq chunk missing from fallback context: {chunks:?}"
-        );
-        assert!(
-            chunks.iter().any(|chunk| chunk.source == "education.json"),
-            "education chunk missing from fallback context: {chunks:?}"
-        );
-        assert!(
-            chunks
-                .iter()
-                .any(|chunk| chunk.source == "testimonials.json"),
-            "testimonials chunk missing from fallback context: {chunks:?}"
-        );
-        let projects_chunk = chunks
-            .iter()
-            .find(|chunk| chunk.source == "projects.json")
-            .expect("projects chunk missing from fallback context");
-        assert!(
-            projects_chunk.body.contains("WebAssembly"),
-            "projects chunk should include full tech stack details: {}",
-            projects_chunk.body
+        .unwrap();
+        let text = data.knowledge_json().to_string();
+        for fact in [
+            "50,000",
+            "Langfuse",
+            "Micro Mages",
+            "BeeToBee",
+            "Machine Learning and Cancer Prediction",
+            "500K",
+            "60+",
+            "Mar 2026",
+            "Apr 2026",
+        ] {
+            assert!(text.contains(fact), "missing {fact}");
+        }
+        assert!(data.experiences[0]["company"]
+            .as_str()
+            .unwrap()
+            .contains("Studi"));
+        assert_eq!(data.testimonials.as_array().unwrap().len(), 2);
+        assert_eq!(
+            data.profile["links"]["resume_url"],
+            "https://cv.zqsdev.com/"
         );
     }
-
     #[test]
-    fn terminal_payload_includes_faq_alias() {
-        let data_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../static/data");
-        let payload = load_terminal_payload(&data_dir);
-        let value = terminal_payload_with_alias(&payload);
-        let map = value
-            .as_object()
-            .expect("serialized payload should be a JSON object");
-        assert!(map.contains_key("faqs"), "faqs key missing from payload");
-        assert!(map.contains_key("faq"), "faq alias missing from payload");
-    }
-
-    #[test]
-    fn estimate_cost_zero_when_free_backend_available() {
-        let client = AiClient::new(
-            Some("google_key".to_string()),
-            None,
-            Some("openai_key".to_string()),
-        )
-        .expect("client should construct");
-        let knowledge = KnowledgeBase {
-            system_prompt: "prompt".to_string(),
-            system_tokens: 8,
-        };
-        let app_state = AppState {
-            limiter: std::sync::Arc::new(tokio::sync::Mutex::new(RateLimiter::new(
-                PER_MINUTE_BUDGET_EUR,
-                PER_HOUR_BUDGET_EUR,
-                PER_DAY_BUDGET_EUR,
-                PER_MONTH_BUDGET_EUR,
-            ))),
-            knowledge,
-            client,
-            retriever: None,
-            terminal_data: empty_terminal_data(),
-            questions_log: PathBuf::from("test-questions.log"),
-            answers_log: PathBuf::from("test-answers.log"),
-        };
-        assert_eq!(app_state.estimate_cost("Hello AI?", &[]), 0.0);
-    }
-
-    #[test]
-    fn faq_knowledge_reflects_latest_details() {
-        let data = load_embedded_knowledge();
-        let faqs = data
-            .get("faq")
-            .and_then(|value| value.as_array())
-            .expect("faq data should be an array");
-
-        let remote = faqs
-            .iter()
-            .find(|entry| {
-                entry.get("question").and_then(|value| value.as_str())
-                    == Some("🌍 Are you open to remote roles?")
-            })
-            .and_then(|entry| entry.get("answer"))
-            .and_then(|value| value.as_str())
-            .expect("remote roles FAQ should be present");
-        assert!(
-            remote.contains("remote-first"),
-            "Remote FAQ answer should mention remote-first culture: {remote}"
+    fn log_redaction_and_cache_behavior() {
+        let output = sanitize_log_text(
+            "hey\n sk-abcdefghijklmnopqrstuvwxyz Bearer abcdefghijklmnopqrstuvwxyz",
         );
-        assert!(
-            remote.contains("Montpellier"),
-            "Remote FAQ answer should include current location: {remote}"
-        );
-        assert!(
-            remote.contains("2026"),
-            "Remote FAQ answer should reference relocation timeline: {remote}"
-        );
-
-        let industries = faqs
-            .iter()
-            .find(|entry| {
-                entry.get("question").and_then(|value| value.as_str())
-                    == Some("🏢 What industries do you focus on?")
-            })
-            .and_then(|entry| entry.get("answer"))
-            .and_then(|value| value.as_str())
-            .expect("industry focus FAQ should be present");
-        assert!(
-            industries.contains("Gaming"),
-            "Industry answer should include gaming focus: {industries}"
-        );
-        assert!(
-            industries.contains("biotech"),
-            "Industry answer should include biotech focus: {industries}"
-        );
-        assert!(
-            industries.contains("automation"),
-            "Industry answer should mention automation projects: {industries}"
-        );
-
-        let leadership = faqs
-            .iter()
-            .find(|entry| {
-                entry.get("question").and_then(|value| value.as_str())
-                    == Some("👥 Can you lead cross-functional teams?")
-            })
-            .and_then(|entry| entry.get("answer"))
-            .and_then(|value| value.as_str())
-            .expect("leadership FAQ should be present");
-        assert!(
-            leadership.contains("PlayStation") && leadership.contains("Atos"),
-            "Leadership answer should reference enterprise teams: {leadership}"
-        );
-        assert!(
-            leadership.contains("Jam.gg"),
-            "Leadership answer should mention Jam.gg founding role: {leadership}"
-        );
-        assert!(
-            leadership.contains("artists")
-                && leadership.contains("QA")
-                && leadership.contains("marketing"),
-            "Leadership answer should cover cross-discipline personal projects: {leadership}"
-        );
-
-        let ai_usage = faqs
-            .iter()
-            .find(|entry| {
-                entry.get("question").and_then(|value| value.as_str())
-                    == Some("🤖 How do you use AI in your workflow?")
-            })
-            .and_then(|entry| entry.get("answer"))
-            .and_then(|value| value.as_str())
-            .expect("AI workflow FAQ should be present");
-        assert!(
-            ai_usage.contains("Codex CLI") && ai_usage.contains("Gemini CLI"),
-            "AI usage answer should cite key copilots: {ai_usage}"
-        );
-        assert!(
-            ai_usage.contains("multiple projects") && ai_usage.contains("parallel"),
-            "AI usage answer should highlight concurrent workflows: {ai_usage}"
-        );
-
-        let availability = faqs
-            .iter()
-            .find(|entry| {
-                entry.get("question").and_then(|value| value.as_str())
-                    == Some("⏱️ How soon can you start?")
-            })
-            .and_then(|entry| entry.get("answer"))
-            .and_then(|value| value.as_str())
-            .expect("availability FAQ should be present");
-        assert!(
-            availability.contains("start this month"),
-            "Availability answer should confirm immediate start: {availability}"
-        );
-    }
-
-    #[test]
-    fn sanitize_log_text_redacts_known_secret_patterns() {
-        let input = "OPENAI_API_KEY=sk-proj-1234567890abcdefghijklmnop Authorization: Bearer secret-token-1234567890 gsk_abcdefghijklmnopqrstuvwxyz";
-        let sanitized = sanitize_log_text(input);
-
-        assert!(
-            sanitized.contains("[redacted-openai-key]"),
-            "OpenAI-style secrets should be redacted: {sanitized}"
-        );
-        assert!(
-            sanitized.contains("[redacted-bearer-token]"),
-            "Bearer tokens should be redacted: {sanitized}"
-        );
-        assert!(
-            sanitized.contains("[redacted-groq-key]"),
-            "Groq-style secrets should be redacted: {sanitized}"
-        );
-        assert!(
-            !sanitized.contains("sk-proj-1234567890abcdefghijklmnop"),
-            "Raw OpenAI-style secret leaked into logs: {sanitized}"
-        );
-    }
-
-    #[test]
-    fn sanitize_log_text_normalizes_whitespace_and_truncates() {
-        let input = format!("line1\nline2\t{}", "x".repeat(MAX_LOG_TEXT_CHARS + 10));
-        let sanitized = sanitize_log_text(&input);
-
-        assert!(
-            !sanitized.contains('\n') && !sanitized.contains('\t'),
-            "Control characters should be normalized: {sanitized}"
-        );
-        assert!(
-            sanitized.contains("[truncated "),
-            "Long log payloads should be truncated: {sanitized}"
-        );
+        assert!(!output.contains("abcdefghijklmnopqrstuvwxyz"));
+        assert!(!output.contains('\n'));
+        assert_eq!(cache_control_for_path("/cv/fr.html"), "no-store");
     }
 }

@@ -2,7 +2,7 @@
 members = ["server"]
 
 [workspace.package]
-version = "1.0.17"
+version = "1.0.18"
 edition = "2021"
 
 [package]
@@ -54,6 +54,8 @@ features = [
     "DataTransfer",
     "InputEvent",
     "Event",
+    "AbortController",
+    "AbortSignal",
     "Request",
     "RequestInit",
     "RequestMode",

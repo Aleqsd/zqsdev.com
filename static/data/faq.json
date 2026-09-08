@@ -1,34 +1,34 @@
 [
-    {
-        "question": "🌍 Are you open to remote roles?",
-        "answer": "Yes. I'm remote-first, currently based in Montpellier, France, and can consider relocation in 2026."
-    },
-    {
-        "question": "👥 Can you lead cross-functional teams?",
-        "answer": "Yes. I've led developer and QA teams for PlayStation and Atos, helped launch Jam.gg as a founding engineer, product owner, and TPM, and coordinated personal gaming crews across artists, gamedev, QA, and marketing."
-    },
-    {
-        "question": "🏢 What industries do you focus on?",
-        "answer": "Gaming, biotech, and the automation projects that keep me curious are where I deliver the most value."
-    },
-    {
-        "question": "🤖 How do you use AI in your workflow?",
-        "answer": "I'm having a blast with the latest AI tooling—pairing Codex CLI, Gemini CLI, and other copilots in parallel across multiple projects every day to speed up delivery."
-    },
-    {
-        "question": "⏱️ How soon can you start?",
-        "answer": "I can start this month and move quickly once we align on scope."
-    },
-    {
-        "question": "🚀 Do you engage with early-stage startups?",
-        "answer": "Absolutely. I have shipped MVPs with founding teams and can help define roadmaps, analytics, and QA guardrails from day one."
-    },
-    {
-        "question": "🕒 What time zones do you collaborate best with?",
-        "answer": "UTC±2 is ideal, but I routinely cover Pacific and Eastern overlap windows for synchronous ceremonies when needed."
-    },
-    {
-        "question": "🛠️ Can you modernise legacy CI/CD pipelines?",
-        "answer": "Yes. I specialise in migrating brittle pipelines to reproducible infrastructure, adding observability, and coaching teams through the rollout."
-    }
+  {
+    "question": "🌍 Are you open to remote roles?",
+    "answer": "Yes. I'm remote-first and based in Montpellier, France. Contact me to discuss location or travel requirements."
+  },
+  {
+    "question": "👥 Can you lead cross-functional teams?",
+    "answer": "Yes. I've led developer and QA teams for PlayStation and Atos, helped launch Jam.gg as a founding engineer, product owner, and TPM, and coordinated personal gaming crews across artists, gamedev, QA, and marketing."
+  },
+  {
+    "question": "🏢 What industries do you focus on?",
+    "answer": "My experience spans education technology and AI at Studi, cloud gaming at Jam.gg, PlayStation emulation, aerospace, and bioinformatics."
+  },
+  {
+    "question": "🤖 How do you use AI in your workflow?",
+    "answer": "I orchestrate many Codex and Claude Code agents across implementation, autonomous tests and code review. I own the architecture and release quality, building on 10 years of software engineering experience. VibeRank lists @Aleqsd as Supernova with 148B+ tracked tokens including cache (September 2026)."
+  },
+  {
+    "question": "⏱️ How soon can you start?",
+    "answer": "Please contact me at alexandre@zqsdev.com to agree on availability and scope. No immediate start date or notice period is confirmed."
+  },
+  {
+    "question": "🚀 Do you engage with early-stage startups?",
+    "answer": "Absolutely. I have shipped MVPs with founding teams and can help define roadmaps, analytics, and QA guardrails from day one."
+  },
+  {
+    "question": "🕒 What time zones do you collaborate best with?",
+    "answer": "UTC±2 is ideal, but I routinely cover Pacific and Eastern overlap windows for synchronous ceremonies when needed."
+  },
+  {
+    "question": "🛠️ Can you modernise legacy CI/CD pipelines?",
+    "answer": "Yes. I specialise in migrating brittle pipelines to reproducible infrastructure, adding observability, and coaching teams through the rollout."
+  }
 ]

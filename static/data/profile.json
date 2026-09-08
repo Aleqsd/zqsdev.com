@@ -1,35 +1,24 @@
 {
-    "name": "Alexandre DO-O ALMEIDA",
-    "headline": "💡 Senior DevOps Engineer • Founding Engineer • QA Automation",
-    "summary_en": "Senior software engineer with 10 years of experience in DevOps, product, and fullstack development across gaming and tech. Ex-PlayStation (CI/CD & QA automation for retro games) and cofounder of Jam.gg (Y Combinator S20).",
-    "location": "Montpellier, France (Remote)",
-    "email": "alexandre@zqsdev.com",
-    "links": {
-        "github": "https://github.com/aleqsd",
-        "linkedin": "https://www.linkedin.com/in/alexandre-dooalmeida",
-        "website": "https://www.zqsdev.com/",
-        "resume_url": "https://founding.zqsdev.com/"
-    },
-    "resume_variants": [
-        {
-            "id": "founding",
-            "label": "Founding Engineer",
-            "url": "https://founding.zqsdev.com/"
-        },
-        {
-            "id": "devops",
-            "label": "DevOps Engineer",
-            "url": "https://devops.zqsdev.com/"
-        },
-        {
-            "id": "software",
-            "label": "Software Engineer",
-            "url": "https://software.zqsdev.com/"
-        }
-    ],
-    "languages": [
-        "English (TOEIC 990/990) - Full professional proficiency",
-        "French - Native or bilingual proficiency",
-        "Spanish - Limited working proficiency"
-    ]
+  "name": "Alexandre DO-O ALMEIDA",
+  "headline": "💡 Lead AI Software Engineer • Agentic AI • Founding Engineer (YC S20)",
+  "summary_en": "Software engineer with 10 years of experience combining AI, product delivery and infrastructure. At Studi, shipped a production RAG course assistant for 50,000 students. Previously built automated testing for 5,000+ games for Sony PlayStation and helped scale Jam.gg (YC S20) to 2M users and 500K MAU. Orchestrates Codex and Claude Code agents for implementation, testing and review while owning architecture and release quality.",
+  "location": "Montpellier, France (Remote)",
+  "email": "alexandre@zqsdev.com",
+  "links": {
+    "github": "https://github.com/aleqsd",
+    "linkedin": "https://www.linkedin.com/in/alexandre-dooalmeida",
+    "website": "https://www.zqsdev.com/",
+    "resume_url": "https://cv.zqsdev.com/",
+    "resume_fr_url": "https://cv.zqsdev.com/fr.html",
+    "viberank": "https://www.viberank.app/profile/Aleqsd"
+  },
+  "resume_variants": [],
+  "languages": [
+    "English (TOEIC 990/990) - Full professional proficiency",
+    "French - Native or bilingual proficiency",
+    "Spanish - Limited working proficiency"
+  ],
+  "summary_fr": "Ingénieur logiciel avec 10 ans d’expérience en IA, produit et infrastructure. Chez Studi, livraison d’un assistant de cours RAG en production pour 50 000 étudiants. Auparavant, tests automatisés de plus de 5 000 jeux pour Sony PlayStation et développement de Jam.gg (YC S20) jusqu’à 2 millions d’utilisateurs et 500 000 MAU. Orchestre des agents Codex et Claude Code pour développer, tester et relire le code, avec la responsabilité de l’architecture et de la qualité des livraisons.",
+  "updated_at": "2026-09-08",
+  "agentic_highlight": "VibeRank Supernova, @Aleqsd: 148B+ tokens tracked, including cache, as of September 2026. Usage is a tooling-activity signal, not a standalone measure of software quality."
 }

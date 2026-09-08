@@ -5,7 +5,7 @@ This script exercises the production website once per run, covering:
   • critical static assets served from Netlify
   • the `/api/data` payload that powers the terminal commands
   • dataset sanity checks (profile, skills, experience, projects, FAQ, testimonials)
-  • a single `/api/ai` question to confirm the concierge is responding
+  • two `/api/ai` questions checking current role and terminal technologies
 
 Run with:
     python3 scripts/live_smoke_test.py
@@ -100,7 +100,7 @@ class LiveSmokeTester:
             ("Backend version endpoint", self.test_backend_version_endpoint),
             ("Terminal data endpoint", self.test_terminal_data_endpoint),
             ("Profile dataset", self.test_profile_dataset),
-            ("Resume variants", self.test_resume_variants),
+            ("Canonical bilingual CV", self.test_resume_variants),
             ("Legacy CV redirect", self.test_legacy_cv_redirect),
             ("CV language switch", self.test_cv_language_switch),
             ("Skills dataset", self.test_skills_dataset),
@@ -325,34 +325,11 @@ class LiveSmokeTester:
         return f"email={email} resume={resume_response.status_code}"
 
     def test_resume_variants(self) -> str:
-        data = self._require_terminal_data()
-        variants = data["profile"].get("resume_variants")
-        assert isinstance(variants, list) and variants, "resume_variants missing"
-
-        expected = {
-            "founding": "https://founding.zqsdev.com/",
-            "devops": "https://devops.zqsdev.com/",
-            "software": "https://software.zqsdev.com/",
-        }
-        actual = {}
-        statuses = []
-        for variant in variants:
-            assert isinstance(variant, dict), f"resume variant has invalid shape: {variant!r}"
-            variant_id = variant.get("id")
-            label = variant.get("label")
-            url = variant.get("url")
-            assert variant_id, f"resume variant missing id: {variant!r}"
-            assert label, f"resume variant missing label: {variant!r}"
-            assert url, f"resume variant missing url: {variant!r}"
-            actual[variant_id] = url
-            response = self._head_or_get(url)
-            assert (
-                200 <= response.status_code < 400
-            ), f"resume variant {variant_id} returned {response.status_code}"
-            statuses.append(f"{variant_id}:{response.status_code}")
-
-        assert actual == expected, f"unexpected resume_variants payload: {actual!r}"
-        return ", ".join(statuses)
+        profile = self._require_terminal_data()['profile']
+        assert not profile.get('resume_variants'), 'Legacy role variants remain'
+        assert profile['links']['resume_url'] == 'https://cv.zqsdev.com/'
+        assert profile['links']['resume_fr_url'] == 'https://cv.zqsdev.com/fr.html'
+        return 'One canonical CV in English and French'
 
     def test_legacy_cv_redirect(self) -> str:
         canonical = "https://cv.zqsdev.com/"
@@ -494,15 +471,12 @@ class LiveSmokeTester:
         data = response.json()
         assert data.get("ai_enabled") is True, "ai disabled for project detail test"
         answer = data.get("answer", "")
-        required_terms = ("WebAssembly", "Rust", "RAG")
+        required_terms = ("WebAssembly", "Rust", "Luna")
         missing = [term for term in required_terms if term.lower() not in answer.lower()]
         assert not missing, f"missing tech terms in answer: {missing}"
-        contexts = data.get("context_chunks") or []
-        projects_context = any(
-            chunk.get("source") == "projects.json" for chunk in contexts
-        )
-        assert projects_context, "AI response missing projects.json context"
-        return f"terms_present={','.join(required_terms)} contexts={len(contexts)}"
+        assert 'projects' in data.get('sources', []), 'Projects attribution missing'
+        assert data.get('model') == 'gpt-5.6-luna', 'Unexpected model'
+        return f"terms_present={','.join(required_terms)}; source=projects"
 
     def test_faq_dataset(self) -> str:
         data = self._require_terminal_data()
@@ -533,16 +507,10 @@ class LiveSmokeTester:
         assert data.get("ai_enabled") is True, f"ai disabled: {data.get('reason')}"
         answer = data.get("answer", "")
         assert len(answer.strip()) >= 32, "answer too short"
-        contexts = data.get("context_chunks") or []
-        assert contexts, "context_chunks missing or empty"
-        first = contexts[0]
-        for key in ("id", "source", "topic"):
-            assert key in first, f"context chunk missing {key}"
-        model = data.get("model") or "unknown"
-        return (
-            f"model={model} answer_len={len(answer.strip())} "
-            f"contexts={len(contexts)} first_chunk={first['id']}"
-        )
+        assert data.get('sources'), 'Source attribution missing'
+        assert data.get('model') == 'gpt-5.6-luna', 'Unexpected model'
+        assert 'Studi' in answer, 'Current role missing'
+        return f"model={data['model']}; current role=Studi; sources={data['sources']}"
 
 
 def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
@@ -562,7 +530,7 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     parser.add_argument(
         "--timeout",
         type=float,
-        default=12.0,
+        default=22.0,
         help="Per-request timeout in seconds (default: %(default)s)",
     )
     parser.add_argument(

@@ -1,62 +1,85 @@
 [
-    {
-        "title": "🚀 DevOps Engineer / Autotests Infrastructure Lead",
-        "company": "🎮 Sony Interactive Entertainment (PlayStation)",
-        "location": "San Francisco (Remote)",
-        "start": "2023",
-        "end": "2025",
-        "highlights": [
-            "Built from scratch the CI/CD and autotest infrastructure for PlayStation emulators used in the Classics Catalog on PS4 and PS5.",
-            "Automated testing of 5,000+ retro games on console devkits and OS environments, using Python, GitHub Actions, AWS and Google / Slack / Linear APIs.",
-            "Ensured QA and non-regression testing for 50+ PlayStation Classics, including Resident Evil, Tomb Raider Legend, Tekken 2 and Legend of Dragoon.",
-            "Maintainer of CI/CD pipelines used by 15+ engineers; provided QA consulting for Sony’s team of 60+ manual testers.",
-            "Contributed via Implicit Conversions to porting and publishing retro titles on PlayStation, Switch, and PC."
-        ]
-    },
-    {
-        "title": "🏗️ Founding Engineer / Product Manager",
-        "company": "☁️ Jam.gg (Y Combinator S20)",
-        "location": "San Francisco (Remote)",
-        "start": "2020",
-        "end": "2023",
-        "highlights": [
-            "Cofounding team of a SaaS cloud gaming platform scaled to 2M users and 500K MAU.",
-            "Built backend/frontend/cloud architecture using Go, TypeScript, React, Firebase, and GCP.",
-            "Led product and QA teams; recruited first 30 hires and implemented agile workflows.",
-            "Shaped the product roadmap and delivered core features including Discord & Twitch integrations and a custom game catalog."
-        ]
-    },
-    {
-        "title": "🔧 Innovation Project Manager / Backend Engineer",
-        "company": "🛡️ Atos",
-        "location": "Aix-en-Provence, France",
-        "start": "2018",
-        "end": "2020",
-        "highlights": [
-            "Led a team of 6 developers on AI, IoT, and predictive maintenance projects using Azure.",
-            "Developed a secure Java backend for a geolocation tool used by the French Army.",
-            "Built Grafana dashboards for code quality visualization across 50+ engineers."
-        ]
-    },
-    {
-        "title": "🕶️ VR/AR Engineer",
-        "company": "🛩️ Airbus Helicopters",
-        "location": "Marignane, France",
-        "start": "2017",
-        "end": "2018",
-        "highlights": [
-            "Built immersive Unity simulators (C#) for HTC Vive and HoloLens to train helicopter technicians.",
-            "Developed a Python & XML tool for Dassault to automate maintenance documentation."
-        ]
-    },
-    {
-        "title": "🧬 Bioinformatics Engineer Intern",
-        "company": "CNRS (French National Centre for Scientific Research)",
-        "location": "Marseille, France",
-        "start": "2016",
-        "end": "2016",
-        "highlights": [
-            "Extended VisualTE (Java & Swing) with modules for 3D structure analysis, multiple alignments, and phylogenetic visualization."
-        ]
-    }
+  {
+    "title": "🤖 Lead AI Software Engineer",
+    "company": "Studi / Galileo Global Education",
+    "location": "France (Remote)",
+    "start": "Apr 2026",
+    "end": "Present",
+    "highlights": [
+      "Delivered a RAG course-support assistant in production for 50,000 students using LLMs, LangChain and Langfuse, with retrieval, evaluation and observability.",
+      "Works directly with the CEO to lead R&D and engineering transformation at an 800-person company.",
+      "Leads architecture and delivery for a complete LMS rebuild and a videoconferencing platform, alongside software engineering and infrastructure R&D.",
+      "Orchestrates Codex and Claude Code agents for autonomous implementation, testing and code review; retains responsibility for architecture and release quality."
+    ]
+  },
+  {
+    "title": "🚀 DevOps Engineer / Test Automation Infrastructure Lead",
+    "company": "🎮 Sony Interactive Entertainment (PlayStation)",
+    "location": "San Francisco (Remote)",
+    "start": "Feb 2023",
+    "end": "Mar 2026",
+    "highlights": [
+      "Built from scratch the CI/CD and autotest infrastructure for PlayStation emulators used in the Classics Catalog on PS4 and PS5.",
+      "Automated testing of 5,000+ retro games on console devkits and OS environments, using Python, GitHub Actions, AWS and Google / Slack / Linear APIs.",
+      "Ensured QA and non-regression testing for 50+ PlayStation Classics on PS4 and PS5, reaching millions of players, including Resident Evil, Tomb Raider Legend, Tekken 2 and Legend of Dragoon.",
+      "Maintainer of CI/CD pipelines used by 15+ engineers; provided QA consulting for Sony’s team of 60+ manual testers.",
+      "Contributed via Implicit Conversions to porting and publishing retro titles on PlayStation, Switch, and PC."
+    ]
+  },
+  {
+    "title": "🏗️ Founding Engineer / Product & QA Lead",
+    "company": "☁️ Jam.gg (formerly Piepacker, Y Combinator S20)",
+    "location": "San Francisco (Remote)",
+    "start": "Mar 2020",
+    "end": "Mar 2023",
+    "highlights": [
+      "Founding engineer of a cloud gaming platform that scaled to 2M users and 500K monthly active users; the company raised a $12M Series A.",
+      "Built backend/frontend/cloud architecture using Go, TypeScript, React, Firebase, and GCP.",
+      "Created and led Product and QA; helped recruit the first 30 employees as the company grew to 60+ people, and implemented agile workflows.",
+      "Shaped the product roadmap and delivered core features including Discord & Twitch integrations and a custom game catalog."
+    ]
+  },
+  {
+    "title": "🔧 Innovation Project Manager / Backend Engineer",
+    "company": "🛡️ Atos",
+    "location": "Aix-en-Provence, France",
+    "start": "2018",
+    "end": "2020",
+    "highlights": [
+      "Led a team of 6 developers on AI, IoT, and predictive maintenance projects using Azure.",
+      "Developed a secure Java backend for a geolocation tool used by the French Army.",
+      "Built Grafana dashboards for code quality visualization across 50+ engineers."
+    ]
+  },
+  {
+    "title": "🕶️ VR/AR Engineer",
+    "company": "🛩️ Airbus Helicopters",
+    "location": "Marignane, France",
+    "start": "2017",
+    "end": "2018",
+    "highlights": [
+      "Built immersive Unity simulators (C#) for HTC Vive and HoloLens to train helicopter technicians.",
+      "Developed a Python & XML tool for Dassault to automate maintenance documentation."
+    ]
+  },
+  {
+    "title": "💻 Software Engineer (via Reactis)",
+    "company": "Airbus Helicopters",
+    "location": "France",
+    "start": "2016",
+    "end": "2017",
+    "highlights": [
+      "Java software engineering for Airbus Helicopters via Reactis."
+    ]
+  },
+  {
+    "title": "🧬 Bioinformatics Engineer Intern",
+    "company": "CNRS (French National Centre for Scientific Research)",
+    "location": "Marseille, France",
+    "start": "2016",
+    "end": "2016",
+    "highlights": [
+      "Extended VisualTE (Java & Swing) with modules for 3D structure analysis, multiple alignments, and phylogenetic visualization."
+    ]
+  }
 ]

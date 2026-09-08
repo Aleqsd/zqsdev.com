@@ -1,98 +1,121 @@
 {
-    "projects": [
-        {
-            "title": "🎮 Micro Mages (NES to PS5 Port)",
-            "date": "2023 - 2024",
-            "description": "Port of the NES classic Micro Mages to PlayStation 5, combining faithful emulation with modern enhancements. Led QA strategy, built test automation tools, and developed CI/CD pipelines for emulator deployment and PlayStation compliance.",
-            "tech": [
-                "Python",
-                "GitHub Actions",
-                "Lua",
-                "CI/CD"
-            ],
-            "link": "https://store.playstation.com/en-us/concept/10008684"
-        },
-        {
-            "title": "🧠 ZQSDev Terminal – AI Résumé Concierge",
-            "date": "2023 - Present",
-            "description": "Built this interactive portfolio terminal that combines a Rust/Axum backend, multi-provider LLM APIs (Gemini, Groq, OpenAI), and a retrieval-augmented generation (RAG) knowledge base so recruiters can ask natural-language questions against my résumé.",
-            "tech": [
-                "Rust",
-                "RAG",
-                "LLM APIs",
-                "WebAssembly",
-                "Netlify"
-            ],
-            "link": "https://www.zqsdev.com"
-        },
-        {
-            "title": "🏰 Mistale Studio – Line Tower Wars",
-            "date": "2017 - 2020",
-            "description": "Directed a 15-member team for a startup project competing in the Intel Game Developer Contest. Oversaw game design, project management, and development of a cross-platform PvP title with community features.",
-            "tech": [
-                "Unity",
-                "Maya",
-                "Leadership",
-                "Video Game"
-            ],
-            "link": "https://x.com/MistaleStudio"
-        },
-        {
-            "title": "🐝 BeeToBee",
-            "date": "2016 - 2018",
-            "description": "Developed a web and mobile platform for Ynov students to share and attend peer-to-peer trainings. Implemented wiki-based documentation to manage professional certification processes.",
-            "tech": [
-                "Android",
-                "NodeJS"
-            ],
-            "link": "https://x.com/BeeToBee_Ynov"
-        },
-        {
-            "title": "🎭 TheClair – End of Study Project",
-            "date": "2012 - 2013",
-            "description": "Led a 4-member team to build theater projector management software controlled by Kinect. Responsible for project management, C++/Qt development, and database integration.",
-            "tech": [
-                "C++",
-                "Qt",
-                "MySQL",
-                "Visual Studio"
-            ]
-        },
-        {
-            "title": "🕹️ E-Sport Player @ Millenium",
-            "date": "2010",
-            "description": "Competed as part of the World of Warcraft roster for Millenium, one of France’s major multi-gaming organizations (later part of Webedia).",
-            "tech": [
-                "E-Sport",
-                "Gaming"
-            ]
-        }
-    ],
-    "publications": [
-        {
-            "title": "🧬 Machine Learning and Cancer Prediction",
-            "date": "2019",
-            "description": "Master thesis exploring the use of XGBoost and interpretable machine learning in cancer prediction. Includes interview with Dr. Moulin, oncologist in Marseille.",
-            "tech": [
-                "Python",
-                "Jupyter Notebook",
-                "Machine Learning"
-            ],
-            "link": "https://drive.google.com/file/d/1vSn7ih7-lTybVDkfm3Re2lNdA2dCDqO_/view"
-        }
-    ],
-    "awards": [
-        {
-            "title": "🥇 First place – Workshop Ynov National",
-            "issuer": "Atos France & Ynov National",
-            "date": "2019",
-            "description": "National competition among 2600 students presenting development, marketing, and design projects. Delivered oral presentation during finals before a professional jury."
-        },
-        {
-            "title": "🏆 Winner – Student Battle Code",
-            "issuer": "Sopra Steria",
-            "date": "2018",
-            "description": "National-level programming competition involving top engineering and IT schools across France."
-        }
-    ]
+  "projects": [
+    {
+      "title": "🤖 Studi – Production AI Course Assistant",
+      "date": "2026 - Present",
+      "description": "Delivered a conversational RAG assistant in production for 50,000 students to help with course content. Uses LLMs, LangChain and Langfuse for retrieval, evaluation and observability.",
+      "tech": [
+        "LLMs",
+        "RAG",
+        "LangChain",
+        "Langfuse"
+      ]
+    },
+    {
+      "title": "🎓 Studi – LMS Rebuild & Videoconferencing",
+      "date": "2026 - Present",
+      "description": "Leads architecture and engineering delivery for a complete LMS rebuild and a videoconferencing platform, working directly with the CEO on R&D and engineering transformation in an 800-person company. Delivery milestones and user counts for these two platforms are not specified.",
+      "tech": [
+        "Software architecture",
+        "Agentic coding",
+        "Automated testing",
+        "Infrastructure"
+      ]
+    },
+    {
+      "title": "🎮 Micro Mages (NES to PS5 Port)",
+      "date": "2023 - 2024",
+      "description": "Port of the NES classic Micro Mages to PlayStation 5, combining faithful emulation with modern enhancements. Led QA strategy, built test automation tools, and developed CI/CD pipelines for emulator deployment and PlayStation compliance.",
+      "tech": [
+        "Python",
+        "GitHub Actions",
+        "Lua",
+        "CI/CD"
+      ],
+      "link": "https://store.playstation.com/en-us/concept/10008684"
+    },
+    {
+      "title": "🧠 ZQSDev Terminal – AI Résumé Concierge",
+      "date": "2023 - Present",
+      "description": "Interactive portfolio with a Rust/Axum backend and Rust/WebAssembly terminal. Uses OpenAI GPT-5.6 Luna with a complete curated knowledge base, bounded conversational history, persistent spending limits and a classic-command fallback. Previously used embeddings, Pinecone and SQLite retrieval; the original project, education and testimonial knowledge is preserved in version-controlled JSON.",
+      "tech": [
+        "Rust",
+        "Axum",
+        "WebAssembly",
+        "OpenAI GPT-5.6 Luna",
+        "JSON knowledge base",
+        "Netlify"
+      ],
+      "link": "https://www.zqsdev.com"
+    },
+    {
+      "title": "🏰 Mistale Studio – Line Tower Wars",
+      "date": "2017 - 2020",
+      "description": "Directed a 15-member team for a startup project competing in the Intel Game Developer Contest. Oversaw game design, project management, and development of a cross-platform PvP title with community features.",
+      "tech": [
+        "Unity",
+        "Maya",
+        "Leadership",
+        "Video Game"
+      ],
+      "link": "https://x.com/MistaleStudio"
+    },
+    {
+      "title": "🐝 BeeToBee",
+      "date": "2016 - 2018",
+      "description": "Developed a web and mobile platform for Ynov students to share and attend peer-to-peer trainings. Implemented wiki-based documentation to manage professional certification processes.",
+      "tech": [
+        "Android",
+        "NodeJS"
+      ],
+      "link": "https://x.com/BeeToBee_Ynov"
+    },
+    {
+      "title": "🎭 TheClair – End of Study Project",
+      "date": "2012 - 2013",
+      "description": "Led a 4-member team to build theater projector management software controlled by Kinect. Responsible for project management, C++/Qt development, and database integration.",
+      "tech": [
+        "C++",
+        "Qt",
+        "MySQL",
+        "Visual Studio"
+      ]
+    },
+    {
+      "title": "🕹️ E-Sport Player @ Millenium",
+      "date": "2010",
+      "description": "Competed as part of the World of Warcraft roster for Millenium, one of France’s major multi-gaming organizations (later part of Webedia).",
+      "tech": [
+        "E-Sport",
+        "Gaming"
+      ]
+    }
+  ],
+  "publications": [
+    {
+      "title": "🧬 Machine Learning and Cancer Prediction",
+      "date": "2019",
+      "description": "Master thesis exploring the use of XGBoost and interpretable machine learning in cancer prediction. Includes interview with Dr. Moulin, oncologist in Marseille.",
+      "tech": [
+        "Python",
+        "Jupyter Notebook",
+        "Machine Learning"
+      ],
+      "link": "https://drive.google.com/file/d/1vSn7ih7-lTybVDkfm3Re2lNdA2dCDqO_/view"
+    }
+  ],
+  "awards": [
+    {
+      "title": "🥇 First place – Workshop Ynov National",
+      "issuer": "Atos France & Ynov National",
+      "date": "2019",
+      "description": "National competition among 2600 students presenting development, marketing, and design projects. Delivered oral presentation during finals before a professional jury."
+    },
+    {
+      "title": "🏆 Winner – Student Battle Code",
+      "issuer": "Sopra Steria",
+      "date": "2018",
+      "description": "National-level programming competition involving top engineering and IT schools across France."
+    }
+  ]
 }

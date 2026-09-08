@@ -1,0 +1,125 @@
+{
+  "education": [
+    {
+      "degree": "🎓 Master’s Degree in Software Engineering - AI & Machine Learning",
+      "location": "Aix-en-Provence, France",
+      "school": "Ingesup Engineering School",
+      "years": "2016–2019"
+    },
+    {
+      "degree": "📚 Bachelor’s Degree in Cell & Molecular Biology",
+      "location": "Marseille, France",
+      "school": "Aix-Marseille University, Faculty of Science",
+      "years": "2013–2016"
+    },
+    {
+      "degree": "🌐 Advanced Technician Certificate in IT & Network for Industry and Services",
+      "location": "Aix-en-Provence, France",
+      "school": "CPGE Lycée Vauvenargues",
+      "years": "2011–2013"
+    },
+    {
+      "degree": "⚛️ Scientific High School Diploma – Biology (Mathematics specialty)",
+      "location": "Pertuis, France",
+      "school": "Val de Durance High School",
+      "years": "2011"
+    }
+  ],
+  "testimonials": [
+    {
+      "author": "✨ Thomas Moreau",
+      "link": "https://www.linkedin.com/in/thommoreau",
+      "quote": "Alexandre is a rare Pokemon type in the gaming industry: with his engineering knowledge and his passion for agile processes, he quickly became a natural glue and key product POC across our org, in particular when we launched our first version of the platform. Undoubtedly, he has been a pivotal and instrumental hire for Jam.gg, often commanding immediate respect among his peers. Would recommend adding him to your Eng or Product team in a heartbeat!",
+      "role": "Game Producer (ex-Google, Activision, King)"
+    },
+    {
+      "author": "🌟 Suchada Sutasirisap",
+      "link": "https://www.linkedin.com/in/iamsushicombo",
+      "quote": "I had the pleasure to work with Alex at Jam.gg (formerly known as Piepacker) for two years. I couldn't have asked for a better partner to tackle such a complicated project with. He always pushes the limit of what people think isn't possible, stays open to feedback, and strives to help the team do better. He has worn multiple hats, from leading the engineering team, managing, recruiting, to PMing various projects. Alex made technical problems easy for designers to understand and always advocated for users so we could build the best product instead of cutting corners. He led the team to set up structure and an inclusive culture as one of the first members of the company. Anyone would be lucky to have an opportunity to work and learn from him.",
+      "role": "Product Design Leadership, Meta (previously Apple & IBM)"
+    }
+  ],
+  "publications": [
+    {
+      "date": "2019",
+      "description": "Master thesis exploring the use of XGBoost and interpretable machine learning in cancer prediction. Includes interview with Dr. Moulin, oncologist in Marseille.",
+      "link": "https://drive.google.com/file/d/1vSn7ih7-lTybVDkfm3Re2lNdA2dCDqO_/view",
+      "tech": [
+        "Python",
+        "Jupyter Notebook",
+        "Machine Learning"
+      ],
+      "title": "🧬 Machine Learning and Cancer Prediction"
+    }
+  ],
+  "awards": [
+    {
+      "date": "2019",
+      "description": "National competition among 2600 students presenting development, marketing, and design projects. Delivered oral presentation during finals before a professional jury.",
+      "issuer": "Atos France & Ynov National",
+      "title": "🥇 First place – Workshop Ynov National"
+    },
+    {
+      "date": "2018",
+      "description": "National-level programming competition involving top engineering and IT schools across France.",
+      "issuer": "Sopra Steria",
+      "title": "🏆 Winner – Student Battle Code"
+    }
+  ],
+  "projects": [
+    {
+      "date": "2023 - 2024",
+      "description": "Port of the NES classic Micro Mages to PlayStation 5, combining faithful emulation with modern enhancements. Led QA strategy, built test automation tools, and developed CI/CD pipelines for emulator deployment and PlayStation compliance.",
+      "link": "https://store.playstation.com/en-us/concept/10008684",
+      "tech": [
+        "Python",
+        "GitHub Actions",
+        "Lua",
+        "CI/CD"
+      ],
+      "title": "🎮 Micro Mages (NES to PS5 Port)"
+    },
+    {
+      "date": "2017 - 2020",
+      "description": "Directed a 15-member team for a startup project competing in the Intel Game Developer Contest. Oversaw game design, project management, and development of a cross-platform PvP title with community features.",
+      "link": "https://x.com/MistaleStudio",
+      "tech": [
+        "Unity",
+        "Maya",
+        "Leadership",
+        "Video Game"
+      ],
+      "title": "🏰 Mistale Studio – Line Tower Wars"
+    },
+    {
+      "date": "2016 - 2018",
+      "description": "Developed a web and mobile platform for Ynov students to share and attend peer-to-peer trainings. Implemented wiki-based documentation to manage professional certification processes.",
+      "link": "https://x.com/BeeToBee_Ynov",
+      "tech": [
+        "Android",
+        "NodeJS"
+      ],
+      "title": "🐝 BeeToBee"
+    },
+    {
+      "date": "2012 - 2013",
+      "description": "Led a 4-member team to build theater projector management software controlled by Kinect. Responsible for project management, C++/Qt development, and database integration.",
+      "tech": [
+        "C++",
+        "Qt",
+        "MySQL",
+        "Visual Studio"
+      ],
+      "title": "🎭 TheClair – End of Study Project"
+    },
+    {
+      "date": "2010",
+      "description": "Competed as part of the World of Warcraft roster for Millenium, one of France’s major multi-gaming organizations (later part of Webedia).",
+      "tech": [
+        "E-Sport",
+        "Gaming"
+      ],
+      "title": "🕹️ E-Sport Player @ Millenium"
+    }
+  ]
+}

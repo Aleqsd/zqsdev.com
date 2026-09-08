@@ -155,6 +155,9 @@ pub struct AppState {
     pub data: Option<TerminalData>,
     pub initialized: bool,
     pub ai_mode: bool,
+    pub ai_history: Vec<crate::ai::Message>,
+    pub ai_busy: bool,
+    pub ai_generation: u64,
     pub ai_model: Option<String>,
     pub input_disabled: bool,
     pub konami_index: usize,
@@ -181,6 +184,9 @@ impl AppState {
             data: None,
             initialized: false,
             ai_mode: false,
+            ai_history: Vec::new(),
+            ai_busy: false,
+            ai_generation: 0,
             ai_model: None,
             input_disabled: false,
             konami_index: 0,
@@ -212,6 +218,11 @@ impl AppState {
 
     pub fn set_ai_mode(&mut self, active: bool) {
         self.ai_mode = active;
+        if !active {
+            self.ai_history.clear();
+            self.ai_busy = false;
+            self.ai_generation += 1;
+        }
     }
 
     pub fn set_ai_model(&mut self, model: Option<String>) {

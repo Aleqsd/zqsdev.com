@@ -32,15 +32,11 @@ build:
 	cp -r $(PKG_DIR)/* $(STATIC_PKG)/
 	python3 scripts/minify_css.py $(STATIC_DIR)/style.css -o $(STATIC_DIR)/style.min.css
 	@echo "window.__BUILD_ID__ = \"$(BUILD_ID)\";" > $(STATIC_DIR)/build_id.js
-	@if [ "$(SKIP_RAG)" = "1" ]; then \
-		echo "Skipping RAG bundle rebuild because SKIP_RAG=1"; \
-	else \
-		$(MAKE) rag; \
-	fi
+	python3 scripts/validate_knowledge.py
 	cargo build --release --manifest-path $(SERVER_MANIFEST)
 
 build-frontend:
-	@SKIP_RAG=1 $(MAKE) build
+	@$(MAKE) build
 
 rag:
 	@command -v python3 >/dev/null 2>&1 || { echo "python3 not found. Install Python 3 to continue."; exit 1; }
@@ -53,7 +49,7 @@ test:
 	@command -v wasm-pack >/dev/null 2>&1 || { echo "wasm-pack not found. Install with 'cargo install wasm-pack'."; exit 1; }
 	@command -v python3 >/dev/null 2>&1 || { echo "python3 not found. Install Python 3 to continue."; exit 1; }
 	rustup target add $(WASM_TARGET) >/dev/null 2>&1 || true
-	python3 -m unittest scripts.test_build_rag
+	python3 -m unittest scripts.test_knowledge
 	python3 -m unittest scripts.test_cv_site
 	wasm-pack test --node
 	cargo test --manifest-path $(SERVER_MANIFEST)
