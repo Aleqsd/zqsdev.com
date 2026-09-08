@@ -2,7 +2,7 @@
 publish = "static"
 command = ""
 
-# One canonical HTML resume and one downloadable PDF.
+# One canonical resume in English and French, with one PDF per language.
 [[redirects]]
 from = "https://founding.zqsdev.com/*"
 to = "https://cv.zqsdev.com/:splat"

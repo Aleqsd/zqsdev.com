@@ -209,7 +209,9 @@ canvas {
 #viewer { grid-template-columns: minmax(0, 1fr); }
 .page { min-width: 0; }
 .site-actions button { background: transparent; font: inherit; cursor: pointer; }
-.site-actions .viberank-link { display: inline-flex; align-items: center; gap: 7px; }
+.site-actions .viberank-link, .site-actions .icon-link, .site-actions .language-switch { display: inline-flex; align-items: center; gap: 7px; }
+.brand-icon { display: block; flex-shrink: 0; }
+.language-flag { display: block; flex-shrink: 0; border-radius: 2px; box-shadow: 0 0 0 1px rgba(255,255,255,.2); }
 .viberank-link img { display: block; width: 20px; height: 20px; }
 .resume-document { width: 100%; min-height: 297mm; margin: 0; padding: 12mm 13mm 11mm; border-radius: 8px; background: white; color: #17282c; font: 10pt/1.35 Arial, Helvetica, sans-serif; }
 .resume-document.fit-document { width: 210mm; zoom: var(--resume-zoom, 1); }

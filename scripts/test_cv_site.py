@@ -41,16 +41,59 @@ class PublicCvTests(unittest.TestCase):
         self.assertEqual(len(downloads), 1)
         self.assertEqual(downloads[0]["href"], "resume.pdf")
 
-    def test_only_one_pdf_and_all_assets_are_local(self):
-        self.assertEqual(list(CV.rglob("*.pdf")), [CV / "resume.pdf"])
-        self.assertTrue((CV / "resume.pdf").read_bytes().startswith(b"%PDF-"))
-        doc = Document((CV / "index.html").read_text(encoding="utf-8"))
-        for tag, attrs in doc.elements:
-            path = attrs.get("src") or (attrs.get("href") if tag == "link" and attrs.get("rel") != "canonical" else None)
-            if path:
-                self.assertFalse(urlparse(path).scheme, path)
-                self.assertTrue((CV / path).is_file(), path)
-        self.assertTrue(any(tag == "a" and a.get("href") == "https://www.viberank.app/profile/Aleqsd" for tag, a in doc.elements))
+    def test_one_pdf_per_language_and_all_assets_are_local(self):
+        self.assertEqual(set(CV.rglob("*.pdf")), {CV / "resume.pdf", CV / "resume-fr.pdf"})
+        for name in ("resume.pdf", "resume-fr.pdf"):
+            self.assertTrue((CV / name).read_bytes().startswith(b"%PDF-"))
+        for name in ("index.html", "fr.html"):
+            doc = Document((CV / name).read_text(encoding="utf-8"))
+            for tag, attrs in doc.elements:
+                path = attrs.get("src") or (attrs.get("href") if tag == "link" and attrs.get("rel") not in ("canonical", "alternate") else None)
+                if path:
+                    self.assertFalse(urlparse(path).scheme, path)
+                    self.assertTrue((CV / path).is_file(), path)
+            self.assertTrue(any(tag == "a" and a.get("href") == "https://www.viberank.app/profile/Aleqsd" for tag, a in doc.elements))
+
+    def test_language_switch_and_matching_download_work_without_javascript(self):
+        cases = (
+            ("index.html", "en", "fr", "fr.html", "resume.pdf", "Download PDF", "Copy Email"),
+            ("fr.html", "fr", "en", "./", "resume-fr.pdf", "Télécharger le PDF", "Copier l’e-mail"),
+        )
+        for name, language, target_language, target, pdf, label, clipboard in cases:
+            with self.subTest(language=language):
+                doc = Document((CV / name).read_text(encoding="utf-8"))
+                self.assertIn(("html", {"lang": language}), doc.elements)
+                links = [a for tag, a in doc.elements if tag == "a"]
+                switch = next(a for a in links if a.get("class") == "language-switch")
+                self.assertEqual(switch["href"], target)
+                self.assertEqual(switch["hreflang"], target_language)
+                self.assertEqual(switch["lang"], target_language)
+                downloads = [a for a in links if "download" in a]
+                self.assertEqual(len(downloads), 1)
+                self.assertEqual(downloads[0]["href"], pdf)
+                if language == "fr":
+                    self.assertTrue(downloads[0]["download"].endswith("_FR.pdf"))
+                copy = " ".join(" ".join(doc.copy).split())
+                self.assertIn(label, copy)
+                self.assertIn(clipboard, copy)
+                self.assertEqual(sum(tag == "h1" for tag, _ in doc.elements), 1)
+                self.assertFalse({"canvas", "iframe", "object", "embed"}.intersection(tag for tag, _ in doc.elements))
+                alternates = {a["hreflang"]: a["href"] for tag, a in doc.elements if tag == "link" and a.get("rel") == "alternate"}
+                self.assertEqual(alternates["en"], "https://cv.zqsdev.com/")
+                self.assertEqual(alternates["fr"], "https://cv.zqsdev.com/fr.html")
+        french = " ".join(Document((CV / "fr.html").read_text(encoding="utf-8")).copy)
+        for text in ("50 000 étudiants", "5 000+ jeux", "millions de joueurs", "30 premiers recrutements", "60+ collaborateurs", "12 M$ en série A", "148 Md+ tokens", "cache inclus", "TOEIC 990/990"):
+            self.assertIn(text, french)
+
+    def test_toolbar_has_decorative_monochrome_brand_marks(self):
+        for name in ("index.html", "fr.html"):
+            doc = Document((CV / name).read_text(encoding="utf-8"))
+            icons = [a for tag, a in doc.elements if tag == "svg" and a.get("class") == "brand-icon"]
+            self.assertEqual(len(icons), 2)
+            for icon in icons:
+                self.assertEqual(icon["fill"], "currentColor")
+                self.assertEqual(icon["aria-hidden"], "true")
+                self.assertEqual(icon["focusable"], "false")
 
     def test_legacy_links_reach_the_single_resume(self):
         rules = tomllib.loads((ROOT / "netlify.toml").read_text(encoding="utf-8"))["redirects"]
@@ -76,7 +119,7 @@ class PublicCvTests(unittest.TestCase):
             self.fail(f"Redirect loop at {url}")
 
         for host in ("cv", "founding", "devops", "software"):
-            for suffix in ("", "resume.pdf", "resume.css", "assets/viberank.svg"):
+            for suffix in ("", "fr.html", "resume.pdf", "resume-fr.pdf", "resume.css", "assets/viberank.svg"):
                 with self.subTest(host=host, suffix=suffix):
                     self.assertEqual(resolve(f"https://{host}.zqsdev.com/{suffix}"), f"/cv/{suffix}")
         for host in ("www", "cv"):

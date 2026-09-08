@@ -1,4 +1,5 @@
 // The resume and PDF link are usable before this optional enhancement loads.
+const isFrench = document.documentElement.lang === "fr";
 const email = "alexandre@zqsdev.com";
 const emailButton = document.getElementById("copy-email");
 const toast = document.getElementById("toast");
@@ -16,7 +17,7 @@ if (emailButton) {
   emailButton.addEventListener("click", async () => {
     try {
       await navigator.clipboard.writeText(email);
-      showToast("Email copied to clipboard");
+      showToast(isFrench ? "E-mail copié dans le presse-papiers" : "Email copied to clipboard");
     } catch {
       // Keep the address available even if clipboard permission is denied.
       showToast(email);
@@ -36,7 +37,16 @@ if (document.referrer) {
     // A missing or malformed referrer should not affect the resume.
   }
 }
-if (fromTerminal) cta?.remove();
+if (fromTerminal) {
+  cta?.remove();
+  // Keep the terminal return context across a language change.
+  const languageLink = document.querySelector(".language-switch");
+  if (languageLink) {
+    const target = new URL(languageLink.href);
+    target.searchParams.set("from", "interactive");
+    languageLink.href = target.href;
+  }
+}
 
 // Fit the A4 HTML to the original PDF frame on desktop, keeping real text.
 const documentElement = document.getElementById("resume");
