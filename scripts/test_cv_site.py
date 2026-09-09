@@ -95,6 +95,18 @@ class PublicCvTests(unittest.TestCase):
                 self.assertEqual(icon["aria-hidden"], "true")
                 self.assertEqual(icon["focusable"], "false")
 
+    def test_above_the_fold_portrait_stays_lightweight(self):
+        # A ~100px portrait must not make mobile visitors download the 1.8MB master.
+        for name in ("index.html", "fr.html"):
+            with self.subTest(page=name):
+                doc = Document((CV / name).read_text(encoding="utf-8"))
+                portrait = next(a for tag, a in doc.elements if tag == "img" and a.get("class") == "portrait")
+                self.assertLess((CV / portrait["src"]).stat().st_size, 64 * 1024)
+                self.assertNotEqual(portrait.get("loading"), "lazy")
+                self.assertEqual(portrait.get("fetchpriority"), "high")
+                self.assertGreater(int(portrait["width"]), 0)
+                self.assertEqual(portrait["width"], portrait["height"])
+
     def test_legacy_links_reach_the_single_resume(self):
         rules = tomllib.loads((ROOT / "netlify.toml").read_text(encoding="utf-8"))["redirects"]
 
