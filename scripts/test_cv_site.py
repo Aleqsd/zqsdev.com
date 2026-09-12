@@ -82,7 +82,7 @@ class PublicCvTests(unittest.TestCase):
                 self.assertEqual(alternates["en"], "https://cv.zqsdev.com/")
                 self.assertEqual(alternates["fr"], "https://cv.zqsdev.com/fr.html")
         french = " ".join(Document((CV / "fr.html").read_text(encoding="utf-8")).copy)
-        for text in ("50 000 étudiants", "5 000+ jeux", "millions de joueurs", "30 premiers recrutements", "60+ collaborateurs", "12 M$ en série A", "148 Md+ tokens", "cache inclus", "TOEIC 990/990"):
+        for text in ("50 000 étudiants", "5 000+ jeux", "millions de joueurs", "30 premiers recrutements", "60+ collaborateurs", "12 M$ en série A", "148 Md+ tokens", "17e au classement mondial en septembre 2026", "TOEIC 990/990"):
             self.assertIn(text, french)
 
     def test_toolbar_has_decorative_monochrome_brand_marks(self):
