@@ -107,6 +107,36 @@ class PublicCvTests(unittest.TestCase):
                 self.assertGreater(int(portrait["width"]), 0)
                 self.assertEqual(portrait["width"], portrait["height"])
 
+    def test_secondary_links_and_contact_are_available_without_javascript(self):
+        for name in ("index.html", "fr.html"):
+            doc = Document((CV / name).read_text(encoding="utf-8"))
+            self.assertTrue(any(tag == "details" for tag, _ in doc.elements))
+            self.assertTrue(any(tag == "summary" and attrs.get("aria-label") for tag, attrs in doc.elements))
+            self.assertTrue(any(tag == "a" and attrs.get("href") == "mailto:alexandre@zqsdev.com" for tag, attrs in doc.elements))
+            for tag, attrs in doc.elements:
+                if tag == "svg" and attrs.get("class") == "action-icon":
+                    self.assertEqual(attrs.get("aria-hidden"), "true")
+            for emoji in ("🚀", "⬇️", "✉️"):
+                self.assertNotIn(emoji, " ".join(doc.copy))
+
+    def test_share_previews_and_compressed_font(self):
+        for name in ("index.html", "fr.html"):
+            doc = Document((CV / name).read_text(encoding="utf-8"))
+            metadata = {a.get("property") or a.get("name"): a.get("content") for tag, a in doc.elements if tag == "meta"}
+            image_url = metadata["og:image"]
+            self.assertTrue(image_url.startswith("https://cv.zqsdev.com/assets/share-"))
+            image = CV / urlparse(image_url).path.lstrip("/")
+            content = image.read_bytes()
+            self.assertTrue(content.startswith(b"\x89PNG\r\n\x1a\n"))
+            self.assertEqual(int.from_bytes(content[16:20], "big"), 1200)
+            self.assertEqual(int.from_bytes(content[20:24], "big"), 630)
+            self.assertEqual(metadata["twitter:image"], image_url)
+            self.assertEqual(metadata["twitter:card"], "summary_large_image")
+            preload = next(a for tag, a in doc.elements if tag == "link" and a.get("as") == "font")
+            font = (CV / preload["href"]).read_bytes()
+            self.assertEqual(font[:4], b"wOF2")
+            self.assertLess(len(font), 100 * 1024)
+
     def test_legacy_links_reach_the_single_resume(self):
         rules = tomllib.loads((ROOT / "netlify.toml").read_text(encoding="utf-8"))["redirects"]
 

@@ -41,55 +41,6 @@ body {
 .site-actions a:hover, .site-actions button:hover {
   background: rgba(255, 255, 255, 0.08);
 }
-.terminal-cta {
-  border: 1px solid rgba(64, 242, 255, 0.35);
-  padding: 9px 16px;
-  border-radius: 999px;
-  font-weight: 500;
-  letter-spacing: 0.02em;
-  text-transform: none;
-  background: linear-gradient(
-    135deg,
-    rgba(64, 242, 255, 0.12),
-    rgba(155, 139, 255, 0.18)
-  );
-  color: rgba(243, 251, 255, 0.82);
-  box-shadow: 0 0 0 0 rgba(64, 242, 255, 0.4);
-  text-shadow: none;
-  transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease,
-    transform 0.2s ease;
-  position: relative;
-  animation: terminalCtaPulse 2.8s ease-in-out infinite;
-}
-.terminal-cta:hover,
-.terminal-cta:focus-visible {
-  background: linear-gradient(
-    135deg,
-    rgba(64, 242, 255, 0.18),
-    rgba(155, 139, 255, 0.24)
-  );
-  border-color: rgba(155, 139, 255, 0.45);
-  color: #f7fbff;
-  transform: translateY(-1px) scale(1.02);
-}
-.terminal-cta:focus-visible {
-  outline: 2px solid rgba(64, 242, 255, 0.5);
-  outline-offset: 2px;
-}
-@keyframes terminalCtaPulse {
-  0% {
-    box-shadow: 0 0 0 0 rgba(64, 242, 255, 0.32);
-    filter: brightness(1);
-  }
-  50% {
-    box-shadow: 0 0 24px 8px rgba(64, 242, 255, 0.22);
-    filter: brightness(1.05);
-  }
-  100% {
-    box-shadow: 0 0 0 0 rgba(64, 242, 255, 0.32);
-    filter: brightness(1);
-  }
-}
 .site-main {
   height: 100%;
   overflow: auto;
@@ -204,6 +155,41 @@ canvas {
   }
 }
 
+
+/* Compact actions: primary PDF, persistent contact/language, native disclosure. */
+.site-actions [hidden] { display:none !important; }
+.site-actions { gap:8px; padding:10px 12px; isolation:isolate; }
+.site-actions a, .site-actions button, .site-actions summary { display:inline-flex; align-items:center; justify-content:center; gap:7px; min-height:44px; font-size:14px; white-space:nowrap; }
+.site-actions .download-primary { background:#315f83; border-color:#7597b1; color:#fff; font-weight:600; }
+.site-actions .download-primary:hover { background:#3b7099; }
+.site-actions .terminal-cta { background:transparent; font-weight:500; animation:none; box-shadow:none; transform:none; }
+.action-icon { display:block; flex:none; }
+.label-short { display:none; }
+.site-actions .email-wrapper { display:inline-flex; }
+.site-actions .language-switch { order:3; }
+.more-actions { position:relative; }
+.more-actions > summary { cursor:pointer; list-style:none; padding:8px 12px; border:1px solid rgba(255,255,255,.2); border-radius:999px; }
+.more-actions > summary::-webkit-details-marker { display:none; }
+.more-actions[open] > summary { background:rgba(255,255,255,.08); }
+.site-actions summary:focus-visible { outline:2px solid #5ccfe6; outline-offset:4px; }
+.secondary-actions { display:flex; align-items:center; gap:8px; }
+@media screen and (min-width:841px) {
+ .more-actions[open] > summary { display:none; }
+ .more-actions:not([open]) .secondary-actions { display:none; }
+}
+@media screen and (max-width:840px) {
+ .site-actions { justify-content:center; flex-wrap:nowrap; padding:8px; gap:6px; }
+ .site-actions .language-switch { order:0; }
+ .site-actions > a, .site-actions .email-wrapper button, .site-actions .email-wrapper a, .more-actions > summary { padding:8px 10px; }
+ .site-actions .label-full { display:none; }
+ .site-actions .label-short { display:inline; }
+ .secondary-actions { position:absolute; right:0; top:calc(100% + 10px); width:min(260px,calc(100vw - 24px)); padding:10px; display:flex; flex-direction:column; align-items:stretch; background:#171c25; border:1px solid #414956; border-radius:16px; box-shadow:0 16px 40px #0008; max-height:calc(100dvh - 90px); overflow:auto; }
+ .secondary-actions .label-full { display:inline; }
+ .site-actions .secondary-actions a { justify-content:flex-start; border-color:transparent; border-radius:8px; }
+ .site-actions .secondary-actions a:hover { background:#ffffff12; }
+ .more-actions:not([open]) .secondary-actions { display:none; }
+}
+
 /* HTML document occupies the former PDF canvas, inside the original .page frame. */
 .site-main { min-height: 0; min-width: 0; }
 #viewer { grid-template-columns: minmax(0, 1fr); }
@@ -290,7 +276,7 @@ canvas {
 .resume-document .yc-inline { display: inline-block; width: 22mm; height: auto; }
 
 /* Approved slate design; scoped to the CV to preserve the site shell. */
-@font-face {font-family:"IBM Plex Sans";src:url("assets/ibm-plex-sans-3b031aa42161.ttf") format("truetype");font-weight:100 900;font-style:normal;font-display:swap;}
+@font-face {font-family:"IBM Plex Sans";src:url("assets/ibm-plex-sans-latin-a9fbaea2d499.woff2") format("woff2");font-weight:100 900;font-style:normal;font-display:swap;}
 .resume-document {--ink:#1e2d3b;--accent:#244e70;--muted:#485b69;--rule:#cbd7e0}
 .resume-document {font-family:"IBM Plex Sans",Arial,sans-serif;font-size:9.6pt}
 .resume-document .header h1 {font-size:23pt;letter-spacing:-.8px}
@@ -417,6 +403,10 @@ canvas {
   .resume-document .education, .resume-document .languages { font-size: 13px; line-height: 1.6; }
 }
 @media screen and (max-width: 480px) {
+  .site-actions { padding:8px 6px; gap:4px; }
+  .site-actions > a, .site-actions .email-wrapper button, .site-actions .email-wrapper a, .more-actions > summary { padding:8px; font-size:13px; gap:5px; }
+  .site-actions .action-icon { width:16px; height:16px; }
+
   .resume-document .header-main { min-height:54px; }
   .resume-document { padding: 24px 16px; }
   .resume-document .header-main { padding-right: 62px; }

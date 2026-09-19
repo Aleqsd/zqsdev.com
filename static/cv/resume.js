@@ -67,3 +67,24 @@ if (frame && "ResizeObserver" in window) {
   window.addEventListener("resize", fitDocument);
   fitDocument();
 }
+
+// Native disclosure keeps secondary links available without JavaScript.
+const moreActions = document.querySelector('.more-actions');
+const desktopActions = window.matchMedia('(min-width: 841px)');
+if (moreActions) {
+  const syncActions = () => { moreActions.open = desktopActions.matches; };
+  syncActions();
+  desktopActions.addEventListener('change', syncActions);
+  document.addEventListener('keydown', event => {
+    if (event.key === 'Escape' && moreActions.open && !desktopActions.matches) {
+      moreActions.open = false;
+      moreActions.querySelector('summary').focus();
+    }
+  });
+  document.addEventListener('click', event => {
+    if (!desktopActions.matches && !moreActions.contains(event.target)) moreActions.open = false;
+  });
+  moreActions.querySelectorAll('a').forEach(link => link.addEventListener('click', () => {
+    if (!desktopActions.matches) moreActions.open = false;
+  }));
+}
