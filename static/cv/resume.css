@@ -324,6 +324,7 @@ canvas {
 .resume-document section[aria-labelledby="education-title"], .resume-document section[aria-labelledby="skills-title"] { margin-top: 2.5mm; }
 .resume-document #education-title, .resume-document #skills-title { margin-bottom: 2mm; }
 .resume-document .stack { row-gap: 1.3mm; }
+.resume-document .education-entry:last-child { margin-bottom: 0; }
 @media screen and (max-width: 840px) {
  .resume-document section[aria-labelledby="education-title"], .resume-document section[aria-labelledby="skills-title"] { margin-top: 24px; }
  .resume-document #education-title, .resume-document #skills-title { margin-bottom: 16px; }
