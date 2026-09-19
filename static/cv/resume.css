@@ -355,9 +355,15 @@ canvas {
 
 /* Flowing header keeps PDF text in reading order. */
 .resume-document .header { position:static; display:flow-root; }
-.resume-document .portrait { position:static; float:right; margin:-1mm 0 0 4mm; }
+.resume-document .portrait { position:static; float:right; margin:-1mm 0 0 1mm; }
 .resume-document .header-main { min-height:17.5mm; padding-right:0; }
-.resume-document .contact { margin-right:28mm; }
+.resume-document .contact { margin-right:24mm; }
+
+
+/* Decorative contact icons; labels remain real text. */
+.resume-document .contact { column-gap:3mm; }
+.resume-document .contact > span, .resume-document .contact > a { display:inline-flex; align-items:center; gap:.85mm; white-space:nowrap; }
+.resume-document .contact-icon { display:block; width:2.6mm; height:2.6mm; flex:0 0 2.6mm; color:var(--accent); }
 
 @media screen and (max-width: 840px) {
   .resume-document .header { position:relative; }
