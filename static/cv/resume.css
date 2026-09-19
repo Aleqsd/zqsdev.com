@@ -269,6 +269,17 @@ canvas {
 .resume-document .education { font-size: 8.8pt; line-height: 1.5; }
 .resume-document .languages { font-size: 8.5pt; color: var(--muted); margin-top: 1mm; }
 
+
+/* Approved CV: one experience section, with compact employer wordmarks. */
+.resume-document .earlier { display: block; }
+.resume-document .earlier-entry { display: grid; grid-template-columns: 11mm minmax(0, 1fr) auto; align-items: start; column-gap: 2mm; margin-top: 2mm; break-inside: avoid; }
+.resume-document .earlier-entry:first-child { margin-top: 0; }
+.resume-document .earlier-entry .brand { width: 10mm; height: 8mm; }
+.resume-document .earlier-entry .brand img { width: 10mm; height: 8mm; object-fit: contain; }
+.resume-document .earlier-entry .brand.cnrs img { width: 7.5mm; height: 7.5mm; }
+.resume-document .earlier-entry .brand.airbus img, .resume-document .brand.sony img { width: 10.5mm; height: 8mm; object-fit: contain; }
+.resume-document .earlier-entry p { font-size: 9.05pt; line-height: 1.32; }
+
 @media screen and (max-width: 840px) {
   .resume-document { min-height: 0; padding: 26px 24px; }
   .resume-document .header-main { padding-right: 85px; }
@@ -293,6 +304,10 @@ canvas {
   .resume-document li { font-size: 15px; line-height: 1.55; margin-bottom: 9px; }
   .resume-document .earlier { font-size: 14px; line-height: 1.55; row-gap: 6px; grid-template-columns: minmax(0, 1fr); }
   .resume-document .earlier .date { font-size: 12px; margin-bottom: 12px; }
+  .resume-document .earlier-entry { grid-template-columns: 36px minmax(0, 1fr); gap: 6px 12px; margin-top: 16px; }
+  .resume-document .earlier-entry p { font-size: 14px; line-height: 1.55; }
+  .resume-document .earlier-entry .date { grid-column: 2; margin-bottom: 0; }
+
   .resume-document .stack { font-size: 14px; line-height: 1.55; grid-template-columns: minmax(0, 1fr); row-gap: 4px; }
   .resume-document .stack dd { margin-bottom: 10px; }
   .resume-document .education, .resume-document .languages { font-size: 13px; line-height: 1.6; }
