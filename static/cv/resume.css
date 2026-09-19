@@ -280,6 +280,10 @@ canvas {
 .resume-document .earlier-entry .brand.airbus img, .resume-document .brand.sony img { width: 10.5mm; height: 8mm; object-fit: contain; }
 .resume-document .earlier-entry p { font-size: 9.05pt; line-height: 1.32; }
 
+/* Approved role-first headings and consistently sized YC wordmark. */
+.resume-document .company-caption { margin-top: .8mm; }
+.resume-document .brand.yc-horizontal, .resume-document .brand.yc-horizontal img { width: 10mm; height: 8mm; object-fit: contain; }
+
 @media screen and (max-width: 840px) {
   .resume-document { min-height: 0; padding: 26px 24px; }
   .resume-document .header-main { padding-right: 85px; }
