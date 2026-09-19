@@ -311,7 +311,28 @@ canvas {
 .resume-document .education {font-size:8.6pt}
 .resume-document .languages {font-size:8.5pt}
 
+/* Compact education entries before technical skills. */
+.resume-document .education-entry { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 3mm; margin-bottom: 1.5mm; break-inside: avoid; }
+.resume-document .education-entry h3 { font-size: 9.5pt; line-height: 1.25; }
+.resume-document .education-entry .school { font-size: 8.8pt; color: var(--muted); line-height: 1.3; margin-top: .4mm; }
+.resume-document .education-entry .date { font-size: 8.2pt; }
+.resume-document .stack { grid-template-columns: 36mm minmax(0, 1fr); }
+.resume-document .stack dt { font-size: 8.4pt; }
+.resume-document .education-entry { margin-bottom: .8mm; }
+.resume-document .education-entry h3 { line-height: 1.2; }
+.resume-document .education-entry .school { line-height: 1.2; margin-top: .2mm; }
+.resume-document section[aria-labelledby="education-title"], .resume-document section[aria-labelledby="skills-title"] { margin-top: 2.5mm; }
+.resume-document #education-title, .resume-document #skills-title { margin-bottom: 2mm; }
+.resume-document .stack { row-gap: 1.3mm; }
 @media screen and (max-width: 840px) {
+ .resume-document section[aria-labelledby="education-title"], .resume-document section[aria-labelledby="skills-title"] { margin-top: 24px; }
+ .resume-document #education-title, .resume-document #skills-title { margin-bottom: 16px; }
+  .resume-document .education-entry { grid-template-columns: minmax(0, 1fr); gap: 3px; margin-bottom: 12px; }
+  .resume-document .education-entry h3 { font-size: 15px; line-height: 1.4; }
+  .resume-document .education-entry .school { font-size: 13px; line-height: 1.4; }
+  .resume-document .education-entry .date { font-size: 12px; }
+  .resume-document .stack dt { font-size: 14px; }
+
   .resume-document { min-height: 0; padding: 26px 24px; }
   .resume-document .header-main { padding-right: 85px; }
   .resume-document .portrait { width: 72px; height: 72px; top: 0; }
