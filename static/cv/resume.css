@@ -284,6 +284,11 @@ canvas {
 .resume-document .company-caption { margin-top: .8mm; }
 .resume-document .brand.yc-horizontal, .resume-document .brand.yc-horizontal img { width: 10mm; height: 8mm; object-fit: contain; }
 
+/* Jam.gg employer mark; Y Combinator affiliation in the company caption. */
+.resume-document .brand.jam img { width: 10mm; height: 8mm; object-fit: contain; }
+.resume-document .yc-program { display: inline-flex; align-items: center; gap: 1mm; white-space: nowrap; vertical-align: middle; }
+.resume-document .yc-inline { display: inline-block; width: 22mm; height: auto; }
+
 @media screen and (max-width: 840px) {
   .resume-document { min-height: 0; padding: 26px 24px; }
   .resume-document .header-main { padding-right: 85px; }
