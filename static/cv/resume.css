@@ -352,7 +352,17 @@ canvas {
 .resume-document .stack {row-gap:1.6mm;}
 .resume-document .education {line-height:1.6;}
 .resume-document .languages {margin-top:1.8mm;}
+
+/* Flowing header keeps PDF text in reading order. */
+.resume-document .header { position:static; display:flow-root; }
+.resume-document .portrait { position:static; float:right; margin:-1mm 0 0 4mm; }
+.resume-document .header-main { min-height:17.5mm; padding-right:0; }
+.resume-document .contact { margin-right:28mm; }
+
 @media screen and (max-width: 840px) {
+  .resume-document .header { position:relative; }
+  .resume-document .portrait { position:absolute; float:none; margin:0; }
+  .resume-document .contact { margin-right:0; }
   .resume-document .header-main { min-height:72px; }
   .resume-document .header { padding-bottom:18px; }
   .resume-document .contact { margin-top:14px; }
