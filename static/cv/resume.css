@@ -325,7 +325,42 @@ canvas {
 .resume-document #education-title, .resume-document #skills-title { margin-bottom: 2mm; }
 .resume-document .stack { row-gap: 1.3mm; }
 .resume-document .education-entry:last-child { margin-bottom: 0; }
+
+/* Unified spacing for the current one-page CV. */
+.resume-document .header-main {min-height:20.5mm;}
+.resume-document .portrait {width:24mm;height:24mm;top:-1mm;}
+.resume-document .role {margin-top:2mm;}
+.resume-document .contact {margin-top:2.8mm;column-gap:4mm;row-gap:1.4mm;}
+.resume-document .header {padding-bottom:3mm;}
+.resume-document .agentic {margin-top:3.5mm;padding:2.5mm 3mm;}
+.resume-document .agentic h2 {margin-bottom:1.3mm;}
+.resume-document .usage {margin-top:1.3mm;}
+.resume-document section {margin-top:3.6mm;}
+.resume-document section[aria-labelledby="education-title"] {margin-top:3.6mm;}
+.resume-document section[aria-labelledby="skills-title"] {margin-top:3.6mm;}
+.resume-document .section-title {margin-bottom:2.3mm;}
+.resume-document #education-title {margin-bottom:2.3mm;}
+.resume-document #skills-title {margin-bottom:2.3mm;}
+.resume-document .job {margin-bottom:3.6mm;}
+.resume-document .company-caption {margin-top:.9mm;}
+.resume-document ul {margin-top:1.7mm;}
+.resume-document li {line-height:1.39;margin-bottom:1.3mm;}
+.resume-document li:last-child {margin-bottom:0;}
+.resume-document .earlier-entry {margin-top:2.5mm;}
+.resume-document .earlier-entry:first-child {margin-top:0;}
+.resume-document .earlier-entry p {line-height:1.35;}
+.resume-document .stack {row-gap:1.6mm;}
+.resume-document .education {line-height:1.6;}
+.resume-document .languages {margin-top:1.8mm;}
 @media screen and (max-width: 840px) {
+  .resume-document .header-main { min-height:72px; }
+  .resume-document .header { padding-bottom:18px; }
+  .resume-document .contact { margin-top:14px; }
+  .resume-document .agentic { padding:12px; }
+  .resume-document .agentic h2 { margin-bottom:7px; }
+  .resume-document .company-caption { margin-top:4px; }
+  .resume-document .languages { margin-top:10px; }
+
  .resume-document section[aria-labelledby="education-title"], .resume-document section[aria-labelledby="skills-title"] { margin-top: 24px; }
  .resume-document #education-title, .resume-document #skills-title { margin-bottom: 16px; }
   .resume-document .education-entry { grid-template-columns: minmax(0, 1fr); gap: 3px; margin-bottom: 12px; }
@@ -366,6 +401,7 @@ canvas {
   .resume-document .education, .resume-document .languages { font-size: 13px; line-height: 1.6; }
 }
 @media screen and (max-width: 480px) {
+  .resume-document .header-main { min-height:54px; }
   .resume-document { padding: 24px 16px; }
   .resume-document .header-main { padding-right: 62px; }
   .resume-document .portrait { width: 54px; height: 54px; }
