@@ -192,6 +192,6 @@ Run `python3 -m unittest scripts.test_cv_site` to check the static CV and routin
 Portrait: final 1254x1254 PNG supplied by Alexandre on 2026-09-08, published without further editing. The HTML and PDF use the same image.
 Studi logo: [Studi, Wikimedia Commons](https://commons.wikimedia.org/wiki/File:Studi_logo.svg), [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/), unmodified.
 PlayStation symbol: official PlayStation site. YC badge: typographic Y.
-VibeRank icon: [official SVG](https://www.viberank.app/icon.svg), copied locally on 2026-09-08; links to [Aleqsd's profile](https://www.viberank.app/profile/Aleqsd).
+Token Tracker icon: bolt and background layers from the [official app icon](https://github.com/xiufengsun/TokenTracker/tree/main/TokenTrackerBar/TokenTrackerBar/AppIcon.icon/Assets) (MIT), combined into one rounded SVG on 2026-10-17; links to [Aleqsd's public profile](https://www.tokentracker.cc/u/ad7485bd-6569-45a5-850d-44a9de505b1b).
 
 Toolbar: monochrome GitHub and LinkedIn SVG marks inherit the light text color to stay legible on the dark background. Language flags are decorative SVGs with visible language names.

@@ -33,7 +33,7 @@ class PublicCvTests(unittest.TestCase):
         self.assertEqual(tags.count("h1"), 1)
         self.assertFalse({"canvas", "iframe", "object", "embed"}.intersection(tags))
         copy = " ".join(" ".join(doc.copy).split())
-        for text in ("Lead AI Software Engineer", "50,000 students", "5,000+ games", "millions of players", "first 30 hires", "60+ employees"):
+        for text in ("Lead AI Software Engineer", "50,000 students", "5,000+ games", "millions of players", "first 30 hires", "60+ employees", "152B+ tokens", "Top 1% worldwide on Token Tracker in October 2026"):
             self.assertIn(text, copy)
         for obsolete in ("View PDF", "DevOps CV", "Software CV", "Resume Selector"):
             self.assertNotIn(obsolete, copy)
@@ -52,7 +52,7 @@ class PublicCvTests(unittest.TestCase):
                 if path:
                     self.assertFalse(urlparse(path).scheme, path)
                     self.assertTrue((CV / path).is_file(), path)
-            self.assertTrue(any(tag == "a" and a.get("href") == "https://www.viberank.app/profile/Aleqsd" for tag, a in doc.elements))
+            self.assertTrue(any(tag == "a" and a.get("href") == "https://www.tokentracker.cc/u/ad7485bd-6569-45a5-850d-44a9de505b1b" for tag, a in doc.elements))
 
     def test_language_switch_and_matching_download_work_without_javascript(self):
         cases = (
@@ -82,7 +82,7 @@ class PublicCvTests(unittest.TestCase):
                 self.assertEqual(alternates["en"], "https://cv.zqsdev.com/")
                 self.assertEqual(alternates["fr"], "https://cv.zqsdev.com/fr.html")
         french = " ".join(Document((CV / "fr.html").read_text(encoding="utf-8")).copy)
-        for text in ("50 000 étudiants", "5 000+ jeux", "millions de joueurs", "30 premiers recrutements", "60+ collaborateurs", "12 M$ en série A", "148 Md+ tokens", "17e au classement mondial sur VibeRank en septembre 2026", "TOEIC 990/990"):
+        for text in ("50 000 étudiants", "5 000+ jeux", "millions de joueurs", "30 premiers recrutements", "60+ collaborateurs", "12 M$ en série A", "152 Md+ tokens", "Top 1 % mondial sur Token Tracker en octobre 2026", "TOEIC 990/990"):
             self.assertIn(text, french)
 
     def test_toolbar_has_decorative_monochrome_brand_marks(self):
@@ -161,7 +161,7 @@ class PublicCvTests(unittest.TestCase):
             self.fail(f"Redirect loop at {url}")
 
         for host in ("cv", "founding", "devops", "software"):
-            for suffix in ("", "fr.html", "resume.pdf", "resume-fr.pdf", "resume.css", "assets/viberank.svg"):
+            for suffix in ("", "fr.html", "resume.pdf", "resume-fr.pdf", "resume.css", "assets/tokentracker.svg"):
                 with self.subTest(host=host, suffix=suffix):
                     self.assertEqual(resolve(f"https://{host}.zqsdev.com/{suffix}"), f"/cv/{suffix}")
         for host in ("www", "cv"):
