@@ -1,7 +1,7 @@
 mod ai;
 mod budget;
 mod static_data;
-use ai::{AiClient, AiRequest};
+use ai::{AiClient, AiRequest, KNOWLEDGE_UPDATED};
 
 use axum::{
     body::Body,
@@ -67,7 +67,7 @@ struct AiResponse {
     knowledge_updated: &'static str,
 }
 fn fallback(status: StatusCode, reason: &str) -> Response {
-    (status,Json(AiResponse {answer:"AI is temporarily unavailable. Classic commands are ready: about, experience, projects, testimonials, resume. / IA temporairement indisponible : les commandes classiques restent disponibles.".into(),ai_enabled:false,reason:Some(reason.into()),model:None,sources:vec![],knowledge_updated:"2026-09-08"})).into_response()
+    (status,Json(AiResponse {answer:"AI is temporarily unavailable. Classic commands are ready: about, experience, projects, testimonials, resume. / IA temporairement indisponible : les commandes classiques restent disponibles.".into(),ai_enabled:false,reason:Some(reason.into()),model:None,sources:vec![],knowledge_updated:KNOWLEDGE_UPDATED})).into_response()
 }
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -219,7 +219,7 @@ async fn handle_ai(
                 reason: None,
                 model: Some(answer.model),
                 sources: answer.sources,
-                knowledge_updated: "2026-09-08",
+                knowledge_updated: KNOWLEDGE_UPDATED,
             };
             let _ = tokio::time::timeout(
                 Duration::from_secs(1),
@@ -427,7 +427,7 @@ async fn handle_data(State(state): State<Arc<AppState>>) -> impl IntoResponse {
 
 async fn handle_version(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     Json(
-        serde_json::json!({"version":SERVER_VERSION,"commit":server_commit_hash(),"model":state.client.model,"knowledge_updated":"2026-09-08","knowledge_mode":"full_context","ai_configured":state.client.configured()}),
+        serde_json::json!({"version":SERVER_VERSION,"commit":server_commit_hash(),"model":state.client.model,"knowledge_updated":KNOWLEDGE_UPDATED,"knowledge_mode":"full_context","ai_configured":state.client.configured()}),
     )
 }
 
@@ -734,6 +734,12 @@ mod tests {
         h.insert("x-real-ip", HeaderValue::from_static("1.2.3.4"));
         assert_eq!(client_ip(&h, "127.0.0.1:1".parse().unwrap()), "1.2.3.4");
         assert_eq!(client_ip(&h, "5.6.7.8:1".parse().unwrap()), "5.6.7.8");
+    }
+    #[test]
+    fn knowledge_updated_matches_profile() {
+        let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../static/data/profile.json");
+        let profile: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
+        assert_eq!(profile["updated_at"].as_str(), Some(KNOWLEDGE_UPDATED));
     }
     #[test]
     fn preserves_rich_knowledge_and_current_role() {

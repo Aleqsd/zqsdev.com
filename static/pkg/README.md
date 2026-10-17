@@ -96,7 +96,7 @@ make serve-static STATIC_PORT=9000
 `make build` always refreshes `static/pkg/` and `static/style.min.css`, both of which must ship alongside the rest of `static/` for deployment.
 
 ## 📚 Curated knowledge
-Edit `static/data/*.json`, run `python3 scripts/validate_knowledge.py`, build, and restart the backend after deploying data. The reviewed full-context ceiling is 64 KB. Builds require no AI credentials.
+Edit `static/data/*.json`, run `python3 scripts/validate_knowledge.py`, build, then redeploy the backend with `make deploy-backend` (data is loaded at startup). Keep `KNOWLEDGE_UPDATED` in `server/src/ai.rs` equal to `updated_at` in `profile.json`. The reviewed full-context ceiling is 64 KB. Builds require no AI credentials.
 
 The migration verified all 44 live SQLite chunks against the JSON sources and the Pinecone index held 44 vectors. All original projects (including Micro Mages, Mistale, BeeToBee and TheClair), education, publications, awards and two full testimonials were preserved. The obsolete terminal-project description, role dates and availability FAQ were updated; Studi and agentic engineering were added.
 
@@ -148,6 +148,7 @@ If `PUSHOVER_API_TOKEN` and `PUSHOVER_USER_KEY` are present (in the environment,
 - 🔗 The public resume is `https://cv.zqsdev.com/`. The terminal uses this same canonical CV, in English and French.
 - 🧾 Edit the JSON files in `static/data/` to refresh profile details, experiences, and skills for the interactive terminal and AI knowledge base.
 - 📄 Edit `static/cv/index.html` (English), `static/cv/fr.html` (French) and the shared `static/cv/resume.css` for the public resume. The approved base V4 is available as `resume.pdf` in English and `resume-fr.pdf` in French. Each static page links to its matching PDF and the other language, including without JavaScript. `resume.js` localizes the clipboard message, preserves terminal return context when switching language and fits the document inside the original PDF frame.
+- 🖨️ After editing the HTML, regenerate both PDFs with `python3 scripts/render_cv_pdfs.py` (headless Chrome + PyMuPDF; `--check` only prints the text diff).
 
 ## 🚢 Deployment
 The server is optional at runtime; the public site is served from the static bundle.
@@ -173,11 +174,12 @@ The proxy reads `static/data/*.json` at startup, forwards questions to `gpt-5.6-
 
 ### 🧭 Systemd service (production)
 - 🧾 Unit file: `/etc/systemd/system/zqs-terminal.service` runs `/opt/zqsdev/bin/zqs-terminal-server` as the `zqsdev` user with `WorkingDirectory=/opt/zqsdev`.
-- 🌡️ Environment lives in `/etc/zqsdev/server.env`, including `HOST=0.0.0.0`, `PORT=8787`, `STATIC_DIR=/opt/zqsdev/static`, and the API keys used at runtime.
+- 🌡️ Environment lives in `/etc/zqsdev/server.env`, including `HOST=127.0.0.1`, `PORT=8787`, `STATIC_DIR=/opt/zqsdev/static`, `AI_BUDGET_PATH`, and the API keys used at runtime.
+- 🚀 Releases: `make deploy-backend` builds the committed `HEAD` on the VPS into `/opt/zqsdev/releases/<version>`, swaps the binary and `static` symlink atomically and rolls back on failure (details in `AGENTS.md`).
 - 🛎️ Manage the service with `sudo systemctl status|restart zqs-terminal.service`; logs stream to `/opt/zqsdev/backend.log` (mirrored here as `./backend.log`) and via `journalctl -u zqs-terminal.service`.
 - 📡 Run `make backend-log` to tail the rolling log from the repository root.
 - 🔐 Public ingress: `api.zqsdev.com` terminates TLS with Nginx (config at `/etc/nginx/sites-enabled/api.zqsdev.com`) and proxies to the Axum service on `127.0.0.1:8787`.
-- The binary listens on port `8787/tcp` (`/api/ai`) and restarts automatically on failure.
+- The binary listens on `127.0.0.1:8787` (`/api/ai`) and restarts automatically on failure.
 
 ---
 

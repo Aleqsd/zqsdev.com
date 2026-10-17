@@ -12,6 +12,8 @@ pub struct Message {
     pub role: String,
     pub content: String,
 }
+/// Must match `updated_at` in static/data/profile.json (checked by a server test).
+pub const KNOWLEDGE_UPDATED: &str = "2026-10-17";
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct AiRequest {
@@ -139,7 +141,7 @@ CURATED_KNOWLEDGE_JSON:
     pub fn body(&self, request: &AiRequest) -> Value {
         let mut messages = vec![
             json!({"role":"system","content":self.system}),
-            json!({"role":"system","content":format!("Today's date: {}. Knowledge last reviewed: 2026-09-08.",chrono::Utc::now().date_naive())}),
+            json!({"role":"system","content":format!("Today's date: {}. Knowledge last reviewed: {KNOWLEDGE_UPDATED}.",chrono::Utc::now().date_naive())}),
         ];
         messages.extend(request.history.iter().map(|m| json!(m)));
         messages.push(json!({"role":"user","content":request.question.trim()}));

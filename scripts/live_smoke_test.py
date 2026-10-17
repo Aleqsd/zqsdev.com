@@ -519,7 +519,7 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     )
     parser.add_argument(
         "--base-url",
-        default="https://www.zqsdev.com",
+        default="https://zqsdev.com",
         help="Base URL to target (default: %(default)s)",
     )
     parser.add_argument(
