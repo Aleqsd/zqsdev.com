@@ -2,6 +2,7 @@
 
 from html.parser import HTMLParser
 from pathlib import Path
+import json
 import re
 import tomllib
 import unittest
@@ -26,6 +27,77 @@ class Document(HTMLParser):
 
 
 class PublicCvTests(unittest.TestCase):
+    def test_profile_schema_identifies_the_same_person_in_both_languages(self):
+        identities = []
+        for filename, language, url in (
+            ("index.html", "en", "https://cv.zqsdev.com/"),
+            ("fr.html", "fr", "https://cv.zqsdev.com/fr.html"),
+        ):
+            with self.subTest(language=language):
+                text = (CV / filename).read_text(encoding="utf-8")
+                blocks = re.findall(r'<script type="application/ld\+json">\s*(.*?)\s*</script>', text, re.S)
+                self.assertEqual(len(blocks), 1)
+                schema = json.loads(blocks[0])
+                self.assertEqual(schema["@context"], "https://schema.org")
+                graph = {node["@type"]: node for node in schema["@graph"]}
+                self.assertEqual(set(graph), {"WebSite", "ProfilePage", "Person"})
+                page, person, website = (graph[k] for k in ("ProfilePage", "Person", "WebSite"))
+                self.assertEqual(page["url"], url)
+                self.assertEqual(page["inLanguage"], language)
+                self.assertEqual(page["mainEntity"], {"@id": person["@id"]})
+                self.assertEqual(page["isPartOf"], {"@id": website["@id"]})
+                self.assertEqual(website["publisher"], {"@id": person["@id"]})
+                self.assertEqual(person["@id"], "https://cv.zqsdev.com/#person")
+                self.assertEqual(person["name"], "Alexandre DO-O ALMEIDA")
+                self.assertEqual(person["address"], {"@type": "PostalAddress", "addressLocality": "Montpellier", "addressCountry": "FR"})
+                self.assertEqual(person["knowsLanguage"], ["fr", "en"])
+                doc = Document(text)
+                links = {a.get("href") for tag, a in doc.elements if tag == "a"}
+                self.assertTrue(set(person["sameAs"]).issubset(links))
+                self.assertIn(person["email"], links)
+                portrait = next(a["src"] for tag, a in doc.elements if tag == "img" and a.get("class") == "portrait")
+                self.assertEqual(person["image"], "https://cv.zqsdev.com/" + portrait)
+                ids = {a["id"] for _, a in doc.elements if "id" in a}
+                for part in page["hasPart"]:
+                    self.assertIn(urlparse(part["@id"]).fragment, ids)
+                # Employment, dates and ratings must not be invented from a CV.
+                for key in ("worksFor", "award", "aggregateRating", "interactionStatistic"):
+                    self.assertNotIn(key, person)
+                self.assertNotIn("dateModified", page)
+                self.assertNotIn("dateCreated", page)
+                identities.append({k: person[k] for k in ("@id", "name", "url", "image", "email", "sameAs")})
+        self.assertEqual(*identities)
+
+    def test_search_metadata_matches_the_language_and_visible_profile(self):
+        for filename, locale in (("index.html", "fr_FR"), ("fr.html", "en_US")):
+            with self.subTest(page=filename):
+                doc = Document((CV / filename).read_text(encoding="utf-8"))
+                metadata = {a.get("property") or a.get("name"): a.get("content") for tag, a in doc.elements if tag == "meta"}
+                self.assertEqual(metadata["author"], "Alexandre DO-O ALMEIDA")
+                self.assertIn("index, follow", metadata["robots"])
+                self.assertIn("max-image-preview:large", metadata["robots"])
+                self.assertEqual(metadata["og:locale:alternate"], locale)
+                self.assertEqual(metadata["twitter:image:alt"], metadata["og:image:alt"])
+                self.assertLessEqual(len(metadata["description"]), 165)
+                if filename == "fr.html":
+                    self.assertIn("DevOps pour PlayStation", metadata["description"])
+                    self.assertNotIn("Sony PlayStation et Studi", metadata["description"])
+                sitemap = next(a for tag, a in doc.elements if tag == "link" and a.get("rel") == "sitemap")
+                self.assertEqual(sitemap["href"], "sitemap.xml")
+                self.assertTrue((CV / sitemap["href"]).is_file())
+
+    def test_citable_sections_and_machine_readable_dates_exist_in_both_languages(self):
+        for filename in ("index.html", "fr.html"):
+            with self.subTest(page=filename):
+                doc = Document((CV / filename).read_text(encoding="utf-8"))
+                ids = [a["id"] for _, a in doc.elements if "id" in a]
+                self.assertEqual(len(ids), len(set(ids)))
+                for identifier in ("resume", "summary", "studi", "playstation", "jam-gg", "experience-title", "skills-title", "education-title"):
+                    self.assertIn(identifier, ids)
+                self.assertIn(("section", {"aria-labelledby": "summary", "class": "agentic"}), doc.elements)
+                dates = [a["datetime"] for tag, a in doc.elements if tag == "time"]
+                self.assertEqual(dates, ["2026-04", "2023-02", "2026-03", "2020-03", "2023-03"])
+
     def test_html_is_readable_without_pdf_renderer(self):
         doc = Document((CV / "index.html").read_text(encoding="utf-8"))
         tags = [tag for tag, _ in doc.elements]

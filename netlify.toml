@@ -7,6 +7,25 @@ command = ""
 [build.processing.html]
 pretty_urls = false
 
+# Keep the two public language URLs stable, including old direct file links.
+[[redirects]]
+from = "https://cv.zqsdev.com/index.html"
+to = "https://cv.zqsdev.com/"
+status = 301
+force = true
+
+[[redirects]]
+from = "https://cv.zqsdev.com/fr"
+to = "https://cv.zqsdev.com/fr.html"
+status = 301
+force = true
+
+[[redirects]]
+from = "https://cv.zqsdev.com/fr/"
+to = "https://cv.zqsdev.com/fr.html"
+status = 301
+force = true
+
 # One canonical resume in English and French, with one PDF per language.
 [[redirects]]
 from = "https://founding.zqsdev.com/*"
@@ -58,6 +77,32 @@ force = true
 
 [[redirects]]
 from = "/cv/software/*"
+to = "https://cv.zqsdev.com/:splat"
+status = 301
+force = true
+
+# Public copies on the terminal host share the CV host's canonical URLs. Keep
+# these host-specific: a generic /cv/* redirect can catch the internal rewrite.
+[[redirects]]
+from = "https://zqsdev.com/cv"
+to = "https://cv.zqsdev.com/"
+status = 301
+force = true
+
+[[redirects]]
+from = "https://zqsdev.com/cv/*"
+to = "https://cv.zqsdev.com/:splat"
+status = 301
+force = true
+
+[[redirects]]
+from = "https://www.zqsdev.com/cv"
+to = "https://cv.zqsdev.com/"
+status = 301
+force = true
+
+[[redirects]]
+from = "https://www.zqsdev.com/cv/*"
 to = "https://cv.zqsdev.com/:splat"
 status = 301
 force = true
@@ -151,3 +196,43 @@ for = "/data/*.json"
 for = "/*.woff2"
   [headers.values]
   Cache-Control = "public, max-age=31536000, immutable"
+
+# Discovery documents and HTML must be revalidated when the CV changes.
+[[headers]]
+for = "/cv/index.html"
+  [headers.values]
+  Cache-Control = "public, max-age=0, must-revalidate"
+
+[[headers]]
+for = "/cv/fr.html"
+  [headers.values]
+  Cache-Control = "public, max-age=0, must-revalidate"
+
+[[headers]]
+for = "/cv/robots.txt"
+  [headers.values]
+  Cache-Control = "public, max-age=0, must-revalidate"
+  Content-Type = "text/plain; charset=utf-8"
+
+[[headers]]
+for = "/cv/sitemap.xml"
+  [headers.values]
+  Cache-Control = "public, max-age=0, must-revalidate"
+  Content-Type = "application/xml; charset=utf-8"
+
+[[headers]]
+for = "/cv/llms.txt"
+  [headers.values]
+  Cache-Control = "public, max-age=0, must-revalidate"
+  Content-Type = "text/plain; charset=utf-8"
+
+# The HTML profile is the preferred search result for each downloadable PDF.
+[[headers]]
+for = "/cv/resume.pdf"
+  [headers.values]
+  Link = '<https://cv.zqsdev.com/>; rel="canonical"'
+
+[[headers]]
+for = "/cv/resume-fr.pdf"
+  [headers.values]
+  Link = '<https://cv.zqsdev.com/fr.html>; rel="canonical"'
