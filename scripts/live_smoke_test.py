@@ -363,6 +363,8 @@ class LiveSmokeTester:
             assert link.get("href") == filename, f"wrong {language} PDF: {link}"
             pdf = self.session.get(urljoin(response.url, link["href"]), timeout=self.timeout)
             assert pdf.status_code == 200 and pdf.content.startswith(b"%PDF-"), f"{language} PDF missing"
+            expected_page = canonical if language == "en" else urljoin(canonical, "fr.html")
+            assert pdf.headers.get("Link") == f'<{expected_page}>; rel="canonical"', f"{language} PDF canonical header missing"
             assert document.language_link, f"language switch missing in {language}"
             url = urljoin(response.url, document.language_link)
         return "English -> French -> English; matching PDFs available"

@@ -52,6 +52,9 @@ def headers_for(path):
 
 
 class CvDiscoveryTests(unittest.TestCase):
+    def test_source_release_archives_are_never_published_as_static_assets(self):
+        self.assertEqual(list((ROOT / "static").rglob("zqsdev-release-*.tar.gz")), [])
+
     def test_robots_allows_search_and_ai_crawlers_without_changing_training_policy(self):
         text = (CV / "robots.txt").read_text(encoding="utf-8")
         parser = RobotFileParser()
@@ -130,14 +133,22 @@ class CvDiscoveryTests(unittest.TestCase):
                 self.assertEqual(target, "static/index.html")
                 self.assertEqual(redirects, [])
             self.assertEqual(resolve(f"https://{host}/api/ai")[1], "https://api.zqsdev.com/api/ai")
+            for pdf in ("resume.pdf", "resume-fr.pdf"):
+                final, target, redirects = resolve(f"https://{host}/{pdf}")
+                self.assertEqual(final, f"{ORIGIN}/{pdf}")
+                self.assertEqual(target, f"/cv/{pdf}")
+                self.assertTrue(redirects)
         scheduler = next(rule for rule in CONFIG["redirects"] if rule["from"] == "https://calendly.zqsdev.com/*")
         self.assertEqual(scheduler["to"], "https://calendly.com/alexandre-zqsdev/30min")
 
     def test_pdf_canonical_headers_and_discovery_revalidation(self):
         for filename, canonical in (("resume.pdf", ORIGIN + "/"), ("resume-fr.pdf", ORIGIN + "/fr.html")):
-            headers = headers_for("/cv/" + filename)
-            self.assertEqual(headers["Link"], f'<{canonical}>; rel="canonical"')
-            self.assertNotIn("noindex", headers.get("X-Robots-Tag", ""))
+            # Production subdomain requests match the public path before
+            # rewriting. Direct preview requests use the /cv backing path.
+            for prefix in ("/", "/cv/"):
+                headers = headers_for(prefix + filename)
+                self.assertEqual(headers["Link"], f'<{canonical}>; rel="canonical"')
+                self.assertNotIn("noindex", headers.get("X-Robots-Tag", ""))
         for filename in ("index.html", "fr.html", "robots.txt", "sitemap.xml", "llms.txt"):
             headers = headers_for("/cv/" + filename)
             self.assertEqual(headers["Cache-Control"], "public, max-age=0, must-revalidate")
