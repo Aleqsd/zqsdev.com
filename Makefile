@@ -53,6 +53,7 @@ test:
 	rustup target add $(WASM_TARGET) >/dev/null 2>&1 || true
 	python3 -m unittest scripts.test_knowledge
 	python3 -m unittest scripts.test_cv_site
+	python3 -m unittest scripts.test_cv_discovery
 	wasm-pack test --node
 	cargo test --manifest-path $(SERVER_MANIFEST)
 

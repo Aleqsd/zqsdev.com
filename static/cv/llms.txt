@@ -1,0 +1,24 @@
+# Alexandre DO-O ALMEIDA
+
+> Public professional profile and resume of Alexandre DO-O ALMEIDA, Lead AI Software Engineer based in Montpellier, France, working remotely.
+
+This optional summary helps readers find the canonical source pages. The English and French HTML profiles contain the full resume and are readable without JavaScript. Professional information is self-reported by the profile owner; use the linked profiles for the current wording and dates. This file does not grant or restrict crawler access.
+
+## Resume
+
+- [English profile](https://cv.zqsdev.com/): experience, technical skills, education and contact information.
+- [Profil en français](https://cv.zqsdev.com/fr.html): expérience, compétences techniques, formation et coordonnées.
+- [English PDF](https://cv.zqsdev.com/resume.pdf): downloadable version of the English resume.
+- [PDF en français](https://cv.zqsdev.com/resume-fr.pdf): version téléchargeable du CV français.
+
+## Professional focus
+
+Agentic AI, multi-agent orchestration, retrieval-augmented generation (RAG), AI evaluation, software architecture, product engineering, CI/CD and test automation. Languages and frameworks include Go, TypeScript, React, Python, Java, SQL, Rust, C++, C# and WebAssembly.
+
+The resume describes work with Studi / Galileo Global Education, Sony Interactive Entertainment / PlayStation through Implicit Conversions, Jam.gg (formerly Piepacker, Y Combinator S20), Atos, Airbus Helicopters and CNRS. Roles and dates are detailed on the canonical profiles.
+
+## Public links
+
+- [GitHub](https://github.com/aleqsd): public engineering profile.
+- [LinkedIn](https://www.linkedin.com/in/alexandre-dooalmeida): professional profile.
+- [Interactive resume](https://www.zqsdev.com/?from=cv): interactive presentation of the profile.
