@@ -107,6 +107,32 @@ to = "https://cv.zqsdev.com/:splat"
 status = 301
 force = true
 
+# Root PDF aliases on the terminal host refer to the same canonical downloads.
+# This also keeps the public-path PDF header rules below meaningful on all hosts.
+[[redirects]]
+from = "https://zqsdev.com/resume.pdf"
+to = "https://cv.zqsdev.com/resume.pdf"
+status = 301
+force = true
+
+[[redirects]]
+from = "https://zqsdev.com/resume-fr.pdf"
+to = "https://cv.zqsdev.com/resume-fr.pdf"
+status = 301
+force = true
+
+[[redirects]]
+from = "https://www.zqsdev.com/resume.pdf"
+to = "https://cv.zqsdev.com/resume.pdf"
+status = 301
+force = true
+
+[[redirects]]
+from = "https://www.zqsdev.com/resume-fr.pdf"
+to = "https://cv.zqsdev.com/resume-fr.pdf"
+status = 301
+force = true
+
 # CV host uses the shared /cv directory, including same-origin assets and PDF.
 [[redirects]]
 from = "https://cv.zqsdev.com/*"
@@ -227,6 +253,18 @@ for = "/cv/llms.txt"
   Content-Type = "text/plain; charset=utf-8"
 
 # The HTML profile is the preferred search result for each downloadable PDF.
+# Netlify matches headers against the public URL before the CV host rewrite;
+# retain both paths for direct /cv downloads and same-origin CV downloads.
+[[headers]]
+for = "/resume.pdf"
+  [headers.values]
+  Link = '<https://cv.zqsdev.com/>; rel="canonical"'
+
+[[headers]]
+for = "/resume-fr.pdf"
+  [headers.values]
+  Link = '<https://cv.zqsdev.com/fr.html>; rel="canonical"'
+
 [[headers]]
 for = "/cv/resume.pdf"
   [headers.values]
