@@ -17,7 +17,8 @@ NETLIFY_MESSAGE ?= Deploy $(PROJECT_VERSION)
 AUTOTEST_FLAGS ?=
 VERSION_URL ?= https://www.zqsdev.com/api/version
 DEPLOY_HOST ?= ovh
-RELEASE_ARCHIVE = $(PKG_DIR)/zqsdev-release-$(PROJECT_VERSION).tar.gz
+RELEASE_DIR = target/releases
+RELEASE_ARCHIVE = $(RELEASE_DIR)/zqsdev-release-$(PROJECT_VERSION).tar.gz
 
 .PHONY: build build-frontend clean check fmt serve serve-static test autotest deploy-preview deploy-prod deploy deploy-backend backend-log rag version-check bump-version ensure-version-bumped
 
@@ -88,7 +89,7 @@ deploy: deploy-prod
 # Build and install the committed HEAD on the production VPS (see AGENTS.md).
 deploy-backend:
 	@git diff --quiet HEAD -- || { echo "Commit first: the release is built from HEAD."; exit 1; }
-	mkdir -p $(PKG_DIR)
+	mkdir -p $(RELEASE_DIR)
 	git -c core.autocrlf=false archive --format=tar.gz --output=$(RELEASE_ARCHIVE) HEAD
 	scp $(RELEASE_ARCHIVE) scripts/deploy_backend_release.py $(DEPLOY_HOST):/tmp/
 	ssh $(DEPLOY_HOST) "sudo -n python3 /tmp/deploy_backend_release.py $(PROJECT_VERSION) $$(git rev-parse HEAD)"

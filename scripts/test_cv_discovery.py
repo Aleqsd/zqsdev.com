@@ -52,6 +52,9 @@ def headers_for(path):
 
 
 class CvDiscoveryTests(unittest.TestCase):
+    def test_source_release_archives_are_never_published_as_static_assets(self):
+        self.assertEqual(list((ROOT / "static").rglob("zqsdev-release-*.tar.gz")), [])
+
     def test_robots_allows_search_and_ai_crawlers_without_changing_training_policy(self):
         text = (CV / "robots.txt").read_text(encoding="utf-8")
         parser = RobotFileParser()
