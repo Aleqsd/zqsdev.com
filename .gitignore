@@ -25,3 +25,6 @@ static/data/rag_chunks.db
 
 logs/
 __pycache__/
+
+# Cloudflare wrangler local state
+.wrangler/

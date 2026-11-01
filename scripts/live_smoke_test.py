@@ -2,7 +2,7 @@
 """Nightly live smoke test runner for https://www.zqsdev.com.
 
 This script exercises the production website once per run, covering:
-  • critical static assets served from Netlify
+  • critical static assets served from Cloudflare
   • the `/api/data` payload that powers the terminal commands
   • dataset sanity checks (profile, skills, experience, projects, FAQ, testimonials)
   • two `/api/ai` questions checking current role and terminal technologies

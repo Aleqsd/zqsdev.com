@@ -1,0 +1,288 @@
+{
+  "note": "Routing and headers for zqsdev.com and its subdomains, applied by worker/index.js in order (first matching redirect wins; later header rules override earlier ones). '*' matches any characters, ':splat' reuses them. Header rules match the public path, before the cv.zqsdev.com rewrite.",
+  "redirects": [
+    {
+      "note": "Keep the two public language URLs stable, including old direct file links.",
+      "from": "https://cv.zqsdev.com/index.html",
+      "to": "https://cv.zqsdev.com/",
+      "status": 301,
+      "force": true
+    },
+    {
+      "from": "https://cv.zqsdev.com/fr",
+      "to": "https://cv.zqsdev.com/fr.html",
+      "status": 301,
+      "force": true
+    },
+    {
+      "from": "https://cv.zqsdev.com/fr/",
+      "to": "https://cv.zqsdev.com/fr.html",
+      "status": 301,
+      "force": true
+    },
+    {
+      "note": "One canonical resume in English and French, with one PDF per language.",
+      "from": "https://founding.zqsdev.com/*",
+      "to": "https://cv.zqsdev.com/:splat",
+      "status": 301,
+      "force": true
+    },
+    {
+      "from": "https://devops.zqsdev.com/*",
+      "to": "https://cv.zqsdev.com/:splat",
+      "status": 301,
+      "force": true
+    },
+    {
+      "from": "https://software.zqsdev.com/*",
+      "to": "https://cv.zqsdev.com/:splat",
+      "status": 301,
+      "force": true
+    },
+    {
+      "from": "/cv/founding",
+      "to": "https://cv.zqsdev.com/",
+      "status": 301,
+      "force": true
+    },
+    {
+      "from": "/cv/founding/*",
+      "to": "https://cv.zqsdev.com/:splat",
+      "status": 301,
+      "force": true
+    },
+    {
+      "from": "/cv/devops",
+      "to": "https://cv.zqsdev.com/",
+      "status": 301,
+      "force": true
+    },
+    {
+      "from": "/cv/devops/*",
+      "to": "https://cv.zqsdev.com/:splat",
+      "status": 301,
+      "force": true
+    },
+    {
+      "from": "/cv/software",
+      "to": "https://cv.zqsdev.com/",
+      "status": 301,
+      "force": true
+    },
+    {
+      "from": "/cv/software/*",
+      "to": "https://cv.zqsdev.com/:splat",
+      "status": 301,
+      "force": true
+    },
+    {
+      "note": "Public copies on the terminal host share the CV host's canonical URLs. Keep these host-specific: a generic /cv/* redirect can catch the internal rewrite.",
+      "from": "https://zqsdev.com/cv",
+      "to": "https://cv.zqsdev.com/",
+      "status": 301,
+      "force": true
+    },
+    {
+      "from": "https://zqsdev.com/cv/*",
+      "to": "https://cv.zqsdev.com/:splat",
+      "status": 301,
+      "force": true
+    },
+    {
+      "from": "https://www.zqsdev.com/cv",
+      "to": "https://cv.zqsdev.com/",
+      "status": 301,
+      "force": true
+    },
+    {
+      "from": "https://www.zqsdev.com/cv/*",
+      "to": "https://cv.zqsdev.com/:splat",
+      "status": 301,
+      "force": true
+    },
+    {
+      "note": "Root PDF aliases on the terminal host refer to the same canonical downloads.",
+      "from": "https://zqsdev.com/resume.pdf",
+      "to": "https://cv.zqsdev.com/resume.pdf",
+      "status": 301,
+      "force": true
+    },
+    {
+      "from": "https://zqsdev.com/resume-fr.pdf",
+      "to": "https://cv.zqsdev.com/resume-fr.pdf",
+      "status": 301,
+      "force": true
+    },
+    {
+      "from": "https://www.zqsdev.com/resume.pdf",
+      "to": "https://cv.zqsdev.com/resume.pdf",
+      "status": 301,
+      "force": true
+    },
+    {
+      "from": "https://www.zqsdev.com/resume-fr.pdf",
+      "to": "https://cv.zqsdev.com/resume-fr.pdf",
+      "status": 301,
+      "force": true
+    },
+    {
+      "note": "CV host uses the shared /cv directory, including same-origin assets and PDF.",
+      "from": "https://cv.zqsdev.com/*",
+      "to": "/cv/:splat",
+      "status": 200,
+      "force": true
+    },
+    {
+      "note": "Calendly keeps its vanity subdomain but points to the external scheduler.",
+      "from": "https://calendly.zqsdev.com/*",
+      "to": "https://calendly.com/alexandre-zqsdev/30min",
+      "status": 301,
+      "force": true
+    },
+    {
+      "from": "/calendly",
+      "to": "https://calendly.com/alexandre-zqsdev/30min",
+      "status": 301,
+      "force": true
+    },
+    {
+      "note": "Proxy API requests to the self-hosted Axum backend.",
+      "from": "/api/*",
+      "to": "https://api.zqsdev.com/api/:splat",
+      "status": 200,
+      "force": true
+    },
+    {
+      "note": "Fallback only when no file matches; the target does not exist, so unknown paths return 404.",
+      "from": "/*",
+      "to": "static/index.html",
+      "status": 200,
+      "force": false
+    }
+  ],
+  "headers": [
+    {
+      "for": "/*.webp",
+      "values": {
+        "Cache-Control": "public, max-age=31536000, immutable"
+      }
+    },
+    {
+      "for": "/*.png",
+      "values": {
+        "Cache-Control": "public, max-age=31536000, immutable"
+      }
+    },
+    {
+      "for": "/*.svg",
+      "values": {
+        "Cache-Control": "public, max-age=31536000, immutable"
+      }
+    },
+    {
+      "for": "/*.ico",
+      "values": {
+        "Cache-Control": "public, max-age=31536000, immutable"
+      }
+    },
+    {
+      "for": "/index.html",
+      "values": {
+        "Cache-Control": "no-store"
+      }
+    },
+    {
+      "for": "/*.css",
+      "values": {
+        "Cache-Control": "no-store"
+      }
+    },
+    {
+      "for": "/*.pdf",
+      "values": {
+        "Cache-Control": "no-store"
+      }
+    },
+    {
+      "for": "/pkg/*.js",
+      "values": {
+        "Cache-Control": "no-store"
+      }
+    },
+    {
+      "for": "/pkg/*.wasm",
+      "values": {
+        "Cache-Control": "no-store"
+      }
+    },
+    {
+      "for": "/data/*.json",
+      "values": {
+        "Cache-Control": "no-store"
+      }
+    },
+    {
+      "for": "/*.woff2",
+      "values": {
+        "Cache-Control": "public, max-age=31536000, immutable"
+      }
+    },
+    {
+      "for": "/cv/index.html",
+      "values": {
+        "Cache-Control": "public, max-age=0, must-revalidate"
+      }
+    },
+    {
+      "for": "/cv/fr.html",
+      "values": {
+        "Cache-Control": "public, max-age=0, must-revalidate"
+      }
+    },
+    {
+      "for": "/cv/robots.txt",
+      "values": {
+        "Cache-Control": "public, max-age=0, must-revalidate",
+        "Content-Type": "text/plain; charset=utf-8"
+      }
+    },
+    {
+      "for": "/cv/sitemap.xml",
+      "values": {
+        "Cache-Control": "public, max-age=0, must-revalidate",
+        "Content-Type": "application/xml; charset=utf-8"
+      }
+    },
+    {
+      "for": "/cv/llms.txt",
+      "values": {
+        "Cache-Control": "public, max-age=0, must-revalidate",
+        "Content-Type": "text/plain; charset=utf-8"
+      }
+    },
+    {
+      "for": "/resume.pdf",
+      "values": {
+        "Link": "<https://cv.zqsdev.com/>; rel=\"canonical\""
+      }
+    },
+    {
+      "for": "/resume-fr.pdf",
+      "values": {
+        "Link": "<https://cv.zqsdev.com/fr.html>; rel=\"canonical\""
+      }
+    },
+    {
+      "for": "/cv/resume.pdf",
+      "values": {
+        "Link": "<https://cv.zqsdev.com/>; rel=\"canonical\""
+      }
+    },
+    {
+      "for": "/cv/resume-fr.pdf",
+      "values": {
+        "Link": "<https://cv.zqsdev.com/fr.html>; rel=\"canonical\""
+      }
+    }
+  ]
+}

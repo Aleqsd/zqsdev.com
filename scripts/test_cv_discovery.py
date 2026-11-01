@@ -3,7 +3,7 @@
 from fnmatch import fnmatchcase
 from pathlib import Path
 import re
-import tomllib
+import json
 import unittest
 from urllib.parse import urlparse
 from urllib.robotparser import RobotFileParser
@@ -13,7 +13,7 @@ import xml.etree.ElementTree as ET
 ROOT = Path(__file__).resolve().parents[1]
 CV = ROOT / "static" / "cv"
 ORIGIN = "https://cv.zqsdev.com"
-CONFIG = tomllib.loads((ROOT / "netlify.toml").read_text(encoding="utf-8"))
+CONFIG = json.loads((ROOT / "site-rules.json").read_text(encoding="utf-8"))
 
 
 def resolve(url):

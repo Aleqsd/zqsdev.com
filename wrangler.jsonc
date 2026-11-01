@@ -1,0 +1,29 @@
+// Cloudflare Worker serving zqsdev.com, www, cv, calendly, founding, devops and software.
+// Rules: site-rules.json, applied by worker/index.js. Workers Builds runs `npx wrangler deploy` on every push to main.
+// Each hostname below needs a proxied DNS record in the zqsdev.com zone.
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "zqsdev",
+  "main": "worker/index.js",
+  "compatibility_date": "2026-10-01",
+  "account_id": "7b9ee223c6a171ffa7672f2c34bf7c16",
+  "assets": {
+    "directory": "./static",
+    "binding": "ASSETS",
+    "run_worker_first": true,
+    "html_handling": "none",
+    "not_found_handling": "none"
+  },
+  "routes": [
+    { "pattern": "zqsdev.com/*", "zone_name": "zqsdev.com" },
+    { "pattern": "www.zqsdev.com/*", "zone_name": "zqsdev.com" },
+    { "pattern": "cv.zqsdev.com/*", "zone_name": "zqsdev.com" },
+    { "pattern": "calendly.zqsdev.com/*", "zone_name": "zqsdev.com" },
+    { "pattern": "founding.zqsdev.com/*", "zone_name": "zqsdev.com" },
+    { "pattern": "devops.zqsdev.com/*", "zone_name": "zqsdev.com" },
+    { "pattern": "software.zqsdev.com/*", "zone_name": "zqsdev.com" }
+  ],
+  "workers_dev": true,
+  "preview_urls": false,
+  "observability": { "enabled": true }
+}

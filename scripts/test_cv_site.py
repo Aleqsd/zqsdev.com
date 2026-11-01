@@ -4,7 +4,6 @@ from html.parser import HTMLParser
 from pathlib import Path
 import json
 import re
-import tomllib
 import unittest
 from urllib.parse import urlparse
 
@@ -210,7 +209,7 @@ class PublicCvTests(unittest.TestCase):
             self.assertLess(len(font), 100 * 1024)
 
     def test_legacy_links_reach_the_single_resume(self):
-        rules = tomllib.loads((ROOT / "netlify.toml").read_text(encoding="utf-8"))["redirects"]
+        rules = json.loads((ROOT / "site-rules.json").read_text(encoding="utf-8"))["redirects"]
 
         def resolve(url):
             # Resolve this site's exact / wildcard rules, stopping at a rewrite.

@@ -8,12 +8,10 @@ HOST ?= 0.0.0.0
 SERVER_PORT ?= 3000
 STATIC_PORT ?= 8765
 SERVER_MANIFEST = server/Cargo.toml
-NETLIFY_BIN ?= netlify
-NETLIFY_FLAGS ?=
+WRANGLER ?= npx wrangler
 PROJECT_VERSION := $(shell cat VERSION 2>/dev/null)
 LOCAL_COMMIT := $(shell git rev-parse --short HEAD 2>/dev/null)
 BUILD_ID := $(or $(LOCAL_COMMIT),$(PROJECT_VERSION),dev)
-NETLIFY_MESSAGE ?= Deploy $(PROJECT_VERSION)
 AUTOTEST_FLAGS ?=
 VERSION_URL ?= https://www.zqsdev.com/api/version
 DEPLOY_HOST ?= ovh
@@ -76,13 +74,13 @@ serve: build
 serve-static: build
 	@python3 scripts/serve.py --root $(STATIC_DIR) --host $(HOST) --port $(STATIC_PORT)
 
+# Serve the Cloudflare Worker locally (send x-test-host to act as another hostname).
 deploy-preview: build
-	@command -v $(NETLIFY_BIN) >/dev/null 2>&1 || { echo "netlify CLI not found. Install with 'npm install -g netlify-cli'."; exit 1; }
-	$(NETLIFY_BIN) deploy --dir $(STATIC_DIR) --message "$(NETLIFY_MESSAGE)" $(NETLIFY_FLAGS)
+	$(WRANGLER) dev
 
+# Workers Builds deploys main on every push; this is the manual equivalent.
 deploy-prod: build
-	@command -v $(NETLIFY_BIN) >/dev/null 2>&1 || { echo "netlify CLI not found. Install with 'npm install -g netlify-cli'."; exit 1; }
-	$(NETLIFY_BIN) deploy --dir $(STATIC_DIR) --prod --message "$(NETLIFY_MESSAGE)" $(NETLIFY_FLAGS)
+	$(WRANGLER) deploy
 
 deploy: deploy-prod
 
