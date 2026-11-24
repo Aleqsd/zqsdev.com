@@ -1,0 +1,2 @@
+# Local leftovers of the retired RAG pipeline (git-ignored) must never be uploaded with the assets.
+data/rag_chunks.db
