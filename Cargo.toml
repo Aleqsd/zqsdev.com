@@ -1,5 +1,4 @@
 [workspace]
-members = ["server"]
 # api/ is the zqsdev-api Worker: a standalone workspace with its own Cargo.lock (worker 0.9.0 needs a
 # newer wasm-bindgen than the frontend's locked 0.2.105).
 exclude = ["api"]

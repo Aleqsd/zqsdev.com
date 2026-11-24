@@ -17,7 +17,6 @@ target/
 
 # Runtime logs
 server.log
-server/Cargo.lock
 static/data/rag_chunks.db
 
 # Local Netlify folder
