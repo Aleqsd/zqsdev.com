@@ -106,7 +106,7 @@ make dev-api     # cd api && npx wrangler dev --local --port 8788 --var OPENAI_B
 make dev-site    # npx wrangler dev --local --port 8787 --infer-origin-from-routes=false
 ```
 
-The site's `API` service binding connects to the local API session: open `http://127.0.0.1:8787`. The API keeps its Durable Object SQLite under `api/.wrangler/`. With `DEV_API_FLAGS=` the API calls the real OpenAI with the key of `api/.dev.vars` (about $0.0005 a question). `make dev` runs both Workers in one experimental multi-config session.
+The site's `API` service binding connects to the local API session: open `http://127.0.0.1:8787`. The API keeps its Durable Object SQLite under `api/.wrangler/`. With `DEV_API_FLAGS=` the API calls the real OpenAI with the key of `api/.dev.vars` (about $0.0005 a question). Note that wrangler also reads `OPENAI_API_KEY` and `ADMIN_TOKEN` from your shell environment, and those values win over `api/.dev.vars`. `make dev` runs both Workers in one experimental multi-config session (without the stub: AI then calls the real OpenAI).
 
 `make test-api-local` (or `python3 scripts/test_api_local.py`) starts the stub and both Workers itself, checks every route through the binding (visitor IP, slots, timeout, transactionSync rollback, admin operations, the 502 of a disconnected binding) and stops everything.
 

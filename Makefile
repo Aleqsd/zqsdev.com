@@ -81,9 +81,10 @@ fmt:
 serve-static: build
 	@python3 scripts/serve.py --root $(STATIC_DIR) --host $(HOST) --port $(STATIC_PORT)
 
-# Site and API Worker in one wrangler session (experimental multi-config; the three-terminal form below is the reference).
+# Site and API Worker in one wrangler session (experimental multi-config; the three-terminal form below is
+# the reference). It runs from api/ because wrangler starts the API's custom build in its own working directory.
 dev:
-	$(WRANGLER) dev -c wrangler.jsonc -c api/wrangler.jsonc --infer-origin-from-routes=false
+	cd api && $(WRANGLER) dev -c ../wrangler.jsonc -c wrangler.jsonc --infer-origin-from-routes=false
 
 # The three-terminal local stack: `make dev-stub`, `make dev-api`, `make dev-site` (its API binding connects to dev-api).
 dev-stub:

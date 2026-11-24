@@ -14,8 +14,9 @@ message, can trigger failures:
     __badsource__  a 2xx answer citing an unknown source ID
     __big__        a 2xx body of about 100 KB (the API refuses replies above 64 KiB)
 
-GET /__stats returns the number of completion requests and how many carried a bearer token.
-The token itself is never stored or printed.
+GET /__stats returns the number of completion requests, how many carried a bearer token and,
+with --require-key-prefix, how many carried another key (refused with 401). The token itself is
+never stored or printed.
 """
 
 from __future__ import annotations
@@ -40,6 +41,7 @@ class Stats:
     lock = threading.Lock()
     requests = 0
     with_bearer = 0
+    foreign_keys = 0
     magic: dict[str, int] = {}
 
     @classmethod
@@ -51,9 +53,15 @@ class Stats:
                 cls.magic[magic] = cls.magic.get(magic, 0) + 1
 
     @classmethod
+    def count_foreign_key(cls) -> None:
+        with cls.lock:
+            cls.foreign_keys += 1
+
+    @classmethod
     def snapshot(cls) -> dict:
         with cls.lock:
-            return {"requests": cls.requests, "with_bearer": cls.with_bearer, "magic": dict(cls.magic)}
+            return {"requests": cls.requests, "with_bearer": cls.with_bearer,
+                    "foreign_keys": cls.foreign_keys, "magic": dict(cls.magic)}
 
 
 def completion(model: str, content: str, prompt_tokens: int) -> dict:
@@ -89,6 +97,7 @@ def magic_of(question: str) -> str | None:
 class Handler(BaseHTTPRequestHandler):
     server_version = "openai-stub/1.0"
     quiet = False
+    required_key_prefix = ""
 
     def log_message(self, fmt: str, *args) -> None:  # noqa: D401 - http.server API
         if not self.quiet:
@@ -122,6 +131,11 @@ class Handler(BaseHTTPRequestHandler):
         if not bearer:
             self.reply(401, {"error": {"message": "Missing bearer token", "type": "invalid_request_error"}})
             return
+        if self.required_key_prefix and not authorization[len("Bearer "):].startswith(self.required_key_prefix):
+            # A real key reached the stub: refuse it, so a local test can never pass with one.
+            Stats.count_foreign_key()
+            self.reply(401, {"error": {"message": "Unexpected API key for the local stub", "type": "invalid_request_error"}})
+            return
         if magic == "__429__":
             self.reply(429, {"error": {"message": "Rate limit reached (stub)", "type": "requests", "code": "rate_limit_exceeded"}})
             return
@@ -152,8 +166,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--host", default="127.0.0.1", help="Address to listen on (default: %(default)s)")
     parser.add_argument("--port", type=int, default=9911, help="Port to listen on (default: %(default)s)")
     parser.add_argument("--quiet", action="store_true", help="Do not log each request")
+    parser.add_argument("--require-key-prefix", default="",
+                        help="Answer 401 unless the bearer key starts with this (e.g. sk-local-)")
     args = parser.parse_args(argv)
     Handler.quiet = args.quiet
+    Handler.required_key_prefix = args.require_key_prefix
     server = ThreadingHTTPServer((args.host, args.port), Handler)
     server.daemon_threads = True
     print(f"openai-stub listening on http://{args.host}:{args.port}/v1", flush=True)

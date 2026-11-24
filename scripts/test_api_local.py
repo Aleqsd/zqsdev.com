@@ -53,6 +53,9 @@ DATA_FILES = {
     "faqs": "faq.json",
 }
 FAIL_AFTER_HEADER = "X-Zqs-Fail-After"
+# Never handed to the local wrangler sessions.
+SECRET_ENV = ("OPENAI_API_KEY", "ADMIN_TOKEN", "ZQS_ADMIN_TOKEN", "CLOUDFLARE_API_TOKEN",
+              "CLOUDFLARE_ACCOUNT_ID", "CF_API_TOKEN")
 HSTS = "max-age=31536000"
 USER_AGENT = "zqsdev-local-test/1.0"
 FALLBACK_ANSWER = (
@@ -389,6 +392,7 @@ class Suite:
         stub = self.stub_stats()
         expect(stub["requests"] == stub_before + 1, "expected exactly one provider call")
         expect(stub["with_bearer"] == stub["requests"], "a provider call lacked the bearer key")
+        expect(stub.get("foreign_keys", 0) == 0, "the API sent a key other than the local placeholder")
         lines = self.export("questions", after=str(before["next_seq"] - 1))
         question = [line for line in lines if line["entry_type"] == "ai_question" and marker in (line["question"] or "")]
         expect(len(question) == 1, f"question row not exported: {lines}")
@@ -730,8 +734,9 @@ def main(argv=None) -> int:
             token = secrets.token_urlsafe(32)
             env_file = temp / "api.env"
             env_file.write_text(f"OPENAI_API_KEY=sk-local-placeholder\nADMIN_TOKEN={token}\n", encoding="utf-8")
-            env = {key: value for key, value in os.environ.items()
-                   if key not in ("CLOUDFLARE_API_TOKEN", "CLOUDFLARE_ACCOUNT_ID", "CF_API_TOKEN")}
+            # wrangler lets process.env override the env file: drop real credentials so the local
+            # Workers only ever see the throwaway values above (and never reach Cloudflare).
+            env = {key: value for key, value in os.environ.items() if key.upper() not in SECRET_ENV}
             env["WRANGLER_SEND_METRICS"] = "false"
             env.pop("ZQS_FAULT_INJECTION", None)
             wrangler = args.wrangler.split()
@@ -740,7 +745,8 @@ def main(argv=None) -> int:
             print(f"Temporary directory: {temp}", flush=True)
 
             processes.append(Process("openai stub", [sys.executable, str(ROOT / "scripts" / "openai_stub.py"),
-                                                     "--port", str(args.stub_port), "--quiet"],
+                                                     "--port", str(args.stub_port), "--quiet",
+                                                     "--require-key-prefix", "sk-local-"],
                                      ROOT, env, temp / "stub.log"))
             stub_process = processes[-1]
             wait_for("the OpenAI stub", lambda: http("GET", f"{stub}/__stats", timeout=2).status == 200, 30, stub_process)
