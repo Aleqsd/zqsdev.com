@@ -2,10 +2,15 @@
 
 /// `ADMIN_TOKEN` shorter than this disables every `/api/admin/*` route.
 pub const MIN_ADMIN_TOKEN_CHARS: usize = 32;
+/// Start of the public placeholder that `api/.dev.vars.example` once shipped: never a secret.
+pub const PLACEHOLDER_PREFIX: &str = "replace-with";
 
-/// The configured admin secret when it is long enough to enable the admin routes.
+/// The configured admin secret when it can enable the admin routes: long enough and not a
+/// documented placeholder.
 pub fn usable_token(secret: Option<String>) -> Option<String> {
-    secret.filter(|t| t.chars().count() >= MIN_ADMIN_TOKEN_CHARS)
+    secret.filter(|t| {
+        t.chars().count() >= MIN_ADMIN_TOKEN_CHARS && !t.starts_with(PLACEHOLDER_PREFIX)
+    })
 }
 
 /// Compares the expected token with a candidate in time that depends only on their lengths.
@@ -35,5 +40,10 @@ mod tests {
         assert_eq!(usable_token(Some("x".repeat(31))), None);
         assert_eq!(usable_token(Some("x".repeat(32))), Some("x".repeat(32)));
         assert_eq!(usable_token(None), None);
+        assert_eq!(usable_token(Some(String::new())), None);
+        // The 68-character placeholder of earlier `.dev.vars.example` files is public.
+        let placeholder = "replace-with-python3-c-import-secrets-print-secrets-token_urlsafe-32";
+        assert!(placeholder.len() >= MIN_ADMIN_TOKEN_CHARS);
+        assert_eq!(usable_token(Some(placeholder.to_string())), None);
     }
 }

@@ -37,3 +37,7 @@ api/.dev.vars.*
 
 # Copies of the VPS spend ledger made for the import (private, never committed)
 ai-budget*.json
+
+# Admin exports: visitor IPs, questions, answers and commands (private, never committed)
+*.ndjson
+exports/

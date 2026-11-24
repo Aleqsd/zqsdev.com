@@ -10,8 +10,8 @@ Through the site Worker and its API service binding, it checks:
      settled at their actual usage cost, and leave no slot in flight;
   3. disconnect: a question whose client gives up after 1 s is still answered and settled
      within 20 s (the site's waitUntil keeps the API call alive), with no slot in flight.
-It reads the ledger through the admin API: the token comes from ZQS_ADMIN_TOKEN or a prompt
-and is never printed.
+It reads the ledger through the admin API: the token comes from ZQS_ADMIN_TOKEN or a prompt,
+is never printed, and is only sent over https (plain http only to this machine).
 """
 
 from __future__ import annotations
@@ -24,17 +24,29 @@ import socket
 import sys
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 import uuid
 from ipaddress import ip_address
 from typing import Optional
 
 USER_AGENT = "zqsdev-cutover-check/1.0"
+LOOPBACK_HOSTS = ("127.0.0.1", "localhost", "::1")
 QUESTION = "In one sentence, what is Alexandre's current role?"
 
 
 class CheckFailed(Exception):
     pass
+
+
+def checked_base_url(url: str) -> str:
+    """The admin token travels in request bodies: https only, or plain http to this machine."""
+    parts = urllib.parse.urlsplit(url.strip())
+    host = (parts.hostname or "").lower()
+    if host and (parts.scheme == "https" or (parts.scheme == "http" and host in LOOPBACK_HOSTS)):
+        return url.strip().rstrip("/")
+    raise CheckFailed(f"--base-url must be an https:// URL (plain http:// only for 127.0.0.1, localhost or ::1), "
+                      f"not {url!r}: the admin token would cross the network in clear text")
 
 
 def post(url: str, body: dict, timeout: float):
@@ -148,9 +160,14 @@ def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description="Verify the zqsdev-api cut-over on the real path (4 paid questions).")
     parser.add_argument("--base-url", default="https://zqsdev.com", help="Site to check (default: %(default)s)")
     args = parser.parse_args(argv)
+    try:
+        base = checked_base_url(args.base_url)
+    except CheckFailed as error:
+        print(f"FAIL  {error}")
+        return 2
     token = os.environ.get("ZQS_ADMIN_TOKEN") or getpass.getpass("Admin token: ")
     try:
-        results = Cutover(args.base_url, token).run()
+        results = Cutover(base, token).run()
     except CheckFailed as error:
         print(f"FAIL  {error}")
         return 1

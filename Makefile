@@ -62,6 +62,7 @@ test:
 	python3 -m unittest scripts.test_knowledge
 	python3 -m unittest scripts.test_cv_site
 	python3 -m unittest scripts.test_cv_discovery
+	python3 -m unittest scripts.test_ops_scripts
 	wasm-pack test --node
 	cargo test --manifest-path $(API_MANIFEST) --lib
 

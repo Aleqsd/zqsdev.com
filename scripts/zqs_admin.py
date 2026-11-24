@@ -3,7 +3,7 @@
 
     python3 scripts/zqs_admin.py stats
     python3 scripts/zqs_admin.py export --table questions --last 50
-    python3 scripts/zqs_admin.py export --table commands --out commands.ndjson
+    python3 scripts/zqs_admin.py export --table commands --out ~/zqs-exports/commands.ndjson
     python3 scripts/zqs_admin.py export --table ledger --vps-json --out ai-budget.json
     python3 scripts/zqs_admin.py import-ledger --file ai-budget.snapshot.json
     python3 scripts/zqs_admin.py import-ledger --file ai-budget.final.json --close
@@ -13,7 +13,11 @@
 The admin token comes from the ZQS_ADMIN_TOKEN environment variable, or is asked for without
 echo. It travels only in the JSON body: never in a URL, a header or a command-line argument, and
 it is never printed. --api selects the base URL (default https://zqsdev.com; the canary is
-https://zqsdev-api.aleqsd.workers.dev).
+https://zqsdev-api.aleqsd.workers.dev); it must be https://, plain http:// only for this machine.
+
+Exports hold visitor IPs, questions, answers and commands, and the repository is public: --out
+refuses a path that git would track (write exports outside the repository; *.ndjson and
+ai-budget*.json are git-ignored anyway) and creates the file readable by its owner only.
 """
 
 from __future__ import annotations
@@ -22,15 +26,18 @@ import argparse
 import getpass
 import json
 import os
+import subprocess
 import sys
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
 USER_AGENT = "zqsdev-admin/1.0"
+LOOPBACK_HOSTS = ("127.0.0.1", "localhost", "::1")
 # Charges per import request: the API refuses more (each charge costs Durable Object CPU).
 CHUNK_MAX = 25
 # Deletes count as Durable Object rows written (Free: 100,000 per day for the whole account). The
@@ -52,6 +59,50 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
 
 
 OPENER = urllib.request.build_opener(NoRedirect)
+
+
+def checked_base_url(url: str) -> str:
+    """The token travels in the request body: https only, or plain http to this machine."""
+    parts = urllib.parse.urlsplit(url.strip())
+    host = (parts.hostname or "").lower()
+    if host and (parts.scheme == "https" or (parts.scheme == "http" and host in LOOPBACK_HOSTS)):
+        return url.strip().rstrip("/")
+    raise AdminError(f"--api must be an https:// URL (plain http:// only for 127.0.0.1, localhost or ::1), "
+                     f"not {url!r}: the admin token would cross the network in clear text")
+
+
+def private_output(out: str) -> Path:
+    """Where an export may go: never a path that git would track, since the repository is public.
+    Missing directories are created (owner only) once the path is accepted."""
+    target = Path(out).expanduser().resolve()
+    anchor = next((folder for folder in target.parents if folder.is_dir()), None)
+    tracked_area = ignored = False
+    if anchor is not None:
+        try:
+            inside = subprocess.run(["git", "-C", str(anchor), "rev-parse", "--is-inside-work-tree"],
+                                    capture_output=True, text=True, timeout=10)
+            tracked_area = inside.returncode == 0 and inside.stdout.strip() == "true"
+            ignored = tracked_area and subprocess.run(
+                ["git", "-C", str(anchor), "check-ignore", "-q", "--", str(target)],
+                capture_output=True, timeout=10).returncode == 0
+        except (OSError, subprocess.SubprocessError):
+            tracked_area = False  # no git to commit it with
+    if tracked_area and not ignored:
+        raise AdminError(f"{out} is inside a git work tree and not git-ignored: exports hold visitor IPs and "
+                         "free text, so write them outside the repository (or name them *.ndjson)")
+    target.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    return target
+
+
+def write_private(path: Path, text: str) -> None:
+    """Creates or replaces the file, readable and writable by its owner only."""
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as handle:
+        handle.write(text)
+    try:
+        os.chmod(path, 0o600)  # a file that already existed keeps its old mode otherwise
+    except OSError:
+        pass
 
 
 class Client:
@@ -122,6 +173,7 @@ def export_pages(client: Client, table: str, after: str):
 def cmd_export(client: Client, args) -> int:
     if args.vps_json and args.table != "ledger":
         raise AdminError("--vps-json only applies to --table ledger")
+    out = private_output(args.out) if args.out else None
     after = args.after
     if args.last is not None:
         if args.last <= 0:
@@ -138,9 +190,9 @@ def cmd_export(client: Client, args) -> int:
         text = "[" + ",".join(lines) + "]"
     else:
         text = "".join(line + "\n" for line in lines)
-    if args.out:
-        Path(args.out).write_text(text, encoding="utf-8", newline="\n")
-        print(f"[export] {len(lines)} line(s) written to {args.out}", file=sys.stderr)
+    if out is not None:
+        write_private(out, text)
+        print(f"[export] {len(lines)} line(s) written to {out}", file=sys.stderr)
     else:
         sys.stdout.write(text)
         if args.vps_json:
@@ -245,7 +297,7 @@ def parse_args(argv=None) -> argparse.Namespace:
     export.add_argument("--table", required=True, choices=("questions", "commands", "ledger"))
     export.add_argument("--after", default="0", help="Cursor to start after (default: the beginning)")
     export.add_argument("--last", type=int, help="Only the last N rows")
-    export.add_argument("--out", help="Write to this file instead of stdout")
+    export.add_argument("--out", help="Write to this file instead of stdout (outside the repository, or git-ignored)")
     export.add_argument("--vps-json", action="store_true",
                         help="Ledger only: one JSON array in the VPS ai-budget.json format")
 
@@ -268,11 +320,16 @@ def parse_args(argv=None) -> argparse.Namespace:
 
 def main(argv=None) -> int:
     args = parse_args(argv)
+    try:
+        api = checked_base_url(args.api)
+    except AdminError as error:
+        print(f"[zqs-admin] {error}", file=sys.stderr)
+        return 2
     token = os.environ.get("ZQS_ADMIN_TOKEN") or getpass.getpass("Admin token: ")
     if len(token) < 32:
         print("The admin token has at least 32 characters.", file=sys.stderr)
         return 2
-    client = Client(args.api, token, args.timeout)
+    client = Client(api, token, args.timeout)
     handlers = {
         "stats": cmd_stats,
         "export": cmd_export,

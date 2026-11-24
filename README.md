@@ -97,7 +97,7 @@ make serve-static STATIC_PORT=9000
 `make build` always refreshes `static/pkg/` and `static/style.min.css`, both of which must ship alongside the rest of `static/` for deployment.
 
 ### 🧪 Local development of the full stack
-Prerequisites: `rustup target add wasm32-unknown-unknown`, wrangler 4.156.0 (`npx wrangler`), Python 3. The API build installs `worker-build@0.9.0` itself. Copy `api/.dev.vars.example` to `api/.dev.vars` (git-ignored) and set an admin token of at least 32 characters.
+Prerequisites: `rustup target add wasm32-unknown-unknown`, wrangler 4.156.0 (`npx wrangler`), Python 3. The API build installs `worker-build@0.9.0` itself. Copy `api/.dev.vars.example` to `api/.dev.vars` (git-ignored); its `ADMIN_TOKEN` is empty, which keeps `/api/admin/*` disabled until you paste a generated token of at least 32 characters.
 
 Offline, with no OpenAI cost, in three terminals:
 

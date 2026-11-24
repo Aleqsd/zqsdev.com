@@ -1,6 +1,7 @@
 # Local secrets for `wrangler dev` in api/ (copy to api/.dev.vars, which git ignores; never commit it).
 # A real OpenAI key only when testing against OpenAI; with scripts/openai_stub.py any non-blank value works.
 OPENAI_API_KEY=sk-local-placeholder
-# At least 32 characters, otherwise /api/admin/* answers 404. Generate one with:
+# Empty keeps /api/admin/* disabled (404). To use the admin routes locally, paste a token of at
+# least 32 characters generated with:
 #   python3 -c "import secrets; print(secrets.token_urlsafe(32))"
-ADMIN_TOKEN=replace-with-python3-c-import-secrets-print-secrets-token_urlsafe-32
+ADMIN_TOKEN=
