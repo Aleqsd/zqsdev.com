@@ -48,8 +48,10 @@ pub struct WorkerPlatform {
     env: Env,
     cfg: Rc<Config>,
     throttle: Rc<Throttle>,
+    /// The request's `X-Zqs-Fail-After` value (local fault injection), shared with the clone that
+    /// runs the settlement retry.
     #[cfg(zqs_fault_injection)]
-    fail_after: Option<String>,
+    fail_after: Rc<std::cell::RefCell<Option<String>>>,
 }
 
 fn transport(error: impl std::fmt::Display) -> PlatformError {
@@ -63,16 +65,31 @@ impl WorkerPlatform {
             cfg,
             throttle: THROTTLE.with(Rc::clone),
             #[cfg(zqs_fault_injection)]
-            fail_after: _req.headers().get(FAIL_AFTER_HEADER).ok().flatten(),
+            fail_after: Rc::new(std::cell::RefCell::new(
+                _req.headers().get(FAIL_AFTER_HEADER).ok().flatten(),
+            )),
         }
     }
 
-    fn ledger_request(&self, body: &str) -> worker::Result<Request> {
+    /// The fault to forward with this op: `<n>` goes with every ledger call of the request,
+    /// `<op>:<n>` only with the first call of that op (so a settlement retry goes through).
+    #[cfg(zqs_fault_injection)]
+    fn fault_for(&self, op: &str) -> Option<String> {
+        let mut slot = self.fail_after.try_borrow_mut().ok()?;
+        let value = slot.clone()?;
+        match value.split_once(':') {
+            Some((target, _)) if target == op => slot.take(),
+            Some(_) => None,
+            None => Some(value),
+        }
+    }
+
+    fn ledger_request(&self, _op: &str, body: &str) -> worker::Result<Request> {
         let headers = Headers::new();
         headers.set("Content-Type", APPLICATION_JSON)?;
         #[cfg(zqs_fault_injection)]
-        if let Some(writes) = &self.fail_after {
-            headers.set(FAIL_AFTER_HEADER, writes)?;
+        if let Some(fault) = self.fault_for(_op) {
+            headers.set(FAIL_AFTER_HEADER, &fault)?;
         }
         let mut init = RequestInit::new();
         init.with_method(Method::Post)
@@ -85,7 +102,7 @@ impl WorkerPlatform {
     /// Object always answers 200; anything else is a transport failure.
     async fn call(&self, op: &LedgerOp, timeout: Duration) -> Result<DoReply, PlatformError> {
         let body = serde_json::to_string(op).map_err(transport)?;
-        let request = self.ledger_request(&body).map_err(transport)?;
+        let request = self.ledger_request(op.name(), &body).map_err(transport)?;
         let stub = self
             .env
             .durable_object(LEDGER_BINDING)

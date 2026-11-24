@@ -50,6 +50,7 @@ An immersive single-page web terminal that reveals Alexandre DO-O ALMEIDA’s r�
 │   ├── live_smoke_test.py  # Production smoke test (nightly in GitHub Actions)
 │   ├── zqs_admin.py      # Admin client for the API ledger (stats, export, import, purge)
 │   ├── verify_api_deploy.py  # Post-deploy check of the API Worker, with rollback
+│   ├── verify_cutover.py # One-off real-path checks of the cut-over (visitor IP, settlement)
 │   ├── test_api_local.py # Local end-to-end test of both Workers
 │   ├── openai_stub.py    # Local stand-in for OpenAI
 │   ├── minify_css.py     # CSS minifier invoked by make build

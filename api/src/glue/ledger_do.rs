@@ -87,13 +87,7 @@ impl DurableObject for Ledger {
                 sql: &self.sql,
                 book: &self.book,
                 #[cfg(zqs_fault_injection)]
-                fail_after: Cell::new(
-                    req.headers()
-                        .get(super::platform::FAIL_AFTER_HEADER)
-                        .ok()
-                        .flatten()
-                        .and_then(|value| value.trim().parse::<u32>().ok()),
-                ),
+                fail_after: Cell::new(injected_fault(&req, &body)),
             };
             let level = self.cfg.log_level;
             let sink = move |line_level: Level, msg: &'static str, fields: Value| {
@@ -125,6 +119,28 @@ impl DurableObject for Ledger {
         }
         Ok(builder.fixed(reply.body))
     }
+}
+
+/// Local fault injection: `X-Zqs-Fail-After: <n>` fails the request's first transaction after
+/// `n` writes; `<op>:<n>` only when the request carries that op.
+#[cfg(zqs_fault_injection)]
+fn injected_fault(req: &Request, body: &[u8]) -> Option<u32> {
+    let value = req
+        .headers()
+        .get(super::platform::FAIL_AFTER_HEADER)
+        .ok()
+        .flatten()?;
+    let writes = match value.split_once(':') {
+        Some((target, writes)) => {
+            let op: crate::core::ledger::protocol::LedgerOp = serde_json::from_slice(body).ok()?;
+            if op.name() != target {
+                return None;
+            }
+            writes
+        }
+        None => value.as_str(),
+    };
+    writes.trim().parse::<u32>().ok()
 }
 
 /// The `LedgerHost` of one request: the object's storage and its cached book.

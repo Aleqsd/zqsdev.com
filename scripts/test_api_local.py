@@ -560,6 +560,29 @@ class Suite:
         expect([line["command"] for line in lines] == [marker], f"commands after retry: {lines}")
         return "2nd write failed: command row rolled back, 500; retry stored once"
 
+    def check_settlement_retry(self) -> str:
+        before = self.stats()
+        marker = uuid.uuid4().hex[:8]
+        # "finish:1": only the inline settlement fails (after its first write); the retry that the
+        # API schedules with ctx.wait_until goes through.
+        reply = self.ask(f"settlement retry {marker}", ip=self.fake_ip(), headers={FAIL_AFTER_HEADER: "finish:1"})
+        expect(reply.status == 200 and reply.json()["ai_enabled"] is True,
+               f"the answer must be sent despite the failed settlement: {reply.status} {reply.text[:200]}")
+        leased = self.stats()["inflight"]
+        expect(len(leased) == 1, f"the inline settlement should have failed and kept the lease: {leased}")
+        deadline = time.monotonic() + 10
+        while True:
+            lines = self.export("questions", after=str(before["next_seq"] - 1))
+            ids = {line["question_id"] for line in lines
+                   if line["entry_type"] == "ai_question" and marker in (line["question"] or "")}
+            kinds = sorted(line["entry_type"] for line in lines if line["question_id"] in ids)
+            if kinds == ["ai_answer", "ai_question", "ai_usage"] or time.monotonic() > deadline:
+                break
+            time.sleep(0.5)
+        expect(kinds == ["ai_answer", "ai_question", "ai_usage"], f"not settled by the retry: {kinds}")
+        expect(self.stats()["inflight"] == [], "the slot is still leased after the retry")
+        return "inline settlement rolled back (slot still leased), the waitUntil retry settled the row 1 s later"
+
     # -- command log
 
     def check_command_log(self) -> str:
@@ -784,6 +807,7 @@ def main(argv=None) -> int:
             ("Per-IP request limit", suite.check_request_limit),
             ("Admission rollback (transactionSync)", suite.check_admission_rollback),
             ("Command rollback (transactionSync)", suite.check_command_rollback),
+            ("Settlement retry (waitUntil)", suite.check_settlement_retry),
             ("Command log", suite.check_command_log),
             ("Admin rejections", suite.check_admin_rejections),
             ("Admin import and export", suite.check_admin_import_export),
