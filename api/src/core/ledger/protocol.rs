@@ -103,7 +103,8 @@ pub struct CommandOp {
     pub ip: String,
 }
 
-/// A chunk (≤ 250) of VPS ledger charges `{"id","at","usd"}`, validated entry by entry.
+/// A chunk (≤ 25, `IMPORT_MAX`) of VPS ledger charges `{"id","at","usd"}`, validated entry by
+/// entry.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ImportOp {
     pub charges: Vec<Value>,

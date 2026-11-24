@@ -990,7 +990,7 @@ async fn admin_operations() {
         (out.status, body_text(&out).as_str()),
         (400, r#"{"error":"invalid_charge:0"}"#)
     );
-    let many: Vec<Value> = (0..251)
+    let many: Vec<Value> = (0..=crate::core::ledger::IMPORT_MAX)
         .map(|i| json!({"id":i.to_string(),"at":1,"usd":0}))
         .collect();
     let out = send(

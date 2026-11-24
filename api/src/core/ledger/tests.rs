@@ -715,13 +715,24 @@ fn id_keyed_import() {
         l.import(now + 6, json!([{"id":"v9","at":now,"usd":0.1}])),
         LedgerReply::error("import_closed")
     );
-    let too_many: Vec<Value> = (0..251)
-        .map(|i| json!({"id":format!("x{i}"),"at":now,"usd":0.0}))
-        .collect();
     let l = Ledger::generous();
+    let chunk = |n: usize| -> Value {
+        (0..n)
+            .map(|i| json!({"id":format!("x{i}"),"at":now,"usd":0.0}))
+            .collect()
+    };
     assert_eq!(
-        l.import(now, Value::Array(too_many)),
+        l.import(now, chunk(super::IMPORT_MAX + 1)),
         LedgerReply::error("too_many_charges")
+    );
+    assert_eq!(l.count("SELECT COUNT(*) FROM imported"), 0);
+    assert_eq!(
+        l.import(now, chunk(super::IMPORT_MAX)),
+        LedgerReply::Imported {
+            inserted: 25,
+            updated: 0,
+            skipped: 0
+        }
     );
 }
 

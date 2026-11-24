@@ -666,10 +666,20 @@ class Suite:
         expect(not any(line["id"] == old for line in ledger), "a charge older than 30 days was imported")
         questions = self.export("questions", after=str(before["next_seq"] - 1))
         expect(questions == [], "imported charges must not produce question lines")
+        # A full chunk (25 charges) goes through the real Durable Object; one more is refused.
+        full = [{"id": f"{prefix}-chunk-{i}", "at": now - 120, "usd": 0} for i in range(26)]
+        refused = self.admin("import-ledger", {"charges": full})
+        expect(refused.status == 400 and refused.json() == {"error": "too_many_charges"},
+               f"26 charges: {refused.status} {refused.text}")
+        accepted = self.admin("import-ledger", {"charges": full[:25]})
+        expect(accepted.status == 200
+               and accepted.json() == {"status": "imported", "inserted": 25, "updated": 0, "skipped": 0},
+               f"25 charges: {accepted.status} {accepted.text}")
         paged = self.export("commands", limit=1)
         whole = self.export("commands")
         expect(paged == whole and len(whole) > 1, f"paged command export: {len(paged)} vs {len(whole)} lines")
-        return "import inserted/updated/skipped by id, invalid chunk refused, ledger export, 1-row pages followed"
+        return ("import inserted/updated/skipped by id, invalid chunk refused, 25-charge chunk ok and 26 refused, "
+                "ledger export, 1-row pages followed")
 
     def check_admin_rebuild_purge_close(self) -> str:
         before = self.stats()

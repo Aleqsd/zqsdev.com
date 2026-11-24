@@ -31,7 +31,8 @@ from pathlib import Path
 from typing import Optional
 
 USER_AGENT = "zqsdev-admin/1.0"
-CHUNK_MAX = 250
+# Charges per import request: the API refuses more (each charge costs Durable Object CPU).
+CHUNK_MAX = 25
 # Deletes count as Durable Object rows written (Free: 100,000 per day for the whole account). The
 # API stops purging once its daily delete budget is used; this is a second bound per run.
 PURGE_MAX_ROWS = 20_000
@@ -174,6 +175,11 @@ def cmd_import(client: Client, args) -> int:
                 if error.code.startswith("invalid_charge:") and index.isdigit() and int(index) < len(chunk):
                     raise AdminError(f"charge #{start + int(index)} is invalid ({chunk[int(index)]!r}); "
                                      "nothing of this chunk was written") from None
+                if error.code == "ledger_unavailable" and len(chunk) > 1:
+                    smaller = max(1, len(chunk) // 2)
+                    raise AdminError(f"{error} at charges {start}-{start + len(chunk) - 1}. If it repeats, the "
+                                     f"chunk may exceed the Durable Object's CPU limit: run the same command "
+                                     f"again with --chunk {smaller} (the import is idempotent).", error.code) from None
                 raise
             for key in totals:
                 totals[key] += reply.get(key, 0)

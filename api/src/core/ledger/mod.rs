@@ -59,8 +59,10 @@ pub const PURGE_BATCH: i64 = 1_000;
 /// command (its row), counted against `LOG_DELETE_DAILY_ROWS`.
 pub const QUESTION_DELETE_ROWS: i64 = 2;
 pub const COMMAND_DELETE_ROWS: i64 = 1;
-/// Charges per import chunk.
-pub const IMPORT_MAX: usize = 250;
+/// Charges per import chunk. Each costs 3 SQL statements, about 0.1 ms of Durable Object CPU
+/// measured in local workerd: 250 took 23-25 ms, beyond the 10 ms per request assumed on Free
+/// (design risk 3); 25 stay near 2.5 ms.
+pub const IMPORT_MAX: usize = 25;
 /// `text_full` once less than this is left of the text budget.
 pub const TEXT_FULL_MARGIN: i64 = 65_536;
 /// Rebuild counts today's commands among this many recent seqs.
