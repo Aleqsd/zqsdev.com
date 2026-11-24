@@ -151,7 +151,7 @@ If `PUSHOVER_API_TOKEN` and `PUSHOVER_USER_KEY` are present (in the environment,
 ## 🔑 Secrets and Variables
 
 - The API Worker's secrets are `OPENAI_API_KEY` and `ADMIN_TOKEN` (at least 32 characters). Set them in Cloudflare from `api/` with `printf '%s' "$OPENAI_API_KEY" | npx wrangler secret put OPENAI_API_KEY`; never commit them. For local development they go in `api/.dev.vars` (see `api/.dev.vars.example`).
-- Its vars (model, budgets, daily caps, log retention, text budget, log level) live in `api/wrangler.jsonc` and are validated by a test before every deploy.
+- Its vars (model, budgets, daily caps, log retention, text budget, daily delete budget, log level) live in `api/wrangler.jsonc` and are validated by a test before every deploy. The delete budget (`LOG_DELETE_DAILY_ROWS`) bounds the rows that admin purges and log retention delete per UTC day: deletes count as Durable Object rows written, whose Free quota is shared by the whole account.
 - `.env.example` only lists the optional Pushover keys of the smoke test; `.env` and `.env.local` are ignored by git.
 - No other AI provider or vector-database credentials are needed.
 

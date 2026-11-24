@@ -167,6 +167,10 @@ pub enum LedgerReply {
     Purged {
         deleted: i64,
         more: bool,
+        /// Today's delete budget (`LOG_DELETE_DAILY_ROWS`) stops this purge until 00:00 UTC.
+        /// Sent only when true.
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        budget_exhausted: bool,
     },
     Stats(Box<StatsReply>),
     Error {
@@ -264,6 +268,9 @@ pub struct StatsReply {
     pub text_budget_bytes: i64,
     pub text_dropped: i64,
     pub retention_days: i64,
+    /// Rows written today by log deletes (purge and retention), and the daily budget.
+    pub delete_rows_today: i64,
+    pub delete_daily_rows: i64,
     pub maintained_at: i64,
     pub import_closed: bool,
     pub imported_rows: i64,
@@ -356,7 +363,32 @@ mod tests {
         round_trip_reply(LedgerReply::Purged {
             deleted: 1_000,
             more: true,
+            budget_exhausted: false,
         });
+        round_trip_reply(LedgerReply::Purged {
+            deleted: 400,
+            more: true,
+            budget_exhausted: true,
+        });
+        // The flag goes on the wire only when set, so version-1 readers see the same reply.
+        assert_eq!(
+            serde_json::to_string(&LedgerReply::Purged {
+                deleted: 3,
+                more: false,
+                budget_exhausted: false
+            })
+            .unwrap(),
+            r#"{"status":"purged","deleted":3,"more":false}"#
+        );
+        assert_eq!(
+            serde_json::to_string(&LedgerReply::Purged {
+                deleted: 0,
+                more: true,
+                budget_exhausted: true
+            })
+            .unwrap(),
+            r#"{"status":"purged","deleted":0,"more":true,"budget_exhausted":true}"#
+        );
         round_trip_reply(LedgerReply::Stats(Box::new(StatsReply {
             valid: true,
             inflight: vec![Lease {

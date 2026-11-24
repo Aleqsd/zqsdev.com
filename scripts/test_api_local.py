@@ -689,17 +689,26 @@ class Suite:
         while True:
             purge = self.admin("purge", {"table": "commands", "before": int(time.time()) + 1})
             expect(purge.status == 200, f"purge: {purge.text}")
-            deleted += purge.json()["deleted"]
-            if not purge.json()["more"]:
+            reply = purge.json()
+            expect(not reply.get("budget_exhausted"), f"the daily delete budget ran out: {reply}")
+            deleted += reply["deleted"]
+            if not reply["more"]:
                 break
         expect(deleted > 0, "no command was purged")
         expect(self.export("commands") == [], "commands remain after the purge")
+        # Every deleted command is one row written against the daily delete budget.
+        budget = load_jsonc(ROOT / "api" / "wrangler.jsonc")["vars"]["LOG_DELETE_DAILY_ROWS"]
+        counted = self.stats()
+        expect(counted["delete_rows_today"] - before["delete_rows_today"] == deleted,
+               f"delete budget counted {counted['delete_rows_today'] - before['delete_rows_today']} rows for {deleted}")
+        expect(counted["delete_daily_rows"] == int(budget), f"delete budget {counted['delete_daily_rows']}")
         closed = self.admin("import-ledger/close")
         expect(closed.json() == {"status": "done"}, f"close: {closed.text}")
         refused = self.admin("import-ledger", {"charges": []})
         expect(refused.status == 400 and refused.json() == {"error": "import_closed"}, f"after close: {refused.text}")
         expect(self.stats()["import_closed"] is True, "import_closed not reported")
-        return f"rebuild kept every sum, questions within 30 days kept, {deleted} commands purged, import closed"
+        return (f"rebuild kept every sum, questions within 30 days kept, {deleted} commands purged and counted "
+                "against the daily delete budget, import closed")
 
     def check_disconnected_binding(self) -> str:
         if self.stop_api is None:

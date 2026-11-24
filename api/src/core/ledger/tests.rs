@@ -157,10 +157,17 @@ impl Ledger {
     /// Every row of every table, to prove that an op wrote nothing.
     fn snapshot(&self) -> Vec<Vec<Vec<SqlValue>>> {
         let mut store = self.host.store.borrow_mut();
-        ["meta", "questions", "ip_windows", "commands", "imported"]
-            .iter()
-            .map(|t| store.rows(&format!("SELECT * FROM {t}")))
-            .collect()
+        [
+            "meta",
+            "questions",
+            "ip_windows",
+            "commands",
+            "imported",
+            "delete_budget",
+        ]
+        .iter()
+        .map(|t| store.rows(&format!("SELECT * FROM {t}")))
+        .collect()
     }
 
     fn executed(&self) -> Vec<&'static str> {
@@ -797,7 +804,8 @@ fn purge_never_deletes_questions_inside_the_month_window() {
         purged,
         LedgerReply::Purged {
             deleted: 1,
-            more: false
+            more: false,
+            budget_exhausted: false
         }
     );
     assert_eq!(
@@ -817,7 +825,8 @@ fn purge_never_deletes_questions_inside_the_month_window() {
         purged,
         LedgerReply::Purged {
             deleted: 1,
-            more: false
+            more: false,
+            budget_exhausted: false
         }
     );
     assert_eq!(l.count("SELECT COUNT(*) FROM commands"), 1);
@@ -903,6 +912,151 @@ fn maintenance_batches_and_backlog_rerun() {
         1
     );
     assert_eq!(keep.logged("🧹 Ledger maintenance"), 1);
+}
+
+/// Old rows for the delete tests: `commands` and `questions` rows at `old`, seqs from 1,000.
+fn old_rows(l: &Ledger, old: i64, commands: usize, questions: usize, maintained_at: i64) {
+    let mut sql_text = String::from("BEGIN;");
+    for i in 0..commands {
+        sql_text.push_str(&format!(
+            "INSERT INTO commands (seq, at, command, command_len, mode, ip) VALUES ({}, {old}, 'abc', 3, 'classic', 'x');",
+            1_000 + i
+        ));
+    }
+    for i in 0..questions {
+        sql_text.push_str(&format!(
+            "INSERT INTO questions (seq, qid, at, nusd, state, lease_until, question) VALUES ({}, 'q{i}', {old}, 5, 1, 0, 'ab');",
+            1_000 + i
+        ));
+    }
+    sql_text.push_str(&format!(
+        "UPDATE meta SET cmd_next_seq = 5000, next_seq = 5000, maintained_at = {maintained_at}; COMMIT;"
+    ));
+    l.exec(&sql_text);
+    l.host.evict();
+}
+
+#[test]
+fn purges_stop_at_the_daily_delete_budget() {
+    // 1,000 rows written per UTC day: 500 questions (row + index entry) or 1,000 commands.
+    let l = Ledger::new(&[("LOG_DELETE_DAILY_ROWS", "1000")]);
+    let now = DAY0 + 60 * 86_400;
+    l.admitted(now - 7_200, "a", 1_000);
+    let old = now - 40 * 86_400;
+    old_rows(&l, old, 1_500, 600, now);
+    let purge = |table: &str, at: i64, before: i64| {
+        l.op(
+            at,
+            LedgerOp::Purge(PurgeOp {
+                table: table.into(),
+                before,
+            }),
+        )
+    };
+    let old_count =
+        |table: &str| l.count(&format!("SELECT COUNT(*) FROM {table} WHERE at = {old}"));
+
+    assert_eq!(
+        purge("questions", now, now),
+        LedgerReply::Purged {
+            deleted: 500,
+            more: true,
+            budget_exhausted: true
+        }
+    );
+    assert_eq!(old_count("questions"), 100);
+    let s = l.stats(now + 1);
+    assert_eq!((s.delete_rows_today, s.delete_daily_rows), (1_000, 1_000));
+    // Used up for today, whatever the table: nothing is deleted or written.
+    let before = l.snapshot();
+    assert_eq!(
+        purge("commands", now + 10, old),
+        LedgerReply::Purged {
+            deleted: 0,
+            more: true,
+            budget_exhausted: true
+        }
+    );
+    assert_eq!(l.snapshot(), before);
+    assert_eq!(l.logged("🧹 Daily delete budget used"), 1);
+    // The next UTC day has a fresh budget.
+    let tomorrow = now + 86_400;
+    assert_eq!(l.stats(tomorrow).delete_rows_today, 0);
+    assert_eq!(
+        purge("commands", tomorrow, old),
+        LedgerReply::Purged {
+            deleted: 1_000,
+            more: true,
+            budget_exhausted: true
+        }
+    );
+    let after = tomorrow + 86_400;
+    assert_eq!(
+        purge("commands", after, old),
+        LedgerReply::Purged {
+            deleted: 500,
+            more: false,
+            budget_exhausted: false
+        }
+    );
+    assert_eq!(old_count("commands"), 0);
+    assert_eq!(l.stats(after).delete_rows_today, 500);
+    // With room left in today's budget, a purge that runs out of rows is simply done.
+    assert_eq!(
+        purge("questions", after, after),
+        LedgerReply::Purged {
+            deleted: 100,
+            more: false,
+            budget_exhausted: false
+        }
+    );
+    assert_eq!(l.stats(after).delete_rows_today, 700);
+}
+
+#[test]
+fn retention_shares_the_daily_delete_budget() {
+    let l = Ledger::new(&[
+        ("LOG_RETENTION_DAYS", "31"),
+        ("LOG_DELETE_DAILY_ROWS", "1000"),
+    ]);
+    let now = DAY0 + 60 * 86_400;
+    l.admitted(now - 7_200, "a", 1_000);
+    let old = now - 40 * 86_400;
+    old_rows(&l, old, 1_000, 400, now - 3_600);
+    let old_count =
+        |table: &str| l.count(&format!("SELECT COUNT(*) FROM {table} WHERE at = {old}"));
+
+    // 250 questions (500 rows) and 250 commands: 750 of 1,000 used, back in 60 s.
+    assert_eq!(l.command(now, "ls"), LedgerReply::Done);
+    assert_eq!((old_count("questions"), old_count("commands")), (150, 750));
+    assert_eq!(l.meta().maintained_at, now - 3_540);
+    // 125 questions use the rest: no 60 s re-run while the budget is used up.
+    assert_eq!(l.command(now + 60, "ls"), LedgerReply::Done);
+    assert_eq!((old_count("questions"), old_count("commands")), (25, 750));
+    assert_eq!(l.meta().maintained_at, now + 60);
+    assert_eq!(l.logged("🧹 Daily delete budget used"), 1);
+    // An hour later, the same UTC day: nothing deleted.
+    assert_eq!(l.command(now + 3_660, "ls"), LedgerReply::Done);
+    assert_eq!((old_count("questions"), old_count("commands")), (25, 750));
+    assert_eq!(l.meta().maintained_at, now + 3_660);
+    assert_eq!(l.stats(now + 3_661).delete_rows_today, 1_000);
+    let lines: Vec<Value> = l
+        .logs
+        .borrow()
+        .iter()
+        .filter(|(_, msg, _)| *msg == "🧹 Ledger maintenance")
+        .map(|(_, _, fields)| fields.clone())
+        .collect();
+    assert_eq!(lines.len(), 3);
+    assert_eq!(lines[0]["delete_budget_left"], 250);
+    assert_eq!(lines[1]["delete_budget_left"], 0);
+    assert_eq!(lines[2]["deleted_commands"], 0);
+    // The next UTC day: the rest of the questions and a new backlog run of commands.
+    let tomorrow = now + 86_400;
+    assert_eq!(l.command(tomorrow, "ls"), LedgerReply::Done);
+    assert_eq!((old_count("questions"), old_count("commands")), (0, 500));
+    assert_eq!(l.meta().maintained_at, tomorrow - 3_540);
+    assert_eq!(l.stats(tomorrow).delete_rows_today, 25 * 2 + 250);
 }
 
 // ---------------------------------------------------------------- atomicity

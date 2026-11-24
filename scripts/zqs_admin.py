@@ -32,6 +32,9 @@ from typing import Optional
 
 USER_AGENT = "zqsdev-admin/1.0"
 CHUNK_MAX = 250
+# Deletes count as Durable Object rows written (Free: 100,000 per day for the whole account). The
+# API stops purging once its daily delete budget is used; this is a second bound per run.
+PURGE_MAX_ROWS = 20_000
 
 
 class AdminError(Exception):
@@ -194,15 +197,28 @@ def parse_before(value: str) -> int:
 
 
 def cmd_purge(client: Client, args) -> int:
-    deleted, calls = 0, 0
+    if args.max_rows <= 0:
+        raise AdminError("--max-rows must be positive")
+    deleted, calls, stopped = 0, 0, "done"
     while True:
         reply = client.json("purge", {"table": args.table, "before": args.before})
         deleted += reply.get("deleted", 0)
         calls += 1
         if not reply.get("more"):
             break
+        if reply.get("budget_exhausted"):
+            stopped = "daily_budget"
+            print("[purge] the API's daily delete budget (LOG_DELETE_DAILY_ROWS) is used up; run the same "
+                  "command again after 00:00 UTC to continue.", file=sys.stderr)
+            break
+        if deleted >= args.max_rows:
+            stopped = "max_rows"
+            print(f"[purge] stopped after {deleted} rows (--max-rows {args.max_rows}); run the same command "
+                  "again to continue.", file=sys.stderr)
+            break
         time.sleep(0.2)
-    print(json.dumps({"table": args.table, "before": args.before, "deleted": deleted, "calls": calls}))
+    print(json.dumps({"table": args.table, "before": args.before, "deleted": deleted, "calls": calls,
+                      "stopped": stopped}))
     return 0
 
 
@@ -232,10 +248,13 @@ def parse_args(argv=None) -> argparse.Namespace:
     imp.add_argument("--chunk", type=int, default=CHUNK_MAX, help="Charges per request (default: %(default)s)")
     imp.add_argument("--close", action="store_true", help="Close the import afterwards (final import only)")
 
-    purge = sub.add_parser("purge", help="Delete old questions or commands (bounded batches)")
+    purge = sub.add_parser("purge", help="Delete old questions or commands (bounded batches, daily budget)")
     purge.add_argument("--table", required=True, choices=("questions", "commands"))
     purge.add_argument("--before", required=True, type=parse_before,
                        help="Unix seconds or YYYY-MM-DD; questions inside the 30-day window are always kept")
+    purge.add_argument("--max-rows", type=int, default=PURGE_MAX_ROWS,
+                       help="Stop once this many rows are deleted in this run (default: %(default)s); the API "
+                            "also stops at its daily delete budget until 00:00 UTC")
 
     sub.add_parser("rebuild", help="Recompute the window sums and counters from the rows")
     return parser.parse_args(argv)

@@ -3,7 +3,7 @@
 //! `commands` without a bound (checked by `EXPLAIN QUERY PLAN` tests).
 
 /// Schema version 1, created with `IF NOT EXISTS` (additive changes only: rollbacks must work).
-pub const SCHEMA: [&str; 6] = [
+pub const SCHEMA: [&str; 7] = [
     "CREATE TABLE IF NOT EXISTS meta (
   id                 INTEGER PRIMARY KEY CHECK (id = 1),
   schema_version     INTEGER NOT NULL,
@@ -64,6 +64,13 @@ pub const SCHEMA: [&str; 6] = [
   id  TEXT PRIMARY KEY,
   seq INTEGER NOT NULL
 ) WITHOUT ROWID",
+    // Rows written today by log deletes (purge and retention), against `LOG_DELETE_DAILY_ROWS`.
+    // A table of its own, so that adding it stays additive for older databases.
+    "CREATE TABLE IF NOT EXISTS delete_budget (
+  id      INTEGER PRIMARY KEY CHECK (id = 1),
+  day     INTEGER NOT NULL,
+  written INTEGER NOT NULL
+)",
 ];
 
 // ---------------------------------------------------------------- meta
@@ -174,6 +181,14 @@ RETURNING COALESCE(length(CAST(command AS BLOB)), 0)";
 /// Export page: `?` after seq, `?` limit.
 pub const EXPORT_COMMANDS: &str = "SELECT seq, at, command, command_len, mode, ip FROM commands \
 WHERE seq > ? ORDER BY seq LIMIT ?";
+
+// ---------------------------------------------------------------- daily delete budget
+
+/// The UTC day number and the rows written by log deletes that day.
+pub const DELETE_BUDGET_SELECT: &str = "SELECT day, written FROM delete_budget WHERE id = 1";
+/// `?` day, `?` written; one row written.
+pub const DELETE_BUDGET_UPSERT: &str = "INSERT INTO delete_budget (id, day, written) \
+VALUES (1, ?, ?) ON CONFLICT(id) DO UPDATE SET day = excluded.day, written = excluded.written";
 
 // ---------------------------------------------------------------- VPS import
 

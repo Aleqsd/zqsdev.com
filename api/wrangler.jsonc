@@ -24,6 +24,7 @@
     "COMMAND_LOG_DAILY_CAP": "10000",
     "LOG_RETENTION_DAYS": "0",               // 0 = never delete question, answer or command logs
     "LOG_TEXT_BUDGET_MB": "256",
+    "LOG_DELETE_DAILY_ROWS": "20000",        // rows written per UTC day by purges and retention (Free: 100k/day per account)
     "LOG_LEVEL": "info"
   },
   "secrets": { "required": ["OPENAI_API_KEY", "ADMIN_TOKEN"] },

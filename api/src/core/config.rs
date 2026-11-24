@@ -212,12 +212,17 @@ pub struct LedgerConfig {
     pub retention_days: i64,
     /// `LOG_TEXT_BUDGET_MB` in bytes.
     pub text_budget_bytes: i64,
+    /// `LOG_DELETE_DAILY_ROWS`: rows written per UTC day by log deletes (admin purges and
+    /// retention together). Deletes count as Durable Object rows written, whose Free quota
+    /// (100,000 per day) is shared by the whole account.
+    pub delete_daily_rows: i64,
     pub log_level: Level,
 }
 
 pub const DEFAULT_DAILY_MAX_CALLS: i64 = 2_000;
 pub const DEFAULT_COMMAND_DAILY_CAP: i64 = 10_000;
 pub const DEFAULT_TEXT_BUDGET_MB: i64 = 256;
+pub const DEFAULT_DELETE_DAILY_ROWS: i64 = 20_000;
 const MIB: i64 = 1_048_576;
 
 impl LedgerConfig {
@@ -255,6 +260,9 @@ impl LedgerConfig {
                 .unwrap_or(DEFAULT_TEXT_BUDGET_MB)
                 .clamp(1, 768)
                 * MIB,
+            delete_daily_rows: int("LOG_DELETE_DAILY_ROWS")
+                .unwrap_or(DEFAULT_DELETE_DAILY_ROWS)
+                .clamp(1_000, 1_000_000),
             log_level: get("LOG_LEVEL").map_or(Level::Info, |v| Level::parse(&v)),
         }
     }
@@ -387,6 +395,7 @@ mod tests {
         assert_eq!(l.command_daily_cap, 10_000);
         assert_eq!(l.retention_days, 0);
         assert_eq!(l.text_budget_bytes, 256 * 1_048_576);
+        assert_eq!(l.delete_daily_rows, 20_000);
         // Unparseable budget → default; negative or non-finite → invalid.
         let l = LedgerConfig::from_lookup(&lookup(&[("AI_HOUR_BUDGET_USD", "two")]));
         assert_eq!(l.limits.unwrap()[1], 2_000_000_000);
@@ -401,21 +410,27 @@ mod tests {
             ("COMMAND_LOG_DAILY_CAP", "5"),
             ("LOG_RETENTION_DAYS", "7"),
             ("LOG_TEXT_BUDGET_MB", "100000"),
+            ("LOG_DELETE_DAILY_ROWS", "0"),
         ]));
         assert_eq!(l.daily_max_calls, 1);
         assert_eq!(l.command_daily_cap, 120);
         assert_eq!(l.retention_days, 31);
         assert_eq!(l.text_budget_bytes, 768 * 1_048_576);
+        assert_eq!(l.delete_daily_rows, 1_000);
         let l = LedgerConfig::from_lookup(&lookup(&[
             ("AI_DAILY_MAX_CALLS", "1e3"),
             ("COMMAND_LOG_DAILY_CAP", "99999999"),
             ("LOG_RETENTION_DAYS", "-5"),
             ("LOG_TEXT_BUDGET_MB", "0"),
+            ("LOG_DELETE_DAILY_ROWS", "5000000"),
         ]));
         assert_eq!(l.daily_max_calls, 2_000);
         assert_eq!(l.command_daily_cap, 1_000_000);
         assert_eq!(l.retention_days, 0);
         assert_eq!(l.text_budget_bytes, 1_048_576);
+        assert_eq!(l.delete_daily_rows, 1_000_000);
+        let l = LedgerConfig::from_lookup(&lookup(&[("LOG_DELETE_DAILY_ROWS", "many")]));
+        assert_eq!(l.delete_daily_rows, 20_000);
         let l = LedgerConfig::from_lookup(&lookup(&[("LOG_RETENTION_DAYS", "9999")]));
         assert_eq!(l.retention_days, 3_650);
     }
@@ -580,6 +595,10 @@ mod tests {
             ledger.text_budget_bytes,
             int("LOG_TEXT_BUDGET_MB") * 1_048_576
         );
+        assert_eq!(ledger.delete_daily_rows, int("LOG_DELETE_DAILY_ROWS"));
+        // Deletes are rows written: keep them well inside the account's Free quota of
+        // 100,000 per day, which the other Workers share.
+        assert!(ledger.delete_daily_rows <= 50_000);
         assert_eq!(ledger.log_level, cfg.log_level);
     }
 }

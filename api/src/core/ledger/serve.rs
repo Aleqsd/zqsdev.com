@@ -128,7 +128,7 @@ pub fn serve<H: LedgerHost>(
         }),
         LedgerOp::ImportClose => run(host, log, now, |book, store| book.import_close(store)),
         LedgerOp::Purge(purge) => run(host, log, now, move |book, store| {
-            book.purge(store, now, &purge)
+            book.purge(store, &cfg, now, &purge)
         }),
         LedgerOp::Stats => run(host, log, now, move |book, store| {
             book.stats(store, &cfg, now)
@@ -199,6 +199,7 @@ fn finish_with_maintenance<H: LedgerHost>(
                     "deleted_commands": report.commands,
                     "text_bytes_freed": report.text_bytes_freed,
                     "backlog": report.backlog,
+                    "delete_budget_left": report.delete_budget_left,
                 }),
             ),
             Ok(None) => {}

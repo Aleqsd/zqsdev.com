@@ -55,6 +55,10 @@ pub const MAINTENANCE_BACKLOG_DELAY: i64 = 60;
 pub const MAINTENANCE_BATCH: i64 = 250;
 /// Rows deleted per admin purge call.
 pub const PURGE_BATCH: i64 = 1_000;
+/// Rows written by deleting one question (its row and its `questions_at_nusd` entry) or one
+/// command (its row), counted against `LOG_DELETE_DAILY_ROWS`.
+pub const QUESTION_DELETE_ROWS: i64 = 2;
+pub const COMMAND_DELETE_ROWS: i64 = 1;
 /// Charges per import chunk.
 pub const IMPORT_MAX: usize = 250;
 /// `text_full` once less than this is left of the text budget.
@@ -118,8 +122,71 @@ pub struct Maintenance {
     pub questions: i64,
     pub commands: i64,
     pub text_bytes_freed: i64,
-    /// A batch was full: the next pass comes 60 s later.
+    /// A batch was full and today's delete budget allows more: the next pass comes 60 s later.
     pub backlog: bool,
+    /// Rows today's delete budget still allows (retention passes only).
+    pub delete_budget_left: Option<i64>,
+}
+
+/// Today's use of `LOG_DELETE_DAILY_ROWS` by log deletes (admin purges and retention). Deletes
+/// count as Durable Object rows written, a Free quota of 100,000 per day for the whole account:
+/// without this bound a purge or a retention backlog could use it all up, and every Durable
+/// Object write of the account would then fail until 00:00 UTC.
+struct DeleteBudget {
+    day: i64,
+    written: i64,
+    limit: i64,
+}
+
+impl DeleteBudget {
+    fn load(
+        store: &mut impl Store,
+        cfg: &LedgerConfig,
+        now: i64,
+    ) -> Result<DeleteBudget, LedgerError> {
+        let day = day_number(now);
+        let written = store
+            .exec(sql::DELETE_BUDGET_SELECT, &[])?
+            .first()
+            .and_then(|row| Some((col_i64(row, 0)?, col_i64(row, 1)?)))
+            .filter(|(stored_day, _)| *stored_day == day)
+            .map_or(0, |(_, written)| written.max(0));
+        Ok(DeleteBudget {
+            day,
+            written,
+            limit: cfg.delete_daily_rows,
+        })
+    }
+
+    fn left(&self) -> i64 {
+        self.limit.saturating_sub(self.written).max(0)
+    }
+
+    /// How many rows costing `cost` rows written each may still be deleted today, at most `cap`.
+    fn affordable(&self, cost: i64, cap: i64) -> i64 {
+        self.left().checked_div(cost).unwrap_or(0).min(cap)
+    }
+
+    fn spend(&mut self, rows: i64, cost: i64) {
+        self.written = self.written.saturating_add(rows.saturating_mul(cost));
+    }
+
+    fn save(&self, store: &mut impl Store) -> Result<(), LedgerError> {
+        store.exec(
+            sql::DELETE_BUDGET_UPSERT,
+            &[self.day.into(), self.written.into()],
+        )?;
+        Ok(())
+    }
+
+    fn event(&self) -> LogEvent {
+        LogEvent {
+            level: Level::Warn,
+            msg: "🧹 Daily delete budget used",
+            fields: json!({"written": self.written, "budget": self.limit}),
+            throttled: true,
+        }
+    }
 }
 
 /// An export op's result.
@@ -754,44 +821,72 @@ impl Book {
     }
 
     /// Deletes ≤ 1,000 rows older than `before` (design 3.11); questions never inside the
-    /// 30-day window.
+    /// 30-day window. Bounded by today's delete budget: once it is used up the reply says
+    /// `budget_exhausted` and nothing more is deleted until 00:00 UTC.
     pub fn purge(
         &mut self,
         store: &mut impl Store,
+        cfg: &LedgerConfig,
         now: i64,
         op: &PurgeOp,
     ) -> Result<LedgerReply, LedgerError> {
         if !self.valid {
             return Ok(LedgerReply::error("invalid_book"));
         }
-        let (deleted, bytes) = match op.table.as_str() {
-            "questions" => {
-                self.advance(store, now)?;
-                if !self.valid {
-                    return Ok(LedgerReply::error("invalid_book"));
-                }
-                let cutoff = op.before.min(now - MONTH);
-                delete_rows(
-                    store,
-                    sql::QUESTIONS_DELETE_UPTO,
-                    &[cutoff.into(), PURGE_BATCH.into()],
-                )?
-            }
-            "commands" => {
-                let cutoff = op.before.min(now);
-                delete_rows(
-                    store,
-                    sql::COMMANDS_DELETE_UPTO,
-                    &[PURGE_BATCH.into(), cutoff.into()],
-                )?
-            }
+        let questions = match op.table.as_str() {
+            "questions" => true,
+            "commands" => false,
             _ => return Ok(LedgerReply::error("invalid_table")),
         };
+        let cost = if questions {
+            QUESTION_DELETE_ROWS
+        } else {
+            COMMAND_DELETE_ROWS
+        };
+        let mut budget = DeleteBudget::load(store, cfg, now)?;
+        let batch = budget.affordable(cost, PURGE_BATCH);
+        if batch <= 0 {
+            self.events.push(budget.event());
+            return Ok(LedgerReply::Purged {
+                deleted: 0,
+                more: true,
+                budget_exhausted: true,
+            });
+        }
+        let (deleted, bytes) = if questions {
+            self.advance(store, now)?;
+            if !self.valid {
+                return Ok(LedgerReply::error("invalid_book"));
+            }
+            let cutoff = op.before.min(now - MONTH);
+            delete_rows(
+                store,
+                sql::QUESTIONS_DELETE_UPTO,
+                &[cutoff.into(), batch.into()],
+            )?
+        } else {
+            let cutoff = op.before.min(now);
+            delete_rows(
+                store,
+                sql::COMMANDS_DELETE_UPTO,
+                &[batch.into(), cutoff.into()],
+            )?
+        };
+        if deleted > 0 {
+            budget.spend(deleted, cost);
+            budget.save(store)?;
+        }
         self.meta.text_bytes = self.meta.text_bytes.saturating_sub(bytes).max(0);
         self.save_meta(store)?;
+        let more = deleted >= batch;
+        let budget_exhausted = more && budget.affordable(cost, 1) == 0;
+        if budget_exhausted {
+            self.events.push(budget.event());
+        }
         Ok(LedgerReply::Purged {
             deleted,
-            more: deleted >= PURGE_BATCH,
+            more,
+            budget_exhausted,
         })
     }
 
@@ -829,6 +924,7 @@ impl Book {
                 .saturating_sub(UNKNOWN_IP_COMMAND_SCAN + 1)
                 .into()],
         )?;
+        let deletes = DeleteBudget::load(store, cfg, now)?;
         let day = day_number(now);
         let meta = &self.meta;
         Ok(LedgerReply::Stats(Box::new(StatsReply {
@@ -868,6 +964,8 @@ impl Book {
             text_budget_bytes: cfg.text_budget_bytes,
             text_dropped: meta.text_dropped,
             retention_days: cfg.retention_days,
+            delete_rows_today: deletes.written,
+            delete_daily_rows: deletes.limit,
             maintained_at: meta.maintained_at,
             import_closed: meta.import_closed != 0,
             imported_rows,
@@ -964,20 +1062,46 @@ impl Book {
         };
         if cfg.retention_days > 0 {
             let cutoff = now - cfg.retention_days * DAY;
-            let (questions, question_bytes) = delete_rows(
-                store,
-                sql::QUESTIONS_DELETE_UPTO,
-                &[cutoff.into(), MAINTENANCE_BATCH.into()],
-            )?;
-            let (commands, command_bytes) = delete_rows(
-                store,
-                sql::COMMANDS_DELETE_UPTO,
-                &[MAINTENANCE_BATCH.into(), cutoff.into()],
-            )?;
+            // Each batch is also bounded by today's delete budget, shared with admin purges.
+            let mut budget = DeleteBudget::load(store, cfg, now)?;
+            let question_batch = budget.affordable(QUESTION_DELETE_ROWS, MAINTENANCE_BATCH);
+            let (questions, question_bytes) = if question_batch > 0 {
+                delete_rows(
+                    store,
+                    sql::QUESTIONS_DELETE_UPTO,
+                    &[cutoff.into(), question_batch.into()],
+                )?
+            } else {
+                (0, 0)
+            };
+            budget.spend(questions, QUESTION_DELETE_ROWS);
+            let command_batch = budget.affordable(COMMAND_DELETE_ROWS, MAINTENANCE_BATCH);
+            let (commands, command_bytes) = if command_batch > 0 {
+                delete_rows(
+                    store,
+                    sql::COMMANDS_DELETE_UPTO,
+                    &[command_batch.into(), cutoff.into()],
+                )?
+            } else {
+                (0, 0)
+            };
+            budget.spend(commands, COMMAND_DELETE_ROWS);
+            if questions > 0 || commands > 0 {
+                budget.save(store)?;
+            }
             report.questions = questions;
             report.commands = commands;
-            report.text_bytes_freed = question_bytes + command_bytes;
-            report.backlog = questions >= MAINTENANCE_BATCH || commands >= MAINTENANCE_BATCH;
+            report.text_bytes_freed = question_bytes.saturating_add(command_bytes);
+            // A full batch means more rows are due; come back in 60 s only if the budget lets
+            // that pass delete some of them, otherwise in an hour (after 00:00 UTC it resumes).
+            let questions_due = question_batch > 0 && questions >= question_batch;
+            let commands_due = command_batch > 0 && commands >= command_batch;
+            report.backlog = (questions_due && budget.affordable(QUESTION_DELETE_ROWS, 1) > 0)
+                || (commands_due && budget.affordable(COMMAND_DELETE_ROWS, 1) > 0);
+            if (questions_due || commands_due) && !report.backlog {
+                self.events.push(budget.event());
+            }
+            report.delete_budget_left = Some(budget.left());
             self.meta.text_bytes = self
                 .meta
                 .text_bytes
