@@ -1201,3 +1201,27 @@ fn sql_plans_never_scan_questions_or_commands() {
     );
     println!("{}", report.join("\n"));
 }
+
+#[test]
+fn extreme_stored_values_never_panic() {
+    let l = Ledger::generous();
+    l.admitted(DAY0, "a", 1_000);
+    l.command(DAY0, "ls");
+    l.exec(
+        "UPDATE meta SET next_seq = 9223372036854775807, cmd_next_seq = 9223372036854775807, \
+         ip_count = 9223372036854775807, ips_pruned_at = -9223372036854775808, \
+         maintained_at = -9223372036854775808, calls_today = 9223372036854775807, \
+         cmd_last_at = 9223372036854775807; \
+         UPDATE ip_windows SET hits = '-9223372036854775808 9223372036854775807';",
+    );
+    l.host.evict();
+    // Whatever the replies, nothing traps (debug builds check overflow).
+    let _ = l.admit(DAY0 + 1, "a", 1_000);
+    let _ = l.admit(DAY0 + 1, "b", 1_000);
+    let _ = l.command(DAY0 + 1, "ls");
+    let _ = l.command(DAY0 + 2, "ls");
+    let _ = l.stats(DAY0 + 3);
+    let _ = l.export(DAY0 + 3, "commands", "0", None);
+    let _ = l.op(DAY0 + 3, LedgerOp::Rebuild);
+    let _ = l.admit(DAY0 + 4, "c", 1_000);
+}

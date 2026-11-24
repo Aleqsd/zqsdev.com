@@ -19,7 +19,7 @@ pub fn parse_hits(text: &str, now: i64) -> Vec<i64> {
     let mut hits: Vec<i64> = text
         .split_whitespace()
         .filter_map(|t| t.parse::<i64>().ok())
-        .filter(|t| now - t < IP_HISTORY)
+        .filter(|t| now.saturating_sub(*t) < IP_HISTORY)
         .collect();
     hits.sort_unstable();
     let excess = hits.len().saturating_sub(MAX_HITS);
@@ -38,7 +38,12 @@ pub fn format_hits(hits: &[i64]) -> String {
 pub fn full_window(hits: &[i64], now: i64) -> Option<i64> {
     IP_WINDOWS
         .iter()
-        .find(|(window, limit)| hits.iter().filter(|t| now - **t < *window).count() >= *limit)
+        .find(|(window, limit)| {
+            hits.iter()
+                .filter(|t| now.saturating_sub(**t) < *window)
+                .count()
+                >= *limit
+        })
         .map(|(window, _)| *window)
 }
 

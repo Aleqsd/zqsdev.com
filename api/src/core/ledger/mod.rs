@@ -189,7 +189,8 @@ impl Book {
         };
         if missing || !valid {
             // Command rows must never reuse a seq, and an untrusted meta row is never written.
-            let next = query_i64(store, sql::COMMANDS_MAX_SEQ, &[])?.map_or(1, |m| m + 1);
+            let next =
+                query_i64(store, sql::COMMANDS_MAX_SEQ, &[])?.map_or(1, |m| m.saturating_add(1));
             book.meta.cmd_next_seq = book.meta.cmd_next_seq.max(next);
             let newest = newest_command_at(store)?.unwrap_or(0);
             book.meta.cmd_last_at = book.meta.cmd_last_at.max(newest);
@@ -344,7 +345,7 @@ impl Book {
         let mut hits = parse_hits(stored.as_deref().unwrap_or_default(), now);
         let mut dirty = false;
         if is_new && self.meta.ip_count >= IP_CAP {
-            if now - self.meta.ips_pruned_at >= IP_PRUNE_EVERY {
+            if now.saturating_sub(self.meta.ips_pruned_at) >= IP_PRUNE_EVERY {
                 let deleted = store
                     .exec(sql::IP_PRUNE, &[(now - IP_HISTORY).into()])?
                     .len();
@@ -386,7 +387,7 @@ impl Book {
             .keep_text(cfg, &op.question)
             .then_some(op.question.as_str());
         let seq = self.meta.next_seq;
-        let lease = now + LEASE_SECS;
+        let lease = now.saturating_add(LEASE_SECS);
         store.exec(
             sql::QUESTION_INSERT,
             &[
@@ -410,12 +411,12 @@ impl Book {
             ],
         )?;
         if is_new {
-            self.meta.ip_count += 1;
+            self.meta.ip_count = self.meta.ip_count.saturating_add(1);
         }
-        self.meta.next_seq = seq + 1;
+        self.meta.next_seq = seq.saturating_add(1);
         self.meta.sums = sums;
         self.inflight.push((seq, lease));
-        self.meta.calls_today += 1;
+        self.meta.calls_today = self.meta.calls_today.saturating_add(1);
         self.save_meta(store)?;
         Ok(LedgerReply::Admitted { seq })
     }
@@ -451,7 +452,10 @@ impl Book {
         }
         let nusd = op.nusd.unwrap_or(old);
         if self.valid && nusd != old {
-            self.shift_sums(at, nusd - old)?;
+            let delta = nusd
+                .checked_sub(old)
+                .ok_or(LedgerError::Abort("overflow"))?;
+            self.shift_sums(at, delta)?;
         }
         let answered = state == STATE_ANSWERED;
         let answer = match (answered, op.answer.as_deref()) {
@@ -522,7 +526,7 @@ impl Book {
         }
         let full = match self.cmd_window.as_mut() {
             Some(window) => {
-                window.retain(|t| now - t < COMMAND_WINDOW_SECS);
+                window.retain(|t| now.saturating_sub(*t) < COMMAND_WINDOW_SECS);
                 window.len() >= COMMAND_WINDOW_MAX
             }
             None => false,
@@ -547,8 +551,8 @@ impl Book {
                 op.ip.as_str().into(),
             ],
         )?;
-        self.meta.cmd_next_seq = seq + 1;
-        self.meta.cmd_today += 1;
+        self.meta.cmd_next_seq = seq.saturating_add(1);
+        self.meta.cmd_today = self.meta.cmd_today.saturating_add(1);
         self.meta.cmd_last_at = now;
         self.save_meta(store)?;
         if let Some(window) = self.cmd_window.as_mut() {
@@ -616,7 +620,11 @@ impl Book {
                 Some((seq, row_at, old)) => {
                     if charge.nusd != old {
                         store.exec(sql::QUESTION_SET_NUSD, &[charge.nusd.into(), seq.into()])?;
-                        self.shift_sums(row_at, charge.nusd - old)?;
+                        let delta = charge
+                            .nusd
+                            .checked_sub(old)
+                            .ok_or(LedgerError::Abort("overflow"))?;
+                        self.shift_sums(row_at, delta)?;
                     }
                     updated += 1;
                 }
@@ -627,7 +635,7 @@ impl Book {
                         &[seq.into(), id.into(), at.into(), charge.nusd.into()],
                     )?;
                     store.exec(sql::IMPORTED_UPSERT, &[id.into(), seq.into()])?;
-                    self.meta.next_seq = seq + 1;
+                    self.meta.next_seq = seq.saturating_add(1);
                     self.shift_sums(at, charge.nusd)?;
                     inserted += 1;
                 }
@@ -815,7 +823,11 @@ impl Book {
         let unknown_ip_commands_last_10k = query_count(
             store,
             sql::UNKNOWN_IP_COMMANDS,
-            &[(self.meta.cmd_next_seq - UNKNOWN_IP_COMMAND_SCAN - 1).into()],
+            &[self
+                .meta
+                .cmd_next_seq
+                .saturating_sub(UNKNOWN_IP_COMMAND_SCAN + 1)
+                .into()],
         )?;
         let day = day_number(now);
         let meta = &self.meta;
@@ -887,8 +899,10 @@ impl Book {
             .filter_map(|row| Some((col_i64(row, 0)?, col_i64(row, 1)?)))
             .collect();
         inflight.sort_unstable();
-        meta.next_seq = query_i64(store, sql::QUESTIONS_MAX_SEQ, &[])?.map_or(1, |m| m + 1);
-        meta.cmd_next_seq = query_i64(store, sql::COMMANDS_MAX_SEQ, &[])?.map_or(1, |m| m + 1);
+        meta.next_seq =
+            query_i64(store, sql::QUESTIONS_MAX_SEQ, &[])?.map_or(1, |m| m.saturating_add(1));
+        meta.cmd_next_seq =
+            query_i64(store, sql::COMMANDS_MAX_SEQ, &[])?.map_or(1, |m| m.saturating_add(1));
         let day = day_number(now);
         let day_start = day * DAY;
         meta.calls_day = day;
@@ -898,7 +912,7 @@ impl Book {
             store,
             sql::COMMANDS_SINCE,
             &[
-                (meta.cmd_next_seq - CMD_TODAY_SCAN - 1).into(),
+                meta.cmd_next_seq.saturating_sub(CMD_TODAY_SCAN + 1).into(),
                 day_start.into(),
             ],
         )?;
@@ -930,7 +944,7 @@ impl Book {
         cfg: &LedgerConfig,
         now: i64,
     ) -> Result<Option<Maintenance>, LedgerError> {
-        if !self.valid || now - self.meta.maintained_at < MAINTENANCE_EVERY {
+        if !self.valid || now.saturating_sub(self.meta.maintained_at) < MAINTENANCE_EVERY {
             return Ok(None);
         }
         // Advance first: no row deleted below may still be counted in a window sum.
