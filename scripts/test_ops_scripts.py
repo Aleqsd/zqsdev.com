@@ -107,5 +107,72 @@ class ExportFiles(unittest.TestCase):
         self.assertLess(len(values["ADMIN_TOKEN"].strip()), 32, "the public example must not enable admin")
 
 
+class Purge(unittest.TestCase):
+    """A purge stops at the API's daily delete budget or at --max-rows."""
+
+    def purge(self, replies, max_rows=20_000):
+        client = FakeClient(replies)
+        args = argparse.Namespace(table="commands", before=1_760_000_000, max_rows=max_rows)
+        with mock.patch.object(zqs_admin.time, "sleep"):
+            status, out, err = run_quietly(zqs_admin.cmd_purge, client, args)
+        self.assertEqual(status, 0)
+        return json.loads(out), err, client
+
+    def test_stops_when_the_daily_budget_is_used(self):
+        summary, err, client = self.purge([{"deleted": 1000, "more": True},
+                                           {"deleted": 500, "more": True, "budget_exhausted": True},
+                                           AssertionError("called after the budget ran out")])
+        self.assertEqual((summary["deleted"], summary["calls"], summary["stopped"]), (1500, 2, "daily_budget"))
+        self.assertIn("00:00 UTC", err)
+        self.assertEqual(len(client.calls), 2)
+
+    def test_stops_at_max_rows(self):
+        summary, err, _ = self.purge([{"deleted": 1000, "more": True}] * 5, max_rows=2500)
+        self.assertEqual((summary["deleted"], summary["calls"], summary["stopped"]), (3000, 3, "max_rows"))
+        self.assertIn("--max-rows", err)
+
+    def test_runs_to_completion(self):
+        summary, _, _ = self.purge([{"deleted": 1000, "more": True}, {"deleted": 3, "more": False}])
+        self.assertEqual((summary["deleted"], summary["stopped"]), (1003, "done"))
+
+    def test_default_max_rows(self):
+        args = zqs_admin.parse_args(["purge", "--table", "commands", "--before", "2026-01-01"])
+        self.assertEqual(args.max_rows, 20_000)
+
+
+class ImportLedger(unittest.TestCase):
+    """At most 25 charges per request; a 503 suggests a smaller chunk."""
+
+    def charges_file(self, folder, count):
+        path = Path(folder) / "ai-budget.json"
+        path.write_text(json.dumps([{"id": f"c{i}", "at": 1_795_000_000, "usd": 0.001} for i in range(count)]),
+                        encoding="utf-8")
+        return str(path)
+
+    def test_chunks_of_25(self):
+        self.assertEqual(zqs_admin.parse_args(["import-ledger", "--file", "x"]).chunk, 25)
+        with tempfile.TemporaryDirectory() as folder:
+            path = self.charges_file(folder, 30)
+            with self.assertRaises(zqs_admin.AdminError):
+                zqs_admin.cmd_import(FakeClient([]), argparse.Namespace(file=path, chunk=26, close=False))
+            reply = {"status": "imported", "inserted": 25, "updated": 0, "skipped": 0}
+            client = FakeClient([reply, dict(reply, inserted=5)])
+            status, out, _ = run_quietly(zqs_admin.cmd_import, client,
+                                         argparse.Namespace(file=path, chunk=25, close=False))
+        self.assertEqual(status, 0)
+        self.assertEqual([len(body["charges"]) for _, body in client.calls], [25, 5])
+        self.assertEqual(json.loads(out)["inserted"], 30)
+
+    def test_unavailable_ledger_suggests_a_smaller_chunk(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = self.charges_file(folder, 30)
+            client = FakeClient([zqs_admin.AdminError("import-ledger: HTTP 503 ledger_unavailable",
+                                                      "ledger_unavailable")])
+            with self.assertRaises(zqs_admin.AdminError) as caught:
+                run_quietly(zqs_admin.cmd_import, client, argparse.Namespace(file=path, chunk=25, close=False))
+        self.assertIn("--chunk 12", str(caught.exception))
+        self.assertIn("idempotent", str(caught.exception))
+
+
 if __name__ == "__main__":
     unittest.main()
