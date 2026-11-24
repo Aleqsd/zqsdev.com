@@ -45,12 +45,12 @@ async fn fetch(mut req: Request, env: Env, ctx: Context) -> worker::Result<web_s
     let mut out = handle(&platform, &cfg, request).await;
 
     // A settlement that failed inline is retried once, 1 s later, after the response.
-    if let Some(op) = out.retry.take() {
+    if let Some(retry) = out.retry.take() {
         let retry_platform = platform.clone();
         let retry_cfg = cfg.clone();
         ctx.wait_until(async move {
             Delay::from(Duration::from_millis(retry_cfg.timing.retry_delay_ms)).await;
-            retry_finish(&retry_platform, &retry_cfg, &op).await;
+            retry_finish(&retry_platform, &retry_cfg, &retry).await;
         });
     }
 

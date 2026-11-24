@@ -11,7 +11,7 @@ use super::config::Config;
 use super::embedded::DATA_JSON;
 use super::http::{
     effective_body, extract_json, json_content_type, AdminRoute, Body, In, Out, OutBody, Route,
-    DATA_CACHE_CONTROL, NDJSON, NO_STORE,
+    SettlementRetry, DATA_CACHE_CONTROL, NDJSON, NO_STORE,
 };
 use super::ledger::export::{parse_cursor, Table};
 use super::ledger::protocol::{
@@ -307,10 +307,14 @@ async fn ai(p: &impl Platform, cfg: &Config, req: In<'_>) -> Out {
         p.log(
             Level::Warn,
             "🧾 Settlement failed; reservation kept",
-            json!({ "question_id": qid, "error": error, "retry": false }),
+            json!({ "question_id": qid, "seq": seq, "error": error, "retry": false }),
         );
         return Out {
-            retry: Some(finish),
+            retry: Some(SettlementRetry {
+                question_id: qid,
+                seq,
+                op: finish,
+            }),
             ..out
         };
     }
@@ -383,20 +387,31 @@ fn settlement_error(reply: Result<LedgerReply, PlatformError>) -> Option<String>
 }
 
 /// The single settlement retry, run by the glue in `wait_until` after `Timing::retry_delay_ms`.
-/// Returns whether it landed; if not, the reservation stays and the lease frees the slot.
-pub async fn retry_finish(p: &impl Platform, cfg: &Config, op: &LedgerOp) -> bool {
-    let error = settlement_error(p.ledger(op, millis(cfg.timing.retry_timeout_ms)).await);
-    match error {
-        None => true,
+/// Returns whether it landed; if not, the reservation stays and the lease frees the slot. Either
+/// outcome is logged with the question id and the seq, like the inline failure.
+pub async fn retry_finish(p: &impl Platform, cfg: &Config, retry: &SettlementRetry) -> bool {
+    let reply = p
+        .ledger(&retry.op, millis(cfg.timing.retry_timeout_ms))
+        .await;
+    match settlement_error(reply) {
+        None => {
+            p.log(
+                Level::Info,
+                "🧾 Settlement completed on retry",
+                json!({ "question_id": retry.question_id, "seq": retry.seq }),
+            );
+            true
+        }
         Some(error) => {
-            let seq = match op {
-                LedgerOp::Finish(f) => f.seq,
-                _ => 0,
-            };
             p.log(
                 Level::Warn,
                 "🧾 Settlement failed; reservation kept",
-                json!({ "seq": seq, "error": error, "retry": true }),
+                json!({
+                    "question_id": retry.question_id,
+                    "seq": retry.seq,
+                    "error": error,
+                    "retry": true,
+                }),
             );
             false
         }

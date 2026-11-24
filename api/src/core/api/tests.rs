@@ -435,24 +435,34 @@ async fn failed_settlement_is_retried_once() {
     // The answer is sent anyway; the row is still in flight with its reservation.
     assert_eq!(out.status, 200);
     assert_eq!(count(&p, "SELECT state FROM questions"), 0);
+    let qid = p.logged("🤖 AI response completed")[0]["question_id"].clone();
+    assert!(qid.is_string());
     let settlement = p.logged("🧾 Settlement failed; reservation kept");
-    assert_eq!(settlement[0]["retry"], false);
+    assert_eq!(
+        settlement[0],
+        json!({"question_id": qid, "seq": 1, "error": "transport: stub threw", "retry": false})
+    );
     let retry = out.retry.clone().unwrap();
-    assert!(matches!(&retry, LedgerOp::Finish(f) if f.outcome == "answered"));
-    // The glue runs it in wait_until after a second.
+    assert_eq!((json!(retry.question_id), retry.seq), (qid.clone(), 1));
+    assert!(matches!(&retry.op, LedgerOp::Finish(f) if f.outcome == "answered" && f.seq == 1));
+    // The glue runs it in wait_until after a second; a retry that lands is logged too.
     p.advance(cfg.timing.retry_delay_ms);
     assert!(retry_finish(&p, &cfg, &retry).await);
     assert_eq!(count(&p, "SELECT state FROM questions"), 1);
     assert_eq!(count(&p, "SELECT nusd FROM questions"), 20_000);
     assert!(stats(&p).inflight.is_empty());
+    assert_eq!(
+        p.logged("🧾 Settlement completed on retry"),
+        [json!({"question_id": qid, "seq": 1})]
+    );
     // Running it again is harmless (idempotent finish).
     assert!(retry_finish(&p, &cfg, &retry).await);
-    // A retry that fails too is logged; the lease frees the slot later.
+    // A retry that fails too is logged with the same question id; the lease frees the slot later.
     p.script_ledger(LedgerStep::Fail("again".into()));
     assert!(!retry_finish(&p, &cfg, &retry).await);
     assert_eq!(
-        p.logged("🧾 Settlement failed; reservation kept")[1]["retry"],
-        true
+        p.logged("🧾 Settlement failed; reservation kept")[1],
+        json!({"question_id": qid, "seq": 1, "error": "transport: again", "retry": true})
     );
 }
 

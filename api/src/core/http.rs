@@ -67,6 +67,17 @@ impl OutBody {
     }
 }
 
+/// A settlement to repeat once in `wait_until` (after 1 s) because the inline one failed.
+#[derive(Clone, Debug, PartialEq)]
+pub struct SettlementRetry {
+    /// The call's `question_id`, so that every settlement log line can be tied to its question.
+    pub question_id: String,
+    /// Ledger seq of the reservation.
+    pub seq: i64,
+    /// The `finish` op to send again (idempotent: a repeat answers `done`).
+    pub op: LedgerOp,
+}
+
 /// A response for the glue to send.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Out {
@@ -75,7 +86,7 @@ pub struct Out {
     pub headers: Vec<(&'static str, String)>,
     pub body: OutBody,
     /// A settlement to repeat once in `wait_until` (after 1 s) because the inline one failed.
-    pub retry: Option<LedgerOp>,
+    pub retry: Option<SettlementRetry>,
 }
 
 impl Out {
