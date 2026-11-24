@@ -1,5 +1,5 @@
 # 🖥️ ZQS Terminal — Rust Résumé in Your Browser
-[![Netlify Status](https://api.netlify.com/api/v1/badges/c51eac08-53e4-4951-a311-8491cb78a4b8/deploy-status)](https://app.netlify.com/projects/zqsdev/deploys) ![WebAssembly](https://img.shields.io/badge/WebAssembly-654FF0?logo=webassembly&logoColor=white) ![Rust](https://img.shields.io/badge/Rust-%F0%9F%A6%80-orange?logo=rust&logoColor=white)
+![Cloudflare Workers](https://img.shields.io/badge/Cloudflare%20Workers-F38020?logo=cloudflare&logoColor=white) ![WebAssembly](https://img.shields.io/badge/WebAssembly-654FF0?logo=webassembly&logoColor=white) ![Rust](https://img.shields.io/badge/Rust-%F0%9F%A6%80-orange?logo=rust&logoColor=white)
 
 An immersive single-page web terminal that reveals Alexandre DO-O ALMEIDA’s résumé through typed commands. Everything is written in **Rust**, compiled to WebAssembly, and ships as a framework-free SPA for fast cold starts.
 
@@ -7,28 +7,33 @@ An immersive single-page web terminal that reveals Alexandre DO-O ALMEIDA’s r�
 
 ## ✨ Features
 - 🎛️ Web-only terminal UI with history, autocomplete, theming, achievements, and an **AI Mode** toggle.
-- 📦 Static résumé data sourced from JSON so updates never require a recompile.
-- 🤖 Optional AI concierge proxied through an Axum service that uses complete curated knowledge and persistent spending limits.
-- 🚀 Build pipeline ships optimized WebAssembly + minified CSS in `static/`, ready for any CDN with an optional Axum proxy.
+- 📦 Static résumé data sourced from JSON so updates never require a recompile of the terminal.
+- 🤖 Optional AI concierge served by a Rust Cloudflare Worker (`zqsdev-api`) that uses complete curated knowledge and persistent spending limits kept in a SQLite Durable Object.
+- 🚀 Build pipeline ships optimized WebAssembly + minified CSS in `static/`, served by the `zqsdev` site Worker on Cloudflare.
 
 ## 🤖 AI Concierge Stack
-- Generation: one OpenAI `gpt-5.6-luna` call, Chat Completions with reasoning `none` and a 640-token output cap.
-- Knowledge: all seven curated JSON sources, including expanded projects, publications, awards and testimonials beyond the one-page CV. No paid retrieval or vector database is needed.
-- Follow-ups: the last three exchanges are kept in tab memory, bounded and validated by the server. `quit` or refresh clears them.
-- Reliability: pre-call rate/concurrency limits, a 16-second server deadline, a 20-second browser deadline and a working classic terminal on failure.
-- Spending: persistent USD ledger, conservative reservation followed by one reconciliation against reported input/output/cache usage. $0.50/minute, $2/hour and day, $10/30 days by default.
+- Generation: one OpenAI `gpt-6-luna` call, Chat Completions with reasoning `none` and a 640-token output cap.
+- Knowledge: all seven curated JSON sources, including expanded projects, publications, awards and testimonials beyond the one-page CV, embedded in the API Worker at build time. No paid retrieval or vector database is needed.
+- Follow-ups: the last three exchanges are kept in tab memory, bounded and validated by the API. `quit` or refresh clears them.
+- Reliability: pre-call rate/concurrency limits, one 16-second budget per question (responses within 17.5 s), a 20-second browser deadline and a working classic terminal on failure.
+- Spending: persistent ledger in a Durable Object, conservative reservation followed by one reconciliation against reported input/output/cache usage. $0.50/minute, $2/hour and day, $10/30 days and 2,000 calls per day by default.
 - Attribution: `sources` contains validated section IDs, shown below each answer. Factual evaluation remains necessary; metadata alone does not establish correctness.
 
 ## 🗂️ Repository Layout
 ```
 .
-├── Cargo.toml            # Workspace root + WebAssembly crate manifest
+├── Cargo.toml            # Frontend crate manifest (workspace root; api/ is excluded)
 ├── VERSION               # Project version (sync via scripts/bump_version.py)
-├── Makefile              # Build/test/deploy entry points (wasm-pack, Netlify, logs)
-├── netlify.toml          # Netlify deploy config (redirects, cache headers)
-├── .env.example          # Template for required/optional environment variables
+├── Makefile              # Build/test/deploy entry points (wasm-pack, Cloudflare)
+├── site-rules.json       # Redirects, rewrites and cache headers for every zqsdev.com host
+├── worker/index.js       # Site Worker applying site-rules.json in front of static/
+├── wrangler.jsonc        # Site Worker config (assets, routes, API service binding)
+├── .env.example          # Optional Pushover keys for the smoke test
 ├── src/                  # Rust/WebAssembly terminal (commands, state, renderer)
-├── server/               # Axum proxy (OpenAI relay, rate limiting, static host)
+├── api/                  # zqsdev-api Worker: Rust (workers-rs), /api/* + Ledger Durable Object
+│   ├── wrangler.jsonc    # API Worker config (vars, secrets, Durable Object)
+│   ├── .dev.vars.example # Local secrets template for wrangler dev
+│   └── src/              # core/ (pure, natively tested) and glue/ (Workers runtime)
 ├── static/
 │   ├── index.html        # Terminal shell + module bootstrap
 │   ├── style.css         # Source stylesheet (minified to style.min.css)
@@ -41,11 +46,15 @@ An immersive single-page web terminal that reveals Alexandre DO-O ALMEIDA’s r�
 │   └── pkg/              # wasm-bindgen output mirrored from /pkg
 ├── pkg/                  # Raw wasm-pack artefacts (ignored by git)
 ├── scripts/
-│   ├── bump_version.py   # Bumps VERSION + Cargo manifests
-│   ├── live_smoke_test.py  # Production smoke test
+│   ├── bump_version.py   # Bumps VERSION + Cargo.toml
+│   ├── live_smoke_test.py  # Production smoke test (nightly in GitHub Actions)
+│   ├── zqs_admin.py      # Admin client for the API ledger (stats, export, import, purge)
+│   ├── verify_api_deploy.py  # Post-deploy check of the API Worker, with rollback
+│   ├── test_api_local.py # Local end-to-end test of both Workers
+│   ├── openai_stub.py    # Local stand-in for OpenAI
 │   ├── minify_css.py     # CSS minifier invoked by make build
-│   ├── run_live_autotest.sh  # CI helper for the smoke test
 │   └── serve.py          # Static dev server (writes server.log)
+├── .github/workflows/    # Nightly live smoke test
 └── screenshot_zqsdev.png # README showcase image
 ```
 
@@ -79,69 +88,75 @@ Flip on **AI Mode** with the toolbar button to ask natural-language questions. W
 # 1. Compile the WebAssembly bundle (writes static/pkg/)
 make build
 
-# 2. Run the full Rust stack (serves static assets + /api/ai)
-export OPENAI_API_KEY=sk-your-key   # required for AI mode
-make serve                          # http://localhost:3000 by default
-
-# Optional: static-only dev server (no AI proxy, logs to server.log)
+# 2. Static-only dev server (no API, logs to server.log)
 make serve-static                   # http://localhost:8765 by default
-```
-
-Useful overrides:
-```bash
-make serve HOST=127.0.0.1 SERVER_PORT=4000
 make serve-static STATIC_PORT=9000
 ```
 
 `make build` always refreshes `static/pkg/` and `static/style.min.css`, both of which must ship alongside the rest of `static/` for deployment.
 
+### 🧪 Local development of the full stack
+Prerequisites: `rustup target add wasm32-unknown-unknown`, wrangler 4.156.0 (`npx wrangler`), Python 3. The API build installs `worker-build@0.9.0` itself. Copy `api/.dev.vars.example` to `api/.dev.vars` (git-ignored) and set an admin token of at least 32 characters.
+
+Offline, with no OpenAI cost, in three terminals:
+
+```bash
+make dev-stub    # python3 scripts/openai_stub.py --port 9911
+make dev-api     # cd api && npx wrangler dev --local --port 8788 --var OPENAI_BASE_URL:http://127.0.0.1:9911/v1
+make dev-site    # npx wrangler dev --local --port 8787 --infer-origin-from-routes=false
+```
+
+The site's `API` service binding connects to the local API session: open `http://127.0.0.1:8787`. The API keeps its Durable Object SQLite under `api/.wrangler/`. With `DEV_API_FLAGS=` the API calls the real OpenAI with the key of `api/.dev.vars` (about $0.0005 a question). `make dev` runs both Workers in one experimental multi-config session.
+
+`make test-api-local` (or `python3 scripts/test_api_local.py`) starts the stub and both Workers itself, checks every route through the binding (visitor IP, slots, timeout, transactionSync rollback, admin operations, the 502 of a disconnected binding) and stops everything.
+
 ## 📚 Curated knowledge
-Edit `static/data/*.json`, run `python3 scripts/validate_knowledge.py`, build, then redeploy the backend with `make deploy-backend` (data is loaded at startup). Keep `KNOWLEDGE_UPDATED` in `server/src/ai.rs` equal to `updated_at` in `profile.json`. The reviewed full-context ceiling is 64 KB. Builds require no AI credentials.
+Edit `static/data/*.json`, run `python3 scripts/validate_knowledge.py`, then `make build && make test`, commit, push (the site serves the JSON files) **and** run `make deploy-api`: the API embeds the knowledge and the `/api/data` body at build time. `KNOWLEDGE_UPDATED` is `updated_at` from `profile.json`; bump it when the data is reviewed. The reviewed full-context ceiling is 64 KB and the API build fails beyond it. Builds require no AI credentials.
 
 The migration verified all 44 live SQLite chunks against the JSON sources and the Pinecone index held 44 vectors. All original projects (including Micro Mages, Mistale, BeeToBee and TheClair), education, publications, awards and two full testimonials were preserved. The obsolete terminal-project description, role dates and availability FAQ were updated; Studi and agentic engineering were added.
 
 Legacy `build_rag.py`, `inspect_rag.py` and `make rag` remain available for historical inspection only. Normal build and runtime never query Pinecone, call embeddings or open SQLite. The old index is left intact.
 
-Official model reference: [GPT-5.6 Luna](https://developers.openai.com/api/docs/models/gpt-5.6-luna). Rates verified on 2026-09-08: input $0.20, cache read $0.02, cache write $0.25, output $1.20 per million tokens. Set all rates explicitly when selecting another model.
+Official model reference: [GPT-6 Luna](https://developers.openai.com/api/docs/models/gpt-6-luna). Rates checked on 2026-11-24: input $0.10, cache read $0.01, cache write $0.125, output $0.50 per million tokens. `gpt-5.6-luna` keeps built-in prices for a rollback; any other model needs all four `AI_*_USD_PER_MILLION` vars in `api/wrangler.jsonc`.
 
 ## ✅ Tests & Quality Gates
 
 ```bash
-make test   # wasm-pack test --node + cargo test for the proxy
-make fmt    # cargo fmt across the workspace
-make check  # cargo check --target wasm32-unknown-unknown
+make test   # Python suites + wasm-pack test --node + cargo test for the API Worker
+make fmt    # cargo fmt for the frontend and api/
+make check  # cargo check (wasm32) + clippy -D warnings for the API Worker
+make api-dry-run      # build and validate the API Worker without uploading
+make test-api-local   # local end-to-end test of both Workers
 ```
 
 The CI pipeline should run the same trio so local runs stay in lockstep with automation.
 
 ## 🩺 Live Production Smoke Test
 
-Run `make autotest` (or directly `python3 scripts/live_smoke_test.py`) to exercise the deployed site once end-to-end. It validates the Netlify bundle, the `/api/data` payloads, and sends two questions to the AI concierge. Install the lone dependency with `pip install requests`, then wire either command into your scheduler (cron, GitHub Actions, etc.). Optional flags:
+Run `make autotest` (or directly `python3 scripts/live_smoke_test.py`) to exercise the deployed site once end-to-end. It validates the deployed bundle, the `/api/version`, `/api/health` and `/api/data` endpoints, and sends two questions to the AI concierge. Install the lone dependency with `pip install requests`. Optional flags:
 
 ```bash
 python3 scripts/live_smoke_test.py --json-output live-smoke.json
 python3 scripts/live_smoke_test.py --ai-question "What's new with Alexandre?"
+python3 scripts/live_smoke_test.py --api-base-url https://zqsdev-api.aleqsd.workers.dev   # API canary
 # Or via make (flags are forwarded):
 make autotest AUTOTEST_FLAGS="--json-output live-smoke.json"
 ```
 
-The script exits non-zero on failure so monitors can trigger alerts. Keep the two-question smoke suite bounded to respect the production rate limits. For cron jobs, `scripts/run_live_autotest.sh` wraps the Python entry point with sensible defaults.
+The script exits non-zero on failure so monitors can trigger alerts. Keep the two-question smoke suite bounded to respect the production rate limits. The GitHub Actions workflow `.github/workflows/live-smoke.yml` runs it every night at 07:30 UTC.
 
-If `PUSHOVER_API_TOKEN` and `PUSHOVER_USER_KEY` are present (in the environment, `.env.local`, or `.env`), the script will send a Pushover alert only when a check fails or the run ends early with skipped tests. Disable that behaviour with `--no-pushover` or `AUTOTEST_FLAGS="--no-pushover"` if needed.
+If `PUSHOVER_API_TOKEN` and `PUSHOVER_USER_KEY` are present (in the environment, `.env.local`, or `.env`; repository secrets for the workflow), the script sends a Pushover alert only when a check fails or the run ends early with skipped tests. Disable that behaviour with `--no-pushover` or `AUTOTEST_FLAGS="--no-pushover"` if needed.
 
-## 🔑 Environment Variables
+## 🔑 Secrets and Variables
 
-1. Copy the template:
-   ```bash
-   cp .env.example .env
-   ```
-2. Update at least `OPENAI_API_KEY=...` if you plan to enable AI Mode locally.
-
-`OPENAI_API_KEY` is the only required secret today. No other AI provider or vector-database credentials are needed. The proxy loads `.env.local` first, then `.env`, which keeps machine-specific overrides out of version control. Both files are ignored by git so real keys stay on your machine.
+- The API Worker's secrets are `OPENAI_API_KEY` and `ADMIN_TOKEN` (at least 32 characters). Set them in Cloudflare from `api/` with `printf '%s' "$OPENAI_API_KEY" | npx wrangler secret put OPENAI_API_KEY`; never commit them. For local development they go in `api/.dev.vars` (see `api/.dev.vars.example`).
+- Its vars (model, budgets, daily caps, log retention, text budget, log level) live in `api/wrangler.jsonc` and are validated by a test before every deploy.
+- `.env.example` only lists the optional Pushover keys of the smoke test; `.env` and `.env.local` are ignored by git.
+- No other AI provider or vector-database credentials are needed.
 
 ## 📦 Versioning & Release Workflow
-- ✅ Run `make build` and `make test` before handing changes off so `static/pkg/` and the proxy both stay green.
-- ⬆️ Bump the version with `python3 scripts/bump_version.py` (touches `VERSION`, `Cargo.toml`, and `server/Cargo.toml`). The script defaults to patch releases; pass `--minor` or `--major` when needed.
+- ✅ Run `make build` and `make test` before handing changes off so `static/pkg/` and the API Worker both stay green.
+- ⬆️ Bump the version with `python3 scripts/bump_version.py` (touches `VERSION` and `Cargo.toml`; the API reads `VERSION`). The script defaults to patch releases; pass `minor` or `major` when needed.
 - ✍️ Commit only the sources, regenerated assets under `static/pkg/`, and version bumps. Artifacts in `/pkg`, local env files, and logs (`server.log`) are ignored by default.
 
 ## 🎨 Customising the Résumé
@@ -151,35 +166,20 @@ If `PUSHOVER_API_TOKEN` and `PUSHOVER_USER_KEY` are present (in the environment,
 - 🖨️ After editing the HTML, regenerate both PDFs with `python3 scripts/render_cv_pdfs.py` (headless Chrome + PyMuPDF; `--check` only prints the text diff).
 
 ## 🚢 Deployment
-The server is optional at runtime; the public site is served from the static bundle.
+Two Cloudflare Workers on the Free plan: the `zqsdev` site Worker (JavaScript, static assets) and the `zqsdev-api` Worker (Rust), joined by a service binding.
 
-### ☁️ Netlify (www.zqsdev.com & zqsdev.com)
-- 🌐 `netlify.toml` serves the HTML resume at `cv.zqsdev.com`; `founding.zqsdev.com`, `devops.zqsdev.com`, `software.zqsdev.com` and their old PDF links redirect to it. `calendly.zqsdev.com` still forwards to Calendly. Keep the legacy domain aliases so existing shared links continue to work.
-- 🔁 `/api/*` requests proxy through Netlify to `https://api.zqsdev.com/api/:splat`, keeping browser requests same-origin while hitting the Axum backend.
-- 🔐 Install the Netlify CLI (`npm install -g netlify-cli`) and authenticate once with `netlify login` or `NETLIFY_AUTH_TOKEN`.
-- 🚀 `make deploy-preview` → runs `make build` then `netlify deploy --dir static --config netlify.toml`.
-- 🔁 `make deploy-prod` → same flow with `--prod`. Pass extra flags via `NETLIFY_FLAGS` (e.g. `NETLIFY_FLAGS="--alias staging"`).
-- 🧭 In Netlify, add the custom domains `founding.zqsdev.com`, `devops.zqsdev.com`, and `software.zqsdev.com`, then create the matching DNS records before production validation.
+### ☁️ Site Worker (zqsdev.com and its subdomains)
+- 🌐 Since 2026-11-01 the site is a Cloudflare Worker with static assets (`wrangler.jsonc`, `worker/index.js`); DNS for `zqsdev.com` is on Cloudflare too. Workers Builds deploys `main` on every push (`npx wrangler deploy`, no build step: commit the built `static/`).
+- 🗺️ `site-rules.json` holds every redirect, rewrite and header rule; `worker/index.js` applies them in order. It serves the HTML resume at `cv.zqsdev.com`; `founding.zqsdev.com`, `devops.zqsdev.com`, `software.zqsdev.com` and their old PDF links redirect to it. `calendly.zqsdev.com` still forwards to Calendly. Keep the legacy domain aliases so existing shared links continue to work.
+- 🔁 `/api/*` requests go through the `API` service binding to the `zqsdev-api` Worker, same-origin for the browser; the call is kept alive with `ctx.waitUntil` if the visitor disconnects. The API Worker must exist before a site deploy that declares the binding.
+- 🚀 Manual deploy: `make deploy` (runs `make build` then `npx wrangler deploy`; needs `npx wrangler login` once); from Windows, use a checkout with `core.autocrlf=false` so text assets keep LF endings. `make deploy-preview` serves the Worker locally with `wrangler dev`; send `x-test-host: cv.zqsdev.com` to act as another host.
+- 🧭 Each hostname is a Worker route in `wrangler.jsonc` on a proxied DNS record. A new subdomain needs both.
 
-### 🏡 Self-hosting (optional)
-1. 🛠️ Run `make build`.
-2. 📤 Publish the contents of `static/` (including `static/pkg/`) to your CDN or object store.
-
-If you want AI Mode in production, deploy the proxy (e.g. on Fly.io, Railway, or a small VPS) with:
-
-- 🔑 `OPENAI_API_KEY` set.
-- ⚙️ Optional `HOST`, `PORT`, and `STATIC_DIR` overrides.
-
-The proxy reads `static/data/*.json` at startup, forwards questions to `gpt-5.6-luna`, and enforces spend ceilings before gracefully falling back to the classic terminal experience when limits trigger.
-
-### 🧭 Systemd service (production)
-- 🧾 Unit file: `/etc/systemd/system/zqs-terminal.service` runs `/opt/zqsdev/bin/zqs-terminal-server` as the `zqsdev` user with `WorkingDirectory=/opt/zqsdev`.
-- 🌡️ Environment lives in `/etc/zqsdev/server.env`, including `HOST=127.0.0.1`, `PORT=8787`, `STATIC_DIR=/opt/zqsdev/static`, `AI_BUDGET_PATH`, and the API keys used at runtime.
-- 🚀 Releases: `make deploy-backend` builds the committed `HEAD` on the VPS into `/opt/zqsdev/releases/<version>`, swaps the binary and `static` symlink atomically and rolls back on failure (details in `AGENTS.md`).
-- 🛎️ Manage the service with `sudo systemctl status|restart zqs-terminal.service`; logs stream to `/opt/zqsdev/backend.log` (mirrored here as `./backend.log`) and via `journalctl -u zqs-terminal.service`.
-- 📡 Run `make backend-log` to tail the rolling log from the repository root.
-- 🔐 Public ingress: `api.zqsdev.com` terminates TLS with Nginx (config at `/etc/nginx/sites-enabled/api.zqsdev.com`) and proxies to the Axum service on `127.0.0.1:8787`.
-- The binary listens on `127.0.0.1:8787` (`/api/ai`) and restarts automatically on failure.
+### 🦀 API Worker (zqsdev-api)
+- 🧱 `api/` is a workers-rs 0.9.0 crate: the fetch handler serves `/api/data`, `/api/version`, `/api/health`, `/api/ai`, `/api/log/command` and `/api/admin/*`; one SQLite Durable Object (`Ledger`) holds the spend ledger, the rate-limit windows, the provider slots and the question, answer and command logs.
+- 🚀 Workers Builds has no Rust toolchain, so the API is deployed from a developer machine: commit, then `make deploy-api` (tests including the committed config, `wrangler deploy`, then `scripts/verify_api_deploy.py`, which rolls back automatically when `/api/version`, `/api/health` or `/api/data` is wrong). `make api-dry-run` builds without uploading.
+- 🩺 `https://zqsdev.com/api/health` answers `{"ok":true,…}` for an uptime monitor; `make api-tail` streams the Worker logs; `python3 scripts/zqs_admin.py stats` reads the ledger (admin token from `ZQS_ADMIN_TOKEN` or a prompt).
+- 🔐 The API has no public route: it is reached only through the site's binding (`workers.dev` stays on only for the canary and the soak).
 
 ---
 

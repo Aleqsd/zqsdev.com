@@ -12,7 +12,7 @@ pub struct CommandDefinition {
     pub icon: &'static str,
 }
 
-const AI_MODEL_NAME: &str = "gpt-5.6-luna";
+const AI_MODEL_NAME: &str = "gpt-6-luna";
 const REPO_URL: &str = "https://github.com/Aleqsd/zqsdev.com";
 
 pub const COMMAND_DEFINITIONS: &[CommandDefinition] = &[
