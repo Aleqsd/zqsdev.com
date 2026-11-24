@@ -1,0 +1,40 @@
+[package]
+name = "zqsdev-api"
+version = "0.0.0"              # the runtime version comes from ../VERSION (build.rs)
+edition = "2021"
+rust-version = "1.91"
+publish = false
+
+[workspace]                    # standalone workspace: own Cargo.lock, isolated from the frontend crate
+
+[lib]
+crate-type = ["cdylib", "rlib"]   # rlib: native `cargo test --lib`
+
+[dependencies]
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.145"            # no preserve_order: compact output with sorted maps (guarded by a test)
+serde_path_to_error = "=0.1.20"   # axum 0.7.9's JSON rejection texts
+mime = "=0.3.17"                  # axum 0.7.9's Content-Type parser
+futures-util = { version = "0.3.31", default-features = false, features = ["std", "async-await-macro"] }
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+worker = "=0.9.0"                 # no features: fetch handler + DO + SQL (no axum, no http)
+web-sys = { version = "0.3.107", features = ["Crypto", "WorkerGlobalScope"] }   # crypto.randomUUID()
+
+[build-dependencies]
+serde_json = "1.0.145"
+
+[dev-dependencies]
+tokio = { version = "1", default-features = false, features = ["macros", "rt"] }
+rusqlite = { version = "0.37", features = ["bundled"] }   # native tests run the real SQL (4.7)
+sha2 = "0.10"                                              # prompt golden
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+panic = "abort"
+# no `strip = true` (CF §1.2)
+
+[package.metadata.wasm-pack.profile.release]
+wasm-opt = ["-O3"]                # drops names; use ["-O3", "-g"] temporarily for CPU profiles
