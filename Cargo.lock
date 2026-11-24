@@ -441,7 +441,7 @@ dependencies = [
 
 [[package]]
 name = "zqs_terminal"
-version = "1.0.39"
+version = "1.0.40"
 dependencies = [
  "console_error_panic_hook",
  "futures",
