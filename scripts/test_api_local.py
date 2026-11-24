@@ -435,7 +435,8 @@ class Suite:
         before = self.stats()
         outcomes = {}
         reservation = bad_cost = None
-        for magic, error in (("__429__", "http_429"), ("__badsource__", "unknown_source"), ("__big__", "too_large")):
+        for magic, error in (("__429__", "http_429"), ("__badsource__", "unknown_source"), ("__big__", "too_large"),
+                             ("__redirect__", "http_307")):
             reply = self.ask(f"{magic} {uuid.uuid4().hex[:8]}", ip=self.fake_ip())
             expect(reply.status == 503, f"{magic}: {reply.status}")
             expect(reply.json()["reason"] == "provider_unavailable", f"{magic}: {reply.text}")
@@ -459,8 +460,11 @@ class Suite:
         expect(reservation is not None and reservation > 0, "429: reservation missing")
         expect(bad_cost is not None and 0 < bad_cost < reservation, f"badsource charged {bad_cost}, reservation {reservation}")
         expect(self.stats()["inflight"] == [], "inflight not empty")
-        return (f"429 / unknown source / 100 KB reply -> 503 provider_unavailable; errors stored; "
-                f"bad source charged ${bad_cost} instead of the ${reservation} reservation")
+        # A 307 from the provider is an answer, never a hop: the bearer key stays with the stub.
+        followed = self.stub_stats()["redirect_followed"]
+        expect(followed == 0, f"the API followed the provider's redirect {followed} time(s)")
+        return (f"429 / unknown source / 100 KB reply / 307 -> 503 provider_unavailable; errors stored; "
+                f"redirect not followed; bad source charged ${bad_cost} instead of the ${reservation} reservation")
 
     def check_slots_timeout_and_disconnect(self) -> str:
         before = self.stats()

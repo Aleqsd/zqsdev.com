@@ -13,10 +13,12 @@ message, can trigger failures:
     __slow__       a normal answer after 17 s (the API stops waiting after 15 s)
     __badsource__  a 2xx answer citing an unknown source ID
     __big__        a 2xx body of about 100 KB (the API refuses replies above 64 KiB)
+    __redirect__   HTTP 307 to /v1/redirected on this stub (the API must not follow it)
 
-GET /__stats returns the number of completion requests, how many carried a bearer token and,
-with --require-key-prefix, how many carried another key (refused with 401). The token itself is
-never stored or printed.
+GET /__stats returns the number of completion requests, how many carried a bearer token,
+with --require-key-prefix how many carried another key (refused with 401), and how many requests
+followed a __redirect__ answer to /v1/redirected (it must stay 0: a followed redirect would carry
+the bearer key to whatever host the Location names). The token itself is never stored or printed.
 """
 
 from __future__ import annotations
@@ -42,6 +44,7 @@ class Stats:
     requests = 0
     with_bearer = 0
     foreign_keys = 0
+    redirect_followed = 0
     magic: dict[str, int] = {}
 
     @classmethod
@@ -58,10 +61,16 @@ class Stats:
             cls.foreign_keys += 1
 
     @classmethod
+    def count_redirect_followed(cls) -> None:
+        with cls.lock:
+            cls.redirect_followed += 1
+
+    @classmethod
     def snapshot(cls) -> dict:
         with cls.lock:
             return {"requests": cls.requests, "with_bearer": cls.with_bearer,
-                    "foreign_keys": cls.foreign_keys, "magic": dict(cls.magic)}
+                    "foreign_keys": cls.foreign_keys, "redirect_followed": cls.redirect_followed,
+                    "magic": dict(cls.magic)}
 
 
 def completion(model: str, content: str, prompt_tokens: int) -> dict:
@@ -88,7 +97,7 @@ def completion(model: str, content: str, prompt_tokens: int) -> dict:
 
 
 def magic_of(question: str) -> str | None:
-    for magic in ("__429__", "__slow__", "__badsource__", "__big__"):
+    for magic in ("__429__", "__slow__", "__badsource__", "__big__", "__redirect__"):
         if magic in question:
             return magic
     return None
@@ -112,6 +121,12 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self) -> None:  # noqa: N802 - http.server API
         length = int(self.headers.get("Content-Length") or 0)
         raw = self.rfile.read(length) if length > 0 else b""
+        if self.path == "/v1/redirected":
+            # Only a client that followed a __redirect__ answer gets here.
+            Stats.count_redirect_followed()
+            content = json.dumps({"answer": STUB_ANSWER, "sources": ["projects"]})
+            self.reply(200, completion("gpt-6-luna", content, max(1, len(raw) // 4)))
+            return
         if self.path != "/v1/chat/completions":
             self.reply(404, {"error": {"message": "Not found", "type": "invalid_request_error"}})
             return
@@ -139,6 +154,11 @@ class Handler(BaseHTTPRequestHandler):
         if magic == "__429__":
             self.reply(429, {"error": {"message": "Rate limit reached (stub)", "type": "requests", "code": "rate_limit_exceeded"}})
             return
+        if magic == "__redirect__":
+            host, port = self.server.server_address[:2]
+            self.reply(307, {"error": {"message": "Moved (stub)", "type": "redirect"}},
+                       {"Location": f"http://{host}:{port}/v1/redirected"})
+            return
         if magic == "__slow__":
             time.sleep(SLOW_SECONDS)
         sources = ["pinecone-fake"] if magic == "__badsource__" else ["projects"]
@@ -148,12 +168,14 @@ class Handler(BaseHTTPRequestHandler):
             payload["stub_padding"] = "x" * BIG_PADDING_BYTES
         self.reply(200, payload)
 
-    def reply(self, status: int, payload: dict) -> None:
+    def reply(self, status: int, payload: dict, headers: dict | None = None) -> None:
         data = json.dumps(payload).encode("utf-8")
         try:
             self.send_response(status)
             self.send_header("Content-Type", "application/json")
             self.send_header("Content-Length", str(len(data)))
+            for name, value in (headers or {}).items():
+                self.send_header(name, value)
             self.end_headers()
             self.wfile.write(data)
         except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):

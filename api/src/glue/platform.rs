@@ -9,7 +9,10 @@ use futures_util::future::{select, Either};
 use futures_util::{pin_mut, StreamExt};
 use serde_json::Value;
 use worker::wasm_bindgen::{JsCast, JsValue};
-use worker::{js_sys, AbortSignal, Date, Delay, Env, Fetch, Headers, Method, Request, RequestInit};
+use worker::{
+    js_sys, AbortSignal, Date, Delay, Env, Fetch, Headers, Method, Request, RequestInit,
+    RequestRedirect,
+};
 
 use super::log;
 use crate::core::config::Config;
@@ -134,6 +137,9 @@ impl WorkerPlatform {
         }
     }
 
+    /// Redirects are never followed: `follow` (the fetch default) would resend every header,
+    /// the bearer key included, and the visitor's question to whatever host a 3xx names. With
+    /// `manual` a 3xx is just a non-2xx reply (`Provider HTTP 3xx`, body unread).
     fn openai_request(&self, key: &str, body: &str) -> worker::Result<Request> {
         let headers = Headers::new();
         headers.set("Authorization", &format!("Bearer {key}"))?;
@@ -141,6 +147,7 @@ impl WorkerPlatform {
         let mut init = RequestInit::new();
         init.with_method(Method::Post)
             .with_headers(headers)
+            .with_redirect(RequestRedirect::Manual)
             .with_body(Some(JsValue::from_str(body)));
         Request::new_with_init(&self.cfg.endpoint, &init)
     }
@@ -177,8 +184,9 @@ impl Platform for WorkerPlatform {
         }
     }
 
-    /// `POST {base}/chat/completions` with the bearer key. The timer covers headers and body; a
-    /// non-2xx body is never read; a 2xx body is streamed and refused above `REPLY_CAP`.
+    /// `POST {base}/chat/completions` with the bearer key, never following a redirect. The timer
+    /// covers headers and body; a non-2xx body (a 3xx included) is never read; a 2xx body is
+    /// streamed and refused above `REPLY_CAP`.
     async fn provider(&self, body: String, timer: Duration) -> Result<ProviderHttp, ProviderError> {
         let Some(key) = self.cfg.openai_key.as_deref() else {
             return Err(ProviderError::Transport("OpenAI key missing".into()));
