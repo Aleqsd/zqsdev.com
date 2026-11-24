@@ -1,0 +1,33 @@
+// zqsdev-api: Rust Worker (workers-rs 0.9.0) serving /api/* for zqsdev.com.
+// Reached through the "API" service binding of the zqsdev site Worker (../wrangler.jsonc);
+// workers.dev is enabled only during the canary and the soak.
+// Deploy with `make deploy-api` from a developer machine: Workers Builds has no Rust toolchain.
+// The vars below are checked by the native test `production_config_is_valid` before every deploy.
+{
+  "name": "zqsdev-api",
+  "main": "build/index.js",
+  "compatibility_date": "2026-10-30",        // newest date the workerd bundled with wrangler 4.156.0 accepts
+  "account_id": "7b9ee223c6a171ffa7672f2c34bf7c16",
+  "build": {
+    "command": "cargo install -q --locked \"worker-build@0.9.0\" && worker-build --release",
+    "watch_dir": ["src", "../static/data"]   // wrangler dev rebuilds on source or curated-data changes
+  },
+  "workers_dev": true,                       // false in the cleanup commit, after the soak
+  "preview_urls": false,
+  "vars": {
+    "OPENAI_MODEL": "gpt-6-luna",
+    "AI_MINUTE_BUDGET_USD": "0.5",
+    "AI_HOUR_BUDGET_USD": "2",
+    "AI_DAY_BUDGET_USD": "2",
+    "AI_MONTH_BUDGET_USD": "10",
+    "AI_DAILY_MAX_CALLS": "2000",
+    "COMMAND_LOG_DAILY_CAP": "10000",
+    "LOG_RETENTION_DAYS": "0",               // 0 = never delete question, answer or command logs
+    "LOG_TEXT_BUDGET_MB": "256",
+    "LOG_LEVEL": "info"
+  },
+  "secrets": { "required": ["OPENAI_API_KEY", "ADMIN_TOKEN"] },
+  "durable_objects": { "bindings": [ { "name": "LEDGER", "class_name": "Ledger" } ] },
+  "exports": { "Ledger": { "type": "durable-object", "storage": "sqlite" } },
+  "observability": { "enabled": true, "head_sampling_rate": 1 }
+}

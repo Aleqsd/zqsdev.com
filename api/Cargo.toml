@@ -19,7 +19,7 @@ futures-util = { version = "0.3.31", default-features = false, features = ["std"
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 worker = "=0.9.0"                 # no features: fetch handler + DO + SQL (no axum, no http)
-web-sys = { version = "0.3.107", features = ["Crypto", "WorkerGlobalScope"] }   # crypto.randomUUID()
+web-sys = { version = "0.3.107", features = ["AbortController", "AbortSignal", "Crypto", "Headers", "Response", "ResponseInit", "WorkerGlobalScope"] }   # crypto.randomUUID(), abort, responses
 
 [build-dependencies]
 serde_json = "1.0.145"

@@ -31,6 +31,18 @@ fn main() {
     println!("cargo:rerun-if-changed=src/core/prompt.rs");
     println!("cargo:rerun-if-env-changed=ZQS_BUILD_COMMIT");
 
+    // 0. Local fault injection (scripts/test_api_local.py): ZQS_FAULT_INJECTION=1 compiles in the
+    //    `X-Zqs-Fail-After` switch that fails a ledger transaction after N writes. Never deployed:
+    //    `make deploy-api` refuses to run while the variable is set.
+    println!("cargo::rustc-check-cfg=cfg(zqs_fault_injection)");
+    println!("cargo:rerun-if-env-changed=ZQS_FAULT_INJECTION");
+    if std::env::var("ZQS_FAULT_INJECTION").is_ok_and(|value| value == "1") {
+        println!("cargo:rustc-cfg=zqs_fault_injection");
+        println!(
+            "cargo:warning=ZQS_FAULT_INJECTION=1: local fault injection is compiled in; never deploy this build"
+        );
+    }
+
     // 1. Version from ../VERSION.
     let version_path = root.join("VERSION");
     println!("cargo:rerun-if-changed={}", version_path.display());

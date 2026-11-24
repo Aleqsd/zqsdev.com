@@ -419,4 +419,167 @@ mod tests {
         let l = LedgerConfig::from_lookup(&lookup(&[("LOG_RETENTION_DAYS", "9999")]));
         assert_eq!(l.retention_days, 3_650);
     }
+
+    /// JSONC as wrangler reads it: `//` and `/* */` comments outside strings, trailing commas.
+    fn strip_jsonc(text: &str) -> String {
+        let mut out = String::with_capacity(text.len());
+        let mut chars = text.chars().peekable();
+        let mut in_string = false;
+        while let Some(c) = chars.next() {
+            if in_string {
+                out.push(c);
+                if c == '\\' {
+                    if let Some(next) = chars.next() {
+                        out.push(next);
+                    }
+                } else if c == '"' {
+                    in_string = false;
+                }
+                continue;
+            }
+            match (c, chars.peek()) {
+                ('"', _) => {
+                    in_string = true;
+                    out.push(c);
+                }
+                ('/', Some('/')) => {
+                    while chars.peek().is_some_and(|next| *next != '\n') {
+                        chars.next();
+                    }
+                }
+                ('/', Some('*')) => {
+                    chars.next();
+                    let mut previous = ' ';
+                    for next in chars.by_ref() {
+                        if previous == '*' && next == '/' {
+                            break;
+                        }
+                        previous = next;
+                    }
+                }
+                _ => out.push(c),
+            }
+        }
+        // Trailing commas: a comma followed only by whitespace before `}` or `]`.
+        let mut result = String::with_capacity(out.len());
+        let mut in_string = false;
+        let bytes: Vec<char> = out.chars().collect();
+        let mut i = 0;
+        while i < bytes.len() {
+            let c = bytes[i];
+            if in_string {
+                result.push(c);
+                if c == '\\' && i + 1 < bytes.len() {
+                    result.push(bytes[i + 1]);
+                    i += 1;
+                } else if c == '"' {
+                    in_string = false;
+                }
+            } else if c == '"' {
+                in_string = true;
+                result.push(c);
+            } else if c == ',' {
+                let rest = bytes[i + 1..].iter().find(|ch| !ch.is_whitespace());
+                if !matches!(rest, Some('}') | Some(']')) {
+                    result.push(c);
+                }
+            } else {
+                result.push(c);
+            }
+            i += 1;
+        }
+        result
+    }
+
+    #[test]
+    fn jsonc_stripping() {
+        let text = "{\n  // comment \"x\"\n  \"a\": \"b // not a comment\", /* block\n */ \"c\": [1, 2,],\n  \"d\": \"q\\\"/*\",\n}\n";
+        let value: serde_json::Value = serde_json::from_str(&strip_jsonc(text)).unwrap();
+        assert_eq!(
+            value,
+            serde_json::json!({"a": "b // not a comment", "c": [1, 2], "d": "q\"/*"})
+        );
+    }
+
+    /// The committed `api/wrangler.jsonc` must give a working AI configuration and the intended
+    /// limits: `make deploy-api` runs this test first, so an invalid price, budget or cap fails
+    /// the deploy instead of disabling AI in production.
+    #[test]
+    fn production_config_is_valid() {
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("wrangler.jsonc");
+        let text = std::fs::read_to_string(&path).unwrap();
+        let config: serde_json::Value = serde_json::from_str(&strip_jsonc(&text)).unwrap();
+        assert_eq!(config["name"], "zqsdev-api");
+        assert_eq!(config["main"], "build/index.js");
+        let date = config["compatibility_date"].as_str().unwrap();
+        assert!(
+            date <= "2026-10-30",
+            "wrangler 4.156.0's local workerd refuses later compatibility dates: {date}"
+        );
+        assert_eq!(config["durable_objects"]["bindings"][0]["name"], "LEDGER");
+        assert_eq!(
+            config["durable_objects"]["bindings"][0]["class_name"],
+            "Ledger"
+        );
+        assert_eq!(config["exports"]["Ledger"]["type"], "durable-object");
+        assert_eq!(config["exports"]["Ledger"]["storage"], "sqlite");
+        let required: Vec<&str> = config["secrets"]["required"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|v| v.as_str().unwrap())
+            .collect();
+        assert_eq!(required, ["OPENAI_API_KEY", "ADMIN_TOKEN"]);
+
+        let vars: HashMap<String, String> = config["vars"]
+            .as_object()
+            .unwrap()
+            .iter()
+            .map(|(name, value)| {
+                let text = value.as_str();
+                assert!(text.is_some(), "var {name} must be a string");
+                (name.clone(), text.unwrap().to_string())
+            })
+            .collect();
+        for secret in ["OPENAI_API_KEY", "ADMIN_TOKEN"] {
+            assert!(
+                !vars.contains_key(secret),
+                "{secret} is a secret, never a var"
+            );
+        }
+        assert!(
+            !vars.contains_key("OPENAI_BASE_URL"),
+            "OPENAI_BASE_URL only points local tests at the stub"
+        );
+        let lookup = |name: &str| match name {
+            "OPENAI_API_KEY" => Some("sk-production-config-check".to_string()),
+            "ADMIN_TOKEN" => Some("a".repeat(43)),
+            _ => vars.get(name).cloned(),
+        };
+
+        let cfg = Config::from_lookup(&lookup);
+        assert!(cfg.ai_configured, "AI disabled: {:?}", cfg.ai_error);
+        assert_eq!(cfg.model, vars["OPENAI_MODEL"]);
+        assert_eq!(cfg.endpoint, "https://api.openai.com/v1/chat/completions");
+        assert!(cfg.admin_token.is_some());
+        assert!(["error", "warn", "info", "debug"].contains(&vars["LOG_LEVEL"].as_str()));
+
+        // Budgets and caps must parse as written: an unparseable value would silently fall
+        // back to its default, and an out-of-range one would be clamped.
+        for (name, _) in BUDGET_VARS {
+            let usd: f64 = vars[name].parse().unwrap();
+            assert!(usd.is_finite() && usd >= 0.0, "{name}");
+        }
+        let ledger = LedgerConfig::from_lookup(&lookup);
+        assert!(ledger.limits.is_some());
+        let int = |name: &str| -> i64 { vars[name].parse().unwrap() };
+        assert_eq!(ledger.daily_max_calls, int("AI_DAILY_MAX_CALLS"));
+        assert_eq!(ledger.command_daily_cap, int("COMMAND_LOG_DAILY_CAP"));
+        assert_eq!(ledger.retention_days, int("LOG_RETENTION_DAYS"));
+        assert_eq!(
+            ledger.text_budget_bytes,
+            int("LOG_TEXT_BUDGET_MB") * 1_048_576
+        );
+        assert_eq!(ledger.log_level, cfg.log_level);
+    }
 }

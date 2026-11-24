@@ -28,3 +28,13 @@ __pycache__/
 
 # Cloudflare wrangler local state
 .wrangler/
+
+# zqsdev-api Worker (api/): worker-build output, dry-run bundle, local secrets
+api/build/
+api/dist/
+api/.dev.vars
+api/.dev.vars.*
+!api/.dev.vars.example
+
+# Copies of the VPS spend ledger made for the import (private, never committed)
+ai-budget*.json
