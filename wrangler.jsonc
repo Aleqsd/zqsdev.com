@@ -14,6 +14,9 @@
     "html_handling": "none",
     "not_found_handling": "none"
   },
+  // /api/* is served by the zqsdev-api Worker (api/wrangler.jsonc) through this binding.
+  // zqsdev-api must exist before this file is deployed (Workers Builds deploys main on every push).
+  "services": [ { "binding": "API", "service": "zqsdev-api" } ],
   "routes": [
     { "pattern": "zqsdev.com/*", "zone_name": "zqsdev.com" },
     { "pattern": "www.zqsdev.com/*", "zone_name": "zqsdev.com" },
