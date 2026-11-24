@@ -1,5 +1,5 @@
 # 🖥️ ZQS Terminal — Rust Résumé in Your Browser
-[![Netlify Status](https://api.netlify.com/api/v1/badges/c51eac08-53e4-4951-a311-8491cb78a4b8/deploy-status)](https://app.netlify.com/projects/zqsdev/deploys) ![WebAssembly](https://img.shields.io/badge/WebAssembly-654FF0?logo=webassembly&logoColor=white) ![Rust](https://img.shields.io/badge/Rust-%F0%9F%A6%80-orange?logo=rust&logoColor=white)
+![Cloudflare Workers](https://img.shields.io/badge/Cloudflare%20Workers-F38020?logo=cloudflare&logoColor=white) ![WebAssembly](https://img.shields.io/badge/WebAssembly-654FF0?logo=webassembly&logoColor=white) ![Rust](https://img.shields.io/badge/Rust-%F0%9F%A6%80-orange?logo=rust&logoColor=white)
 
 An immersive single-page web terminal that reveals Alexandre DO-O ALMEIDA’s résumé through typed commands. Everything is written in **Rust**, compiled to WebAssembly, and ships as a framework-free SPA for fast cold starts.
 
@@ -24,8 +24,10 @@ An immersive single-page web terminal that reveals Alexandre DO-O ALMEIDA’s r�
 .
 ├── Cargo.toml            # Workspace root + WebAssembly crate manifest
 ├── VERSION               # Project version (sync via scripts/bump_version.py)
-├── Makefile              # Build/test/deploy entry points (wasm-pack, Netlify, logs)
-├── netlify.toml          # Netlify deploy config (redirects, cache headers)
+├── Makefile              # Build/test/deploy entry points (wasm-pack, Cloudflare, logs)
+├── site-rules.json       # Redirects, rewrites and cache headers for every zqsdev.com host
+├── worker/index.js       # Cloudflare Worker applying site-rules.json in front of static/
+├── wrangler.jsonc        # Cloudflare Worker config (assets, routes)
 ├── .env.example          # Template for required/optional environment variables
 ├── src/                  # Rust/WebAssembly terminal (commands, state, renderer)
 ├── server/               # Axum proxy (OpenAI relay, rate limiting, static host)
@@ -116,7 +118,7 @@ The CI pipeline should run the same trio so local runs stay in lockstep with aut
 
 ## 🩺 Live Production Smoke Test
 
-Run `make autotest` (or directly `python3 scripts/live_smoke_test.py`) to exercise the deployed site once end-to-end. It validates the Netlify bundle, the `/api/data` payloads, and sends two questions to the AI concierge. Install the lone dependency with `pip install requests`, then wire either command into your scheduler (cron, GitHub Actions, etc.). Optional flags:
+Run `make autotest` (or directly `python3 scripts/live_smoke_test.py`) to exercise the deployed site once end-to-end. It validates the deployed bundle, the `/api/data` payloads, and sends two questions to the AI concierge. Install the lone dependency with `pip install requests`, then wire either command into your scheduler (cron, GitHub Actions, etc.). Optional flags:
 
 ```bash
 python3 scripts/live_smoke_test.py --json-output live-smoke.json
@@ -153,13 +155,12 @@ If `PUSHOVER_API_TOKEN` and `PUSHOVER_USER_KEY` are present (in the environment,
 ## 🚢 Deployment
 The server is optional at runtime; the public site is served from the static bundle.
 
-### ☁️ Netlify (www.zqsdev.com & zqsdev.com)
-- 🌐 `netlify.toml` serves the HTML resume at `cv.zqsdev.com`; `founding.zqsdev.com`, `devops.zqsdev.com`, `software.zqsdev.com` and their old PDF links redirect to it. `calendly.zqsdev.com` still forwards to Calendly. Keep the legacy domain aliases so existing shared links continue to work.
-- 🔁 `/api/*` requests proxy through Netlify to `https://api.zqsdev.com/api/:splat`, keeping browser requests same-origin while hitting the Axum backend.
-- 🔐 Install the Netlify CLI (`npm install -g netlify-cli`) and authenticate once with `netlify login` or `NETLIFY_AUTH_TOKEN`.
-- 🚀 `make deploy-preview` → runs `make build` then `netlify deploy --dir static --config netlify.toml`.
-- 🔁 `make deploy-prod` → same flow with `--prod`. Pass extra flags via `NETLIFY_FLAGS` (e.g. `NETLIFY_FLAGS="--alias staging"`).
-- 🧭 In Netlify, add the custom domains `founding.zqsdev.com`, `devops.zqsdev.com`, and `software.zqsdev.com`, then create the matching DNS records before production validation.
+### ☁️ Cloudflare Workers (zqsdev.com and its subdomains)
+- 🌐 Since 2026-11-01 the site is a Cloudflare Worker with static assets (`wrangler.jsonc`, `worker/index.js`); DNS for `zqsdev.com` is on Cloudflare too. Workers Builds deploys `main` on every push (`npx wrangler deploy`, no build step: commit the built `static/`).
+- 🗺️ `site-rules.json` holds every redirect, rewrite and header rule; `worker/index.js` applies them in order. It serves the HTML resume at `cv.zqsdev.com`; `founding.zqsdev.com`, `devops.zqsdev.com`, `software.zqsdev.com` and their old PDF links redirect to it. `calendly.zqsdev.com` still forwards to Calendly. Keep the legacy domain aliases so existing shared links continue to work.
+- 🔁 `/api/*` requests proxy through the Worker to `https://api.zqsdev.com/api/:splat`, keeping browser requests same-origin while hitting the Axum backend.
+- 🚀 Manual deploy: `make deploy` (runs `make build` then `npx wrangler deploy`; needs `npx wrangler login` once); from Windows, use a checkout with `core.autocrlf=false` so text assets keep LF endings). `make deploy-preview` serves the Worker locally with `wrangler dev`; send `x-test-host: cv.zqsdev.com` to act as another host.
+- 🧭 Each hostname is a Worker route in `wrangler.jsonc` on a proxied DNS record. A new subdomain needs both.
 
 ### 🏡 Self-hosting (optional)
 1. 🛠️ Run `make build`.

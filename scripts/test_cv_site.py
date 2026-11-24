@@ -2,6 +2,7 @@
 
 from html.parser import HTMLParser
 from pathlib import Path
+import hashlib
 import json
 import re
 import unittest
@@ -203,10 +204,33 @@ class PublicCvTests(unittest.TestCase):
             self.assertEqual(int.from_bytes(content[20:24], "big"), 630)
             self.assertEqual(metadata["twitter:image"], image_url)
             self.assertEqual(metadata["twitter:card"], "summary_large_image")
+            # Immutable cache: the name carries the content hash (scripts/render_share_images.py).
+            self.assertEqual(image.stem.rsplit("-", 1)[1], hashlib.sha256(content).hexdigest()[:12])
+            self.assertEqual((metadata["og:image:width"], metadata["og:image:height"]), ("1200", "630"))
+            self.assertLess(len(content), 300 * 1024)  # WhatsApp drops larger previews
             preload = next(a for tag, a in doc.elements if tag == "link" and a.get("as") == "font")
             font = (CV / preload["href"]).read_bytes()
             self.assertEqual(font[:4], b"wOF2")
             self.assertLess(len(font), 100 * 1024)
+
+    def test_each_language_has_its_own_share_image_and_no_orphans(self):
+        used = set()
+        for name in ("index.html", "fr.html"):
+            text = (CV / name).read_text(encoding="utf-8")
+            used |= set(re.findall(r"https://cv\.zqsdev\.com/assets/(share-[a-z]{2}-[0-9a-f]{12}\.png)", text))
+        self.assertEqual({name.split("-")[1] for name in used}, {"en", "fr"})
+        self.assertEqual({path.name for path in (CV / "assets").glob("share-*.png")}, used)
+
+    def test_share_images_keep_everything_inside_the_square_safe_zone(self):
+        try:
+            from PIL import Image
+            from scripts.render_share_images import outside_safe_zone
+        except ImportError:
+            self.skipTest("Pillow is not installed")
+        for path in sorted((CV / "assets").glob("share-*.png")):
+            with Image.open(path) as image:
+                # Square and 2:1 crops (WhatsApp, Teams, DMs, X) must not cut any text.
+                self.assertIsNone(outside_safe_zone(image.convert("RGB")), path.name)
 
     def test_legacy_links_reach_the_single_resume(self):
         rules = json.loads((ROOT / "site-rules.json").read_text(encoding="utf-8"))["redirects"]
