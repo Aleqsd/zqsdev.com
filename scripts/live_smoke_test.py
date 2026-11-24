@@ -29,6 +29,23 @@ from urllib.parse import urljoin
 
 import requests
 
+API_WRANGLER = Path(__file__).resolve().parents[1] / "api" / "wrangler.jsonc"
+
+
+def configured_model() -> Optional[str]:
+    """The OPENAI_MODEL var of api/wrangler.jsonc (comment lines skipped), or None."""
+    try:
+        lines = API_WRANGLER.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return None
+    for line in lines:
+        if line.lstrip().startswith("//"):
+            continue
+        match = re.search(r'"OPENAI_MODEL"\s*:\s*"([^"]+)"', line)
+        if match:
+            return match.group(1)
+    return None
+
 
 @dataclasses.dataclass
 class TestResult:
@@ -185,9 +202,14 @@ class LiveSmokeTester:
         return f"{self.api_base_url}/{path.lstrip('/')}"
 
     def _expected_model(self) -> str:
-        if not self.backend_model:
-            raise AssertionError("model unknown: the backend version check did not pass")
-        return self.backend_model
+        """The model /api/version reported, even when its version check failed; otherwise the
+        configured OPENAI_MODEL, so the AI checks never fail only because that check did."""
+        if self.backend_model:
+            return self.backend_model
+        model = configured_model()
+        if not model:
+            raise AssertionError("model unknown: /api/version gave none and api/wrangler.jsonc has no OPENAI_MODEL")
+        return model
 
     def _head_or_get(self, path: str) -> requests.Response:
         url = self._url(path)
@@ -460,6 +482,8 @@ class LiveSmokeTester:
         status = response.status_code
         assert status == 200, f"version endpoint returned {status}"
         payload = response.json()
+        # Recorded before the assertions: the AI checks compare with it even after a version mismatch.
+        self.backend_model = payload.get("model") or None
         version = payload.get("version", "")
         commit = payload.get("commit", "unknown")
         assert version, "backend version missing in version payload"
@@ -468,7 +492,6 @@ class LiveSmokeTester:
             version == expected_version
         ), f"backend version mismatch (expected {expected_version}, got {version})"
         assert payload.get("ai_configured") is True, "backend reports ai_configured=false"
-        self.backend_model = payload.get("model") or None
         return f"backend_version={version} commit={commit} model={self.backend_model}"
 
     def test_backend_health_endpoint(self) -> str:

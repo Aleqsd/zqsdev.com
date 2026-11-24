@@ -1,4 +1,4 @@
-"""Operations scripts (admin client, cut-over check); no network access."""
+"""Operations scripts (admin client, cut-over check, live smoke test); no network access."""
 
 import argparse
 import io
@@ -14,6 +14,7 @@ from unittest import mock
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
+import live_smoke_test  # noqa: E402
 import verify_cutover  # noqa: E402
 import zqs_admin  # noqa: E402
 
@@ -172,6 +173,39 @@ class ImportLedger(unittest.TestCase):
                 run_quietly(zqs_admin.cmd_import, client, argparse.Namespace(file=path, chunk=25, close=False))
         self.assertIn("--chunk 12", str(caught.exception))
         self.assertIn("idempotent", str(caught.exception))
+
+
+class SmokeModel(unittest.TestCase):
+    """The AI checks know the expected model even when the version check fails."""
+
+    def make_tester(self):
+        return live_smoke_test.LiveSmokeTester(base_url="https://zqsdev.com", ai_question="q", timeout=1.0,
+                                               fail_fast=False)
+
+    def test_a_version_mismatch_still_records_the_model(self):
+        tester = self.make_tester()
+        response = mock.Mock(status_code=200)
+        response.json.return_value = {"version": "0.0.0", "commit": "abc", "ai_configured": True,
+                                      "model": "gpt-6-luna-2026-11-01"}
+        tester.session = mock.Mock()
+        tester.session.get.return_value = response
+        with self.assertRaises(AssertionError):
+            tester.test_backend_version_endpoint()
+        self.assertEqual(tester._expected_model(), "gpt-6-luna-2026-11-01")
+
+    def test_without_a_version_reply_the_configured_model_is_expected(self):
+        configured = live_smoke_test.configured_model()
+        vars_line = next(line for line in (ROOT / "api" / "wrangler.jsonc").read_text(encoding="utf-8").splitlines()
+                         if '"OPENAI_MODEL"' in line and not line.lstrip().startswith("//"))
+        self.assertIn(f'"{configured}"', vars_line)
+        tester = self.make_tester()
+        self.assertEqual(tester._expected_model(), configured)
+        reply = mock.Mock(status_code=200)
+        reply.json.return_value = {"ai_enabled": True, "model": f"{configured}-2026-11-01", "sources": ["experiences"],
+                                   "answer": "Alexandre leads agentic engineering at Studi, among other things."}
+        tester.session = mock.Mock()
+        tester.session.post.return_value = reply
+        self.assertIn("Studi", tester.test_ai_endpoint())
 
 
 if __name__ == "__main__":
