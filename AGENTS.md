@@ -34,6 +34,7 @@ This file captures the details an operator or automation agent needs to keep the
 - After deploying, run `make autotest AUTOTEST_FLAGS="--no-pushover"` (default base URL `https://zqsdev.com`; `www` redirects and breaks `POST /api/ai`) to ensure `/api/ai` returns factually correct answers with validated `sources` IDs.
 - `KNOWLEDGE_UPDATED` comes from `updated_at` in `static/data/profile.json` at build time; bump that date when the curated data is reviewed.
 - After editing `static/cv/*.html`, regenerate the PDFs with `python3 scripts/render_cv_pdfs.py` (Chrome + `pip install pymupdf`; `--check` previews the text diff without writing). It reuses the 1254px portrait embedded in the current PDF, which is not a web asset.
+- Link previews (`og:image`/`twitter:image`, 1200x630) come from `python3 scripts/render_share_images.py` (Chrome + Pillow): portrait, name, role and YC/Sony logos all inside the central 630x630 square, so square and 2:1 crops never cut text (the script and a test fail otherwise). It writes hash-named `assets/share-<lang>-*.png` and updates both pages; `--out DIR` previews only.
 - Use the hidden `version` terminal command (or `make version-check`) to verify the frontend and backend are running the same release and to grab the GitHub commit links directly from production.
 - If `make version-check` reports an outdated backend version or commit, run `make deploy-api` from the matching commit; the API reports the `VERSION` and commit it was built from.
 
