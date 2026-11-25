@@ -1,0 +1,20 @@
+# Nightly end-to-end check of https://zqsdev.com (site, API Worker, 2 paid AI questions).
+# Replaces the VPS cron job. Pushover alerts need the repository secrets PUSHOVER_API_TOKEN and
+# PUSHOVER_USER_KEY; without them a failed run still shows in GitHub.
+name: live-smoke
+on:
+  schedule: [{ cron: "30 7 * * *" }]   # 08:30 Paris in winter, 09:30 in summer
+  workflow_dispatch: {}
+permissions: { contents: read }
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+      # Ubuntu 24.04 marks the system Python as externally managed (PEP 668); --user keeps it untouched.
+      - run: python3 -m pip install --user --break-system-packages requests
+      - run: python3 scripts/live_smoke_test.py
+        env:
+          PUSHOVER_API_TOKEN: ${{ secrets.PUSHOVER_API_TOKEN }}
+          PUSHOVER_USER_KEY: ${{ secrets.PUSHOVER_USER_KEY }}

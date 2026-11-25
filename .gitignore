@@ -17,7 +17,6 @@ target/
 
 # Runtime logs
 server.log
-server/Cargo.lock
 static/data/rag_chunks.db
 
 # Local Netlify folder
@@ -28,3 +27,17 @@ __pycache__/
 
 # Cloudflare wrangler local state
 .wrangler/
+
+# zqsdev-api Worker (api/): worker-build output, dry-run bundle, local secrets
+api/build/
+api/dist/
+api/.dev.vars
+api/.dev.vars.*
+!api/.dev.vars.example
+
+# Copies of the VPS spend ledger made for the import (private, never committed)
+ai-budget*.json
+
+# Admin exports: visitor IPs, questions, answers and commands (private, never committed)
+*.ndjson
+exports/

@@ -78,18 +78,6 @@ def update_manifest(manifest: Path, new_version: str) -> bool:
     return True
 
 
-def ensure_workspace_version(manifest: Path) -> None:
-    text = manifest.read_text(encoding="utf-8")
-    if 'version.workspace' not in text:
-        raise ValueError(
-            f"{manifest} does not opt into workspace versioning; update the manifest or adjust the bump script."
-        )
-    if VERSION_PATTERN.search(text):
-        raise ValueError(
-            f"{manifest} still contains an explicit version assignment; remove it to rely on workspace.package."
-        )
-
-
 def write_version_file(version_file: Path, version: str) -> None:
     version_file.write_text(f"{version}\n", encoding="utf-8")
 
@@ -102,8 +90,9 @@ def main() -> int:
     args = parse_args()
     repo_root = Path(__file__).resolve().parents[1]
     version_file = repo_root / "VERSION"
+    # The frontend crate takes its version from the root Cargo.toml; the API Worker (api/) reads
+    # VERSION at build time, so these two files are the whole release identifier.
     workspace_manifest = repo_root / "Cargo.toml"
-    server_manifest = repo_root / "server" / "Cargo.toml"
 
     try:
         current_version = read_current_version(version_file, workspace_manifest)
@@ -111,7 +100,6 @@ def main() -> int:
         write_version_file(version_file, new_version)
         if not update_manifest(workspace_manifest, new_version):
             raise ValueError(f"Failed to update version in {workspace_manifest}")
-        ensure_workspace_version(server_manifest)
     except Exception as exc:  # noqa: BLE001
         print(f"[bump-version] error: {exc}", file=sys.stderr)
         return 1

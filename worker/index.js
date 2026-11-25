@@ -2,7 +2,8 @@
 // The rules live in site-rules.json (also read by the Python tests); this file applies them:
 // - redirects: first match wins; a pattern starting with https:// matches host + path, otherwise the path only;
 //   "*" captures anything and ":splat" reuses it; an exact pattern also matches with a trailing slash;
-//   status 200 rewrites to another file (or proxies an https:// target); "force": false applies only when no file matches.
+//   status 200 rewrites to another file, or forwards to a service binding when the target is "service:<BINDING>";
+//   "force": false applies only when no file matches.
 // - headers: every matching rule applies, later ones override; they match the public path, before any rewrite.
 
 import RULES from "../site-rules.json";
@@ -48,16 +49,15 @@ async function asset(request, env, path) {
   return [res, type && res.status === 200 ? { "Content-Type": type } : {}];
 }
 
-async function proxy(request, target) {
-  const headers = new Headers(request.headers);
-  headers.delete("host");
-  const ip = request.headers.get("cf-connecting-ip");
-  if (ip) headers.set("X-Forwarded-For", ip);
-  const init = { method: request.method, headers, redirect: "manual" };
-  if (!["GET", "HEAD"].includes(request.method)) init.body = request.body;
+// A status-200 rule whose target is "service:<BINDING>" forwards the original request to that Worker binding.
+// waitUntil keeps this invocation, and so the called Worker, running if the visitor disconnects:
+// the API then settles its spending ledger and frees its provider slot instead of being cancelled mid-call.
+async function service(request, env, ctx, binding) {
   let res;
   try {
-    res = await fetch(target, init);
+    const pending = env[binding].fetch(request);
+    ctx.waitUntil(pending.then(() => {}, () => {}));
+    res = await pending;
   } catch {
     return new Response("Bad gateway", { status: 502, headers: { "Strict-Transport-Security": HSTS } });
   }
@@ -69,7 +69,7 @@ async function proxy(request, target) {
 const notFound = (path) => withHeaders(new Response(NOT_FOUND, { status: 404, headers: { "Content-Type": "text/html; charset=utf-8" } }), path);
 
 export default {
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
     const url = new URL(request.url);
     let host = url.hostname;
     let scheme = url.protocol.replace(":", "");
@@ -96,7 +96,7 @@ export default {
       }
       const target = rule.to.replace(":splat", match[1] ?? "");
       if (rule.status !== 200) return withHeaders(redirect(target + (target.includes("?") ? "" : search), rule.status), path);
-      if (target.startsWith("https://")) return proxy(request, target + search);
+      if (target.startsWith("service:")) return service(request, env, ctx, target.slice("service:".length));
       const rewritten = await asset(request, env, target);
       return rewritten ? withHeaders(rewritten[0], path, rewritten[1]) : notFound(path);
     }

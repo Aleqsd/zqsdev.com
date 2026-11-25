@@ -3,7 +3,7 @@ import json
 import os
 import urllib.request
 
-URL = os.environ.get("VERSION_URL", "https://www.zqsdev.com/api/version")
+URL = os.environ.get("VERSION_URL", "https://zqsdev.com/api/version")
 
 def main() -> None:
     try:

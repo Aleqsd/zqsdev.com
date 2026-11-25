@@ -1,14 +1,16 @@
 #!/usr/bin/env python3
-"""Nightly live smoke test runner for https://www.zqsdev.com.
+"""Nightly live smoke test runner for https://zqsdev.com.
 
 This script exercises the production website once per run, covering:
   • critical static assets served from Cloudflare
-  • the `/api/data` payload that powers the terminal commands
+  • the `/api/version`, `/api/health` and `/api/data` endpoints of the zqsdev-api Worker
   • dataset sanity checks (profile, skills, experience, projects, FAQ, testimonials)
   • two `/api/ai` questions checking current role and terminal technologies
 
 Run with:
     python3 scripts/live_smoke_test.py
+    # canary: send only the /api/* checks to the API Worker's own hostname
+    python3 scripts/live_smoke_test.py --api-base-url https://zqsdev-api.aleqsd.workers.dev
 """
 
 from __future__ import annotations
@@ -26,6 +28,23 @@ from typing import Callable, List, Optional, Sequence, Tuple
 from urllib.parse import urljoin
 
 import requests
+
+API_WRANGLER = Path(__file__).resolve().parents[1] / "api" / "wrangler.jsonc"
+
+
+def configured_model() -> Optional[str]:
+    """The OPENAI_MODEL var of api/wrangler.jsonc (comment lines skipped), or None."""
+    try:
+        lines = API_WRANGLER.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return None
+    for line in lines:
+        if line.lstrip().startswith("//"):
+            continue
+        match = re.search(r'"OPENAI_MODEL"\s*:\s*"([^"]+)"', line)
+        if match:
+            return match.group(1)
+    return None
 
 
 @dataclasses.dataclass
@@ -71,20 +90,19 @@ class LiveSmokeTester:
         ai_question: str,
         timeout: float,
         fail_fast: bool,
+        api_base_url: Optional[str] = None,
     ) -> None:
-        normalized = base_url.rstrip("/")
-        if not normalized.startswith("http://") and not normalized.startswith(
-            "https://"
-        ):
-            raise ValueError(f"Base URL must include scheme (got {base_url!r})")
+        normalized = self._normalize(base_url)
         self.base_url = normalized
+        self.api_base_url = self._normalize(api_base_url) if api_base_url else normalized
+        self.backend_model: Optional[str] = None
         self.ai_question = ai_question
         self.timeout = timeout
         self.fail_fast = fail_fast
         self.session = requests.Session()
         self.session.headers.update(
             {
-                "User-Agent": "zqsdev-live-smoke/1.0 (+https://www.zqsdev.com)",
+                "User-Agent": "zqsdev-live-smoke/1.0 (+https://zqsdev.com)",
                 "Accept-Language": "en-US,en;q=0.9",
             }
         )
@@ -98,6 +116,7 @@ class LiveSmokeTester:
             ("Build id not dev", self.test_build_id_not_dev),
             ("Static assets respond", self.test_static_assets),
             ("Backend version endpoint", self.test_backend_version_endpoint),
+            ("Backend health endpoint", self.test_backend_health_endpoint),
             ("Terminal data endpoint", self.test_terminal_data_endpoint),
             ("Profile dataset", self.test_profile_dataset),
             ("Canonical bilingual CV", self.test_resume_variants),
@@ -163,11 +182,34 @@ class LiveSmokeTester:
     def all_passed(self) -> bool:
         return all(result.passed for result in self.results)
 
+    @staticmethod
+    def _normalize(url: str) -> str:
+        normalized = url.rstrip("/")
+        if not normalized.startswith("http://") and not normalized.startswith(
+            "https://"
+        ):
+            raise ValueError(f"Base URL must include scheme (got {url!r})")
+        return normalized
+
     def _url(self, path: str) -> str:
         if path.startswith("http://") or path.startswith("https://"):
             return path
         path = path.lstrip("/")
         return f"{self.base_url}/{path}" if path else self.base_url
+
+    def _api_url(self, path: str) -> str:
+        """`/api/*` goes to --api-base-url when given (canary), otherwise to the site."""
+        return f"{self.api_base_url}/{path.lstrip('/')}"
+
+    def _expected_model(self) -> str:
+        """The model /api/version reported, even when its version check failed; otherwise the
+        configured OPENAI_MODEL, so the AI checks never fail only because that check did."""
+        if self.backend_model:
+            return self.backend_model
+        model = configured_model()
+        if not model:
+            raise AssertionError("model unknown: /api/version gave none and api/wrangler.jsonc has no OPENAI_MODEL")
+        return model
 
     def _head_or_get(self, path: str) -> requests.Response:
         url = self._url(path)
@@ -241,7 +283,7 @@ class LiveSmokeTester:
         return ", ".join(detail_parts)
 
     def test_terminal_data_endpoint(self) -> str:
-        response = self.session.get(self._url("/api/data"), timeout=self.timeout)
+        response = self.session.get(self._api_url("/api/data"), timeout=self.timeout)
         status = response.status_code
         if status == 200:
             cache_control = response.headers.get("Cache-Control", "missing")
@@ -436,10 +478,12 @@ class LiveSmokeTester:
         return f"webassembly_projects={len(webassembly_projects)} icon=wasm-original.svg"
 
     def test_backend_version_endpoint(self) -> str:
-        response = self.session.get(self._url("/api/version"), timeout=self.timeout)
+        response = self.session.get(self._api_url("/api/version"), timeout=self.timeout)
         status = response.status_code
         assert status == 200, f"version endpoint returned {status}"
         payload = response.json()
+        # Recorded before the assertions: the AI checks compare with it even after a version mismatch.
+        self.backend_model = payload.get("model") or None
         version = payload.get("version", "")
         commit = payload.get("commit", "unknown")
         assert version, "backend version missing in version payload"
@@ -447,7 +491,18 @@ class LiveSmokeTester:
         assert (
             version == expected_version
         ), f"backend version mismatch (expected {expected_version}, got {version})"
-        return f"backend_version={version} commit={commit}"
+        assert payload.get("ai_configured") is True, "backend reports ai_configured=false"
+        return f"backend_version={version} commit={commit} model={self.backend_model}"
+
+    def test_backend_health_endpoint(self) -> str:
+        response = self.session.get(self._api_url("/api/health"), timeout=self.timeout)
+        status = response.status_code
+        assert status == 200, f"health returned {status}: {response.text[:200]}"
+        payload = response.json()
+        assert payload.get("ok") is True, f"health not ok: {payload}"
+        cache_control = response.headers.get("Cache-Control", "missing")
+        assert cache_control == "no-store", f"unexpected Cache-Control {cache_control}"
+        return f"ledger={payload.get('ledger')} storage={payload.get('storage')}"
 
     @staticmethod
     def _local_version() -> str:
@@ -466,7 +521,7 @@ class LiveSmokeTester:
             "question": "Which technologies power the ZQSDev Terminal project?"
         }
         response = self.session.post(
-            self._url("/api/ai"), json=payload, timeout=self.timeout
+            self._api_url("/api/ai"), json=payload, timeout=self.timeout
         )
         status = response.status_code
         assert status == 200, f"unexpected status {status}"
@@ -477,7 +532,9 @@ class LiveSmokeTester:
         missing = [term for term in required_terms if term.lower() not in answer.lower()]
         assert not missing, f"missing tech terms in answer: {missing}"
         assert 'projects' in data.get('sources', []), 'Projects attribution missing'
-        assert data.get('model') == 'gpt-5.6-luna', 'Unexpected model'
+        # The provider may report a dated snapshot of the configured model.
+        expected_model = self._expected_model()
+        assert (data.get('model') or '').startswith(expected_model), f"Unexpected model {data.get('model')!r}"
         return f"terms_present={','.join(required_terms)}; source=projects"
 
     def test_faq_dataset(self) -> str:
@@ -501,7 +558,7 @@ class LiveSmokeTester:
     def test_ai_endpoint(self) -> str:
         payload = {"question": self.ai_question}
         response = self.session.post(
-            self._url("/api/ai"), json=payload, timeout=self.timeout
+            self._api_url("/api/ai"), json=payload, timeout=self.timeout
         )
         status = response.status_code
         assert status == 200, f"unexpected status {status}"
@@ -510,19 +567,26 @@ class LiveSmokeTester:
         answer = data.get("answer", "")
         assert len(answer.strip()) >= 32, "answer too short"
         assert data.get('sources'), 'Source attribution missing'
-        assert data.get('model') == 'gpt-5.6-luna', 'Unexpected model'
+        expected_model = self._expected_model()
+        assert (data.get('model') or '').startswith(expected_model), f"Unexpected model {data.get('model')!r}"
         assert 'Studi' in answer, 'Current role missing'
         return f"model={data['model']}; current role=Studi; sources={data['sources']}"
 
 
 def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Run live smoke tests against www.zqsdev.com"
+        description="Run live smoke tests against zqsdev.com"
     )
     parser.add_argument(
         "--base-url",
         default="https://zqsdev.com",
         help="Base URL to target (default: %(default)s)",
+    )
+    parser.add_argument(
+        "--api-base-url",
+        default=None,
+        help="Send only the /api/* checks to this base URL, e.g. the API canary "
+        "https://zqsdev-api.aleqsd.workers.dev (default: --base-url)",
     )
     parser.add_argument(
         "--ai-question",
@@ -610,7 +674,7 @@ def send_pushover_notification(tester: LiveSmokeTester) -> bool:
         "title": "ZQSDev nightly smoke",
         "priority": 1 if failed else 0,
         "url": tester.base_url,
-        "url_title": "Open www.zqsdev.com",
+        "url_title": "Open zqsdev.com",
     }
     try:
         response = requests.post(
@@ -634,6 +698,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         ai_question=args.ai_question,
         timeout=args.timeout,
         fail_fast=args.fail_fast,
+        api_base_url=args.api_base_url,
     )
     tester.run()
     tester.print_report()

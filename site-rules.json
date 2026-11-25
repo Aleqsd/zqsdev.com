@@ -146,9 +146,9 @@
       "force": true
     },
     {
-      "note": "Proxy API requests to the self-hosted Axum backend.",
+      "note": "API requests go to the zqsdev-api Rust Worker through the API service binding; it has no public origin.",
       "from": "/api/*",
-      "to": "https://api.zqsdev.com/api/:splat",
+      "to": "service:API",
       "status": 200,
       "force": true
     },

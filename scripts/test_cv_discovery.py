@@ -43,6 +43,36 @@ def resolve(url):
     raise AssertionError(f"Redirect loop at {url}")
 
 
+def load_jsonc(path):
+    """Parse a wrangler JSONC file: drop // and /* */ comments outside strings, then trailing commas."""
+    text = path.read_text(encoding="utf-8")
+    out, i, in_string = [], 0, False
+    while i < len(text):
+        char = text[i]
+        if in_string:
+            out.append(char)
+            if char == "\\":
+                out.append(text[i + 1])
+                i += 1
+            elif char == '"':
+                in_string = False
+        elif char == '"':
+            in_string = True
+            out.append(char)
+        elif text.startswith("//", i):
+            i = text.find("\n", i)
+            if i < 0:
+                break
+            continue
+        elif text.startswith("/*", i):
+            i = text.index("*/", i) + 2
+            continue
+        else:
+            out.append(char)
+        i += 1
+    return json.loads(re.sub(r",(\s*[}\]])", r"\1", "".join(out)))
+
+
 def headers_for(path):
     result = {}
     for rule in CONFIG["headers"]:
@@ -132,7 +162,7 @@ class CvDiscoveryTests(unittest.TestCase):
                 _, target, redirects = resolve(f"https://{host}{path}")
                 self.assertEqual(target, "static/index.html")
                 self.assertEqual(redirects, [])
-            self.assertEqual(resolve(f"https://{host}/api/ai")[1], "https://api.zqsdev.com/api/ai")
+            self.assertEqual(resolve(f"https://{host}/api/ai")[1], "service:API")
             for pdf in ("resume.pdf", "resume-fr.pdf"):
                 final, target, redirects = resolve(f"https://{host}/{pdf}")
                 self.assertEqual(final, f"{ORIGIN}/{pdf}")
@@ -140,6 +170,20 @@ class CvDiscoveryTests(unittest.TestCase):
                 self.assertTrue(redirects)
         scheduler = next(rule for rule in CONFIG["redirects"] if rule["from"] == "https://calendly.zqsdev.com/*")
         self.assertEqual(scheduler["to"], "https://calendly.com/alexandre-zqsdev/30min")
+
+    def test_api_is_served_by_the_service_binding_not_an_origin(self):
+        api_rules = [rule for rule in CONFIG["redirects"] if rule["from"] == "/api/*"]
+        self.assertEqual(
+            [(rule["to"], rule["status"], rule["force"]) for rule in api_rules],
+            [("service:API", 200, True)],
+        )
+        self.assertNotIn("api.zqsdev.com", json.dumps(CONFIG))
+        for rule in CONFIG["redirects"]:
+            if rule["status"] == 200:
+                self.assertFalse(rule["to"].startswith("https://"), rule)
+        wrangler = load_jsonc(ROOT / "wrangler.jsonc")
+        self.assertEqual(wrangler["services"], [{"binding": "API", "service": "zqsdev-api"}])
+        self.assertEqual(load_jsonc(ROOT / "api" / "wrangler.jsonc")["name"], "zqsdev-api")
 
     def test_pdf_canonical_headers_and_discovery_revalidation(self):
         for filename, canonical in (("resume.pdf", ORIGIN + "/"), ("resume-fr.pdf", ORIGIN + "/fr.html")):
